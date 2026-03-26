@@ -69,8 +69,10 @@ func Apply(projectRoot string, paths runtime.Paths, entries []SourceEntry, resol
 				}
 				if runtime.PathsEqual(resolved, entry.FullPath) {
 					currentState = workspace.UpsertMountedEntry(currentState, toMountedStateEntry(entry))
-					if _, err := workspace.AddExclusion(projectRoot, entry.RelativePath); err != nil {
-						return result, err
+					if !workspace.IsGitIgnored(projectRoot, entry.RelativePath) {
+						if _, err := workspace.AddExclusion(projectRoot, entry.RelativePath); err != nil {
+							return result, err
+						}
 					}
 					result.AlreadyLinked++
 					continue
@@ -114,8 +116,12 @@ func Apply(projectRoot string, paths runtime.Paths, entries []SourceEntry, resol
 		if err := os.Symlink(entry.FullPath, targetPath); err != nil {
 			return result, err
 		}
-		if _, err := workspace.AddExclusion(projectRoot, entry.RelativePath); err != nil {
-			return result, err
+
+		// Only add git exclude if the path isn't already covered by .gitignore
+		if !workspace.IsGitIgnored(projectRoot, entry.RelativePath) {
+			if _, err := workspace.AddExclusion(projectRoot, entry.RelativePath); err != nil {
+				return result, err
+			}
 		}
 
 		currentState = workspace.UpsertMountedEntry(currentState, toMountedStateEntry(entry))
@@ -201,26 +207,35 @@ func Unmount(projectRoot string, selection Selection) (Result, error) {
 }
 
 // cleanupEmptyDirs removes empty directories left behind after symlink removal.
-// It walks from each removed file's directory up toward projectRoot, removing
-// empty directories along the way. It never removes projectRoot itself.
+// It collects all ancestor directories, sorts deepest-first, and removes each
+// one that is empty. It never removes projectRoot itself.
 func cleanupEmptyDirs(projectRoot string, removedPaths []string) {
-	cleaned := make(map[string]bool)
+	// Collect all ancestor directories of removed files
+	candidates := make(map[string]bool)
 	for _, relPath := range removedPaths {
 		dir := filepath.Dir(filepath.FromSlash(relPath))
 		for dir != "." && dir != "" {
-			absDir := filepath.Join(projectRoot, dir)
-			if cleaned[absDir] {
-				break
-			}
-			cleaned[absDir] = true
-
-			entries, err := os.ReadDir(absDir)
-			if err != nil || len(entries) > 0 {
-				break
-			}
-			os.Remove(absDir)
+			candidates[dir] = true
 			dir = filepath.Dir(dir)
 		}
+	}
+
+	// Sort deepest first so children are removed before parents
+	sorted := make([]string, 0, len(candidates))
+	for dir := range candidates {
+		sorted = append(sorted, dir)
+	}
+	sort.Slice(sorted, func(i, j int) bool {
+		return len(sorted[i]) > len(sorted[j])
+	})
+
+	for _, dir := range sorted {
+		absDir := filepath.Join(projectRoot, dir)
+		entries, err := os.ReadDir(absDir)
+		if err != nil || len(entries) > 0 {
+			continue
+		}
+		os.Remove(absDir)
 	}
 }
 
