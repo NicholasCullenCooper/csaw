@@ -47,7 +47,7 @@ Do not create a repo-root `TODO.md` backlog.
 - `internal/runtime/`: shared constants, paths, normalization helpers
 - `internal/git/`: git execution interface
 - `internal/sources/`: global source config and registry checkout behavior
-- `internal/profiles/`: `profiles.yml` parsing and inheritance
+- `internal/profiles/`: `csaw.yml` parsing and inheritance
 - `internal/mount/`: mount selection and glob planning
 - `internal/workspace/`: stash state, exclude file management, mounted-link discovery
 - `internal/drift/`: mounted link health inspection
@@ -66,6 +66,39 @@ Do not create a repo-root `TODO.md` backlog.
 - If you change workflows, architecture, or validation commands, update the docs in the same change.
 - Do not commit secrets, credentials, private keys, or local workstation paths.
 - Use generic examples in docs and issues. Prefer placeholders like `git@example.com:org/repo.git` over personal or machine-specific paths.
+
+## Git Workflow
+
+### Branching
+
+All work happens on feature branches, never directly on `main`. Feature branches use
+descriptive names with a prefix:
+
+```
+feat/player-profiles
+feat/data-layer-duckdb
+fix/shot-chart-dimensions
+```
+
+### Merging to Main
+
+1. **Ensure checks pass** (lint, typecheck, tests)
+2. **Create a pull request**
+3. **Stop and tell the user** — give them the PR URL and wait for them to merge it
+4. When the user confirms the PR is merged:
+   - `git checkout main && git pull origin main`
+   - `git push origin --delete feat/branch-name`
+   - `git branch -d feat/branch-name`
+
+Never merge locally — always through a PR so the merge is tracked. Never merge the PR yourself —
+the user reviews and merges.
+
+### Starting a New Phase
+
+1. `git checkout main && git pull`
+2. `git checkout -b feat/description`
+3. `git push -u origin feat/description` (on first commit)
+
 
 ## Validation Commands
 
@@ -98,7 +131,7 @@ Use the repo-local skills when the task matches:
 ## Hard Constraints
 
 - Preserve the Phase 1 public command surface from the brief.
-- Preserve naming from the brief: `~/.csaw`, `profiles.yml`, `.csawignore`, `.csaw-stash`, `# csaw-managed`.
+- Preserve naming from the brief: `~/.csaw`, `csaw.yml`, `.csawignore`, `.csaw-stash`, `# csaw-managed`.
 - Prefer stdlib unless the brief explicitly justifies a dependency.
 - Add tests for profile resolution, glob behavior, path normalization, and workspace-state logic.
 - Do not silently invent new configuration formats.

@@ -195,7 +195,33 @@ func Unmount(projectRoot string, selection Selection) (Result, error) {
 		}
 	}
 
+	cleanupEmptyDirs(projectRoot, removedPaths)
+
 	return result, nil
+}
+
+// cleanupEmptyDirs removes empty directories left behind after symlink removal.
+// It walks from each removed file's directory up toward projectRoot, removing
+// empty directories along the way. It never removes projectRoot itself.
+func cleanupEmptyDirs(projectRoot string, removedPaths []string) {
+	cleaned := make(map[string]bool)
+	for _, relPath := range removedPaths {
+		dir := filepath.Dir(filepath.FromSlash(relPath))
+		for dir != "." && dir != "" {
+			absDir := filepath.Join(projectRoot, dir)
+			if cleaned[absDir] {
+				break
+			}
+			cleaned[absDir] = true
+
+			entries, err := os.ReadDir(absDir)
+			if err != nil || len(entries) > 0 {
+				break
+			}
+			os.Remove(absDir)
+			dir = filepath.Dir(dir)
+		}
+	}
 }
 
 func EntriesFromMountedState(state workspace.MountState) []SourceEntry {
