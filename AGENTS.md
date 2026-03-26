@@ -67,6 +67,39 @@ Do not create a repo-root `TODO.md` backlog.
 - Do not commit secrets, credentials, private keys, or local workstation paths.
 - Use generic examples in docs and issues. Prefer placeholders like `git@example.com:org/repo.git` over personal or machine-specific paths.
 
+## Git Workflow
+
+### Branching
+
+All work happens on feature branches, never directly on `main`. Feature branches use
+descriptive names with a prefix:
+
+```
+feat/player-profiles
+feat/data-layer-duckdb
+fix/shot-chart-dimensions
+```
+
+### Merging to Main
+
+1. **Ensure checks pass** (lint, typecheck, tests)
+2. **Create a pull request**
+3. **Stop and tell the user** — give them the PR URL and wait for them to merge it
+4. When the user confirms the PR is merged:
+   - `git checkout main && git pull origin main`
+   - `git push origin --delete feat/branch-name`
+   - `git branch -d feat/branch-name`
+
+Never merge locally — always through a PR so the merge is tracked. Never merge the PR yourself —
+the user reviews and merges.
+
+### Starting a New Phase
+
+1. `git checkout main && git pull`
+2. `git checkout -b feat/description`
+3. `git push -u origin feat/description` (on first commit)
+
+
 ## Validation Commands
 
 Run the smallest relevant set first, then the full baseline before closing work:
