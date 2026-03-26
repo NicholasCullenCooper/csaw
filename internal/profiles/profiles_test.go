@@ -8,7 +8,7 @@ import (
 
 func TestResolveMultiParentProfile(t *testing.T) {
 	dir := t.TempDir()
-	file := filepath.Join(dir, "profiles.yml")
+	file := filepath.Join(dir, "csaw.yml")
 	content := `
 base:
   include:
@@ -50,7 +50,7 @@ backend:
 
 func TestResolveCycleFails(t *testing.T) {
 	dir := t.TempDir()
-	file := filepath.Join(dir, "profiles.yml")
+	file := filepath.Join(dir, "csaw.yml")
 	content := `
 a:
   extends: b

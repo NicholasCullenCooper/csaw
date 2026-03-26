@@ -10,7 +10,7 @@
 - `internal/runtime`: filesystem locations, platform-aware normalization, and repo discovery
 - `internal/git`: small interface around `git` shell execution for testability
 - `internal/sources`: global config and source registry bookkeeping
-- `internal/profiles`: `profiles.yml` loading, validation, and inheritance
+- `internal/profiles`: `csaw.yml` loading, validation, and inheritance
 - `internal/mount`: include or exclude selection and glob matching
 - `internal/workspace`: `.git/info/exclude`, `.csaw-stash`, and mounted symlink inspection
 - `internal/drift`: health classification for mounted links

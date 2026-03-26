@@ -47,7 +47,7 @@ Do not create a repo-root `TODO.md` backlog.
 - `internal/runtime/`: shared constants, paths, normalization helpers
 - `internal/git/`: git execution interface
 - `internal/sources/`: global source config and registry checkout behavior
-- `internal/profiles/`: `profiles.yml` parsing and inheritance
+- `internal/profiles/`: `csaw.yml` parsing and inheritance
 - `internal/mount/`: mount selection and glob planning
 - `internal/workspace/`: stash state, exclude file management, mounted-link discovery
 - `internal/drift/`: mounted link health inspection
@@ -131,7 +131,7 @@ Use the repo-local skills when the task matches:
 ## Hard Constraints
 
 - Preserve the Phase 1 public command surface from the brief.
-- Preserve naming from the brief: `~/.csaw`, `profiles.yml`, `.csawignore`, `.csaw-stash`, `# csaw-managed`.
+- Preserve naming from the brief: `~/.csaw`, `csaw.yml`, `.csawignore`, `.csaw-stash`, `# csaw-managed`.
 - Prefer stdlib unless the brief explicitly justifies a dependency.
 - Add tests for profile resolution, glob behavior, path normalization, and workspace-state logic.
 - Do not silently invent new configuration formats.

@@ -15,7 +15,7 @@ const (
 	ContextsDirName = "contexts"
 	StateDirName    = "state"
 	ConfigFileName  = "config.yml"
-	ProfilesFile    = "profiles.yml"
+	ProfilesFile    = "csaw.yml"
 	IgnoreFile      = ".csawignore"
 	StashDirName    = ".csaw-stash"
 	ManifestName    = "manifest.json"
