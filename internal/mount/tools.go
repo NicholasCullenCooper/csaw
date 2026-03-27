@@ -23,16 +23,32 @@ var KnownToolDirs = []ToolDir{
 	{Dir: ".codex", SkillsSubdir: "skills"},
 }
 
-// DetectToolDirs returns tool directories that exist in the project root.
+// StandardFallback is always used as a skill mount target, created if needed.
+var StandardFallback = ToolDir{Dir: ".agents", SkillsSubdir: "skills"}
+
+// DetectToolDirs returns tool directories to mount skills into. It detects
+// which known tool directories already exist, and always includes .agents/
+// as the standard fallback (creating it if needed).
 func DetectToolDirs(projectRoot string) []ToolDir {
-	var found []ToolDir
+	found := make(map[string]bool)
+	var dirs []ToolDir
+
 	for _, tool := range KnownToolDirs {
 		dir := filepath.Join(projectRoot, tool.Dir)
 		if info, err := os.Stat(dir); err == nil && info.IsDir() {
-			found = append(found, tool)
+			found[tool.Dir] = true
+			dirs = append(dirs, tool)
 		}
 	}
-	return found
+
+	// Always include the standard fallback
+	if !found[StandardFallback.Dir] {
+		fallbackPath := filepath.Join(projectRoot, StandardFallback.Dir)
+		os.MkdirAll(fallbackPath, 0o755)
+		dirs = append(dirs, StandardFallback)
+	}
+
+	return dirs
 }
 
 // isSkillEntry returns true if the source entry looks like a skill
@@ -49,35 +65,36 @@ func skillName(entry SourceEntry) string {
 	return filepath.Base(dir)
 }
 
-// ExpandToolTargets takes a list of source entries and expands skill entries
-// into additional mount targets for each detected tool directory. Non-skill
-// entries (AGENTS.md, CLAUDE.md, etc.) are left at their original paths.
+// ExpandToolTargets takes a list of source entries and redirects skill entries
+// into tool-specific directories. Non-skill entries (AGENTS.md, CLAUDE.md,
+// agents/, commands/, workflows/) are kept at their original paths.
 //
-// The original entry is kept as-is (mounted at its registry-relative path).
-// Additional entries are created for each tool directory.
+// Skill entries are NOT mounted at their original registry path (e.g.,
+// skills/code-review/SKILL.md). Instead, they are mounted only into tool
+// directories (e.g., .claude/skills/code-review/SKILL.md). This ensures
+// skills are discovered by tool-native scanning rather than relying on
+// git-aware file indexing.
 func ExpandToolTargets(entries []SourceEntry, toolDirs []ToolDir) []SourceEntry {
-	if len(toolDirs) == 0 {
-		return entries
-	}
-
 	var expanded []SourceEntry
 	for _, entry := range entries {
-		// Always keep the original entry
-		expanded = append(expanded, entry)
-
 		if !isSkillEntry(entry) {
+			// Non-skill: keep at original path
+			expanded = append(expanded, entry)
 			continue
 		}
 
+		if len(toolDirs) == 0 {
+			// No tool dirs at all: fall back to original path
+			expanded = append(expanded, entry)
+			continue
+		}
+
+		// Skill: mount only into tool directories, not at original path
 		name := skillName(entry)
 		for _, tool := range toolDirs {
 			toolRelPath := filepath.ToSlash(
 				filepath.Join(tool.Dir, tool.SkillsSubdir, name, "SKILL.md"),
 			)
-			// Don't duplicate if the original path already matches this tool dir
-			if toolRelPath == entry.RelativePath {
-				continue
-			}
 			expanded = append(expanded, SourceEntry{
 				SourceName:    entry.SourceName,
 				RelativePath:  toolRelPath,
