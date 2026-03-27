@@ -1,8 +1,27 @@
-# csaw
+<p align="center">
+  <h1 align="center">csaw</h1>
+  <p align="center">
+    <strong>Mount, not install.</strong> Your AI workspace — symlinked from registries, reversible, inspectable.
+  </p>
+  <p align="center">
+    <a href="https://github.com/csaw-ai/csaw/actions"><img src="https://github.com/csaw-ai/csaw/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+    <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
+    <a href="https://github.com/csaw-ai/csaw/releases"><img src="https://img.shields.io/github/v/release/csaw-ai/csaw?include_prereleases&label=version" alt="Version"></a>
+  </p>
+  <p align="center">
+    Works with: Claude Code · OpenCode · Codex · Cursor · Windsurf · Gemini CLI
+  </p>
+</p>
 
-**Mount, not install.** csaw manages your AI workspace — agent instructions, skills, and configs — from git-backed registries, symlinked into your projects. Reversible, inspectable, clean.
+<p align="center">
+  <img src="docs/assets/demo.gif" alt="csaw demo" width="800">
+</p>
 
-```
+---
+
+csaw manages agent instructions, skills, and configs from git-backed registries — symlinked into your projects, mounted into tool-native directories, and removed without a trace.
+
+```bash
 csaw mount                        # pick a profile interactively
 csaw mount --profile team/backend # or specify directly
 csaw inspect                      # see everything that's active
@@ -15,26 +34,37 @@ Your AI coding tools (Claude Code, OpenCode, Codex, Cursor) need configuration f
 
 csaw mounts these files from a central registry using symlinks. When you're done, unmount. When you switch tasks, switch profiles. Your project's git history stays clean.
 
-|  | Traditional | csaw |
+|  | Copy & paste | csaw |
 |---|---|---|
 | **Install** | Copy files into repo | Symlink from registry |
-| **Update** | Re-copy, hope nothing drifted | Pull registry, links update automatically |
+| **Update** | Re-copy, hope nothing drifted | Pull registry, links update live |
 | **Undo** | Delete files, hope you got them all | `csaw unmount` — originals restored |
 | **Switch** | Manual file swapping | `csaw mount --profile frontend` |
-| **Git** | Config files in your history | Invisible to git |
+| **Git** | Config files in your history | Hidden from git automatically |
+| **Tools** | Manually place in each tool's dir | Auto-detected, auto-mounted |
 
 ## Install
 
 ```bash
 # From source (requires Go 1.22+)
 go install github.com/csaw-ai/csaw/cmd/csaw@latest
-
-# macOS / Linux (coming soon)
-# brew install csaw-ai/tap/csaw
-
-# Windows (coming soon)
-# scoop install csaw
 ```
+
+<details>
+<summary>More install options (coming with v0.1 release)</summary>
+
+```bash
+# macOS / Linux
+brew install csaw-ai/tap/csaw
+
+# Windows
+scoop install csaw
+
+# Anywhere
+curl -fsSL https://csaw-ai.com/install.sh | sh
+```
+
+</details>
 
 ## Quick Start
 
