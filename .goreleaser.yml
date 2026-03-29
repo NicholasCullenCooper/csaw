@@ -1,0 +1,71 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+    - go test ./...
+
+builds:
+  - main: ./cmd/csaw
+    binary: csaw
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
+
+homebrew_casks:
+  - name: csaw
+    binaries:
+      - csaw
+    repository:
+      owner: csaw-ai
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Casks
+    homepage: https://github.com/csaw-ai/csaw
+    description: "Mount, not install. AI workspace configuration from git-backed registries."
+
+scoops:
+  - repository:
+      owner: csaw-ai
+      name: scoop-bucket
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: https://github.com/csaw-ai/csaw
+    description: "Mount, not install. AI workspace configuration from git-backed registries."
+    license: MIT
+
+release:
+  github:
+    owner: csaw-ai
+    name: csaw
+  draft: false
+  prerelease: auto
+  name_template: "v{{ .Version }}"
