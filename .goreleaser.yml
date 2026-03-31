@@ -45,22 +45,33 @@ homebrew_casks:
   - name: csaw
     binaries:
       - csaw
+    homepage: https://github.com/csaw-ai/csaw
+    description: "Mount, not install. AI workspace configuration from git-backed registries."
     repository:
       owner: csaw-ai
       name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+      branch: main
+      token: "{{ .Env.PUBLISH_TOKEN }}"
     directory: Casks
-    homepage: https://github.com/csaw-ai/csaw
-    description: "Mount, not install. AI workspace configuration from git-backed registries."
+    commit_msg_template: "csaw {{ .Tag }}"
+    commit_author:
+      name: csaw-release-bot
+      email: noreply@csaw-ai.com
 
 scoops:
-  - repository:
-      owner: csaw-ai
-      name: scoop-bucket
-      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+  - name: csaw
     homepage: https://github.com/csaw-ai/csaw
     description: "Mount, not install. AI workspace configuration from git-backed registries."
     license: MIT
+    repository:
+      owner: csaw-ai
+      name: scoop-bucket
+      branch: main
+      token: "{{ .Env.PUBLISH_TOKEN }}"
+    commit_msg_template: "csaw {{ .Tag }}"
+    commit_author:
+      name: csaw-release-bot
+      email: noreply@csaw-ai.com
 
 release:
   github:
