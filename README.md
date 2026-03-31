@@ -46,19 +46,26 @@ csaw mounts these files from a central registry using symlinks. When you're done
 ## Install
 
 ```bash
-# From source (requires Go 1.22+)
-go install github.com/csaw-ai/csaw/cmd/csaw@latest
-```
-
-<details>
-<summary>More install options (coming with v0.1 release)</summary>
-
-```bash
 # macOS / Linux
 brew install --cask csaw-ai/tap/csaw
 
 # Windows
+scoop bucket add csaw-ai https://github.com/csaw-ai/scoop-bucket
 scoop install csaw
+```
+
+> **macOS note:** If you see "Apple could not verify", run:
+> ```bash
+> xattr -d com.apple.quarantine "$(which csaw)"
+> ```
+> This is normal for unsigned CLI tools distributed via Homebrew casks.
+
+<details>
+<summary>Install from source</summary>
+
+```bash
+# Requires Go 1.22+
+go install github.com/csaw-ai/csaw/cmd/csaw@latest
 ```
 
 </details>
