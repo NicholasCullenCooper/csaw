@@ -13,12 +13,11 @@ Handled by GoReleaser from a single `.goreleaser.yml`, triggered by a git tag.
 | Channel | Command | Audience |
 |---|---|---|
 | GitHub Releases | Download binary | Everyone (baseline) |
-| Homebrew | `brew install csaw-ai/tap/csaw` | macOS and Linux devs |
+| Homebrew Cask | `brew install --cask csaw-ai/tap/csaw` | macOS and Linux devs |
 | Scoop | `scoop install csaw` | Windows devs |
-| curl installer | `curl -fsSL https://csaw-ai.com/install.sh \| sh` | CI, Docker, quick installs |
 
 **Repos to create:**
-- `csaw-ai/homebrew-tap` — GoReleaser auto-populates the formula on release
+- `csaw-ai/homebrew-tap` — GoReleaser auto-populates the cask on release
 - `csaw-ai/scoop-bucket` — GoReleaser auto-populates the manifest on release
 
 ### Phase 2 — Growth
@@ -55,9 +54,8 @@ git tag v0.1.0 && git push --tags
   GoReleaser job:
     ├── Cross-compile (linux/mac/win x amd64/arm64)
     ├── GitHub Release + checksums + changelog
-    ├── Homebrew formula → csaw-ai/homebrew-tap
-    ├── Scoop manifest → csaw-ai/scoop-bucket
-    └── Curl install script
+    ├── Homebrew cask → csaw-ai/homebrew-tap
+    └── Scoop manifest → csaw-ai/scoop-bucket
 
   PyPI job (parallel, Phase 2):
     ├── go-to-wheel builds platform wheels
@@ -85,7 +83,7 @@ This populates the `version` variable in `cmd/csaw/root.go` that `csaw version` 
 
 ```bash
 # macOS / Linux
-brew install csaw-ai/tap/csaw
+brew install --cask csaw-ai/tap/csaw
 
 # Windows
 scoop bucket add csaw-ai https://github.com/csaw-ai/scoop-bucket
@@ -97,9 +95,6 @@ uvx csaw mount --profile backend
 
 # Node ecosystem
 npx csaw mount --profile backend
-
-# Anywhere
-curl -fsSL https://csaw-ai.com/install.sh | sh
 
 # Verify
 csaw version
@@ -115,7 +110,6 @@ The binary is identical across all channels. Only the packaging differs.
 | `csaw-ai/homebrew-tap` GitHub repo | Trivial | First release |
 | `csaw-ai/scoop-bucket` GitHub repo | Trivial | First release |
 | GitHub Actions release workflow | Medium | First release |
-| `install.sh` curl script | Low | First release |
 | PyPI publishing workflow (go-to-wheel) | Medium | Phase 2 |
 | npm packages (esbuild pattern) | Medium | Phase 2 |
 | Winget / Nix / Docker / AUR | Low each | Phase 3 |

@@ -55,13 +55,10 @@ go install github.com/csaw-ai/csaw/cmd/csaw@latest
 
 ```bash
 # macOS / Linux
-brew install csaw-ai/tap/csaw
+brew install --cask csaw-ai/tap/csaw
 
 # Windows
 scoop install csaw
-
-# Anywhere
-curl -fsSL https://csaw-ai.com/install.sh | sh
 ```
 
 </details>
