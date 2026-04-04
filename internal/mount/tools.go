@@ -75,6 +75,9 @@ func skillName(entry SourceEntry) string {
 // skills are discovered by tool-native scanning rather than relying on
 // git-aware file indexing.
 func ExpandToolTargets(entries []SourceEntry, toolDirs []ToolDir) []SourceEntry {
+	// First pass: project MCP configs to tool-specific paths.
+	entries = expandMCPTargets(entries)
+
 	var expanded []SourceEntry
 	for _, entry := range entries {
 		if !isSkillEntry(entry) {
@@ -104,6 +107,69 @@ func ExpandToolTargets(entries []SourceEntry, toolDirs []ToolDir) []SourceEntry 
 		}
 	}
 
+	return expanded
+}
+
+// MCPTarget maps a registry filename under mcp/ to a project-relative path
+// where the corresponding tool expects its MCP config.
+type MCPTarget struct {
+	// RegistryFile is the filename in the mcp/ directory (e.g., "claude-code.json").
+	RegistryFile string
+	// ProjectPath is the relative path in the project (e.g., ".mcp.json").
+	ProjectPath string
+}
+
+// KnownMCPTargets lists the supported MCP config projections. Each entry maps
+// a file in the registry's mcp/ directory to the path a tool reads from.
+var KnownMCPTargets = []MCPTarget{
+	{RegistryFile: "claude-code.json", ProjectPath: ".mcp.json"},
+	{RegistryFile: "vscode.json", ProjectPath: ".vscode/mcp.json"},
+	{RegistryFile: "cursor.json", ProjectPath: ".cursor/mcp.json"},
+}
+
+// isMCPEntry returns true if the source entry is an MCP config file
+// (lives directly under the mcp/ directory and is a .json file).
+func isMCPEntry(entry SourceEntry) bool {
+	rel := entry.RelativePath
+	dir := filepath.Dir(rel)
+	return dir == "mcp" && strings.HasSuffix(rel, ".json")
+}
+
+// mcpProjectPath returns the project-relative target path for an MCP entry,
+// or empty string if the filename is not a known target.
+func mcpProjectPath(entry SourceEntry) string {
+	base := filepath.Base(entry.RelativePath)
+	for _, target := range KnownMCPTargets {
+		if base == target.RegistryFile {
+			return target.ProjectPath
+		}
+	}
+	return ""
+}
+
+// expandMCPTargets redirects MCP config entries from their registry paths
+// (mcp/claude-code.json) to tool-specific project paths (.mcp.json). Unknown
+// MCP files are kept at their original path.
+func expandMCPTargets(entries []SourceEntry) []SourceEntry {
+	var expanded []SourceEntry
+	for _, entry := range entries {
+		if !isMCPEntry(entry) {
+			expanded = append(expanded, entry)
+			continue
+		}
+		projectPath := mcpProjectPath(entry)
+		if projectPath == "" {
+			// Unknown MCP file: keep at original path
+			expanded = append(expanded, entry)
+			continue
+		}
+		expanded = append(expanded, SourceEntry{
+			SourceName:    entry.SourceName,
+			RelativePath:  projectPath,
+			QualifiedPath: entry.QualifiedPath + "→" + projectPath,
+			FullPath:      entry.FullPath,
+		})
+	}
 	return expanded
 }
 

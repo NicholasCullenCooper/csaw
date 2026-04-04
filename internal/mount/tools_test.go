@@ -116,6 +116,119 @@ func TestExpandToolTargetsSkillsGoToToolDirsOnly(t *testing.T) {
 	}
 }
 
+func TestExpandMCPTargetsProjectsToToolPaths(t *testing.T) {
+	entries := []SourceEntry{
+		{
+			SourceName:    "dotagent",
+			RelativePath:  "mcp/claude-code.json",
+			QualifiedPath: "dotagent/mcp/claude-code.json",
+			FullPath:      "/registry/mcp/claude-code.json",
+		},
+		{
+			SourceName:    "dotagent",
+			RelativePath:  "mcp/vscode.json",
+			QualifiedPath: "dotagent/mcp/vscode.json",
+			FullPath:      "/registry/mcp/vscode.json",
+		},
+		{
+			SourceName:    "dotagent",
+			RelativePath:  "mcp/cursor.json",
+			QualifiedPath: "dotagent/mcp/cursor.json",
+			FullPath:      "/registry/mcp/cursor.json",
+		},
+		{
+			SourceName:    "dotagent",
+			RelativePath:  "AGENTS.md",
+			QualifiedPath: "dotagent/AGENTS.md",
+			FullPath:      "/registry/AGENTS.md",
+		},
+	}
+
+	expanded := expandMCPTargets(entries)
+
+	paths := make(map[string]bool)
+	for _, e := range expanded {
+		paths[e.RelativePath] = true
+	}
+
+	// MCP files should be projected to tool-specific paths
+	expectedPresent := []string{
+		".mcp.json",
+		".vscode/mcp.json",
+		".cursor/mcp.json",
+		"AGENTS.md",
+	}
+	for _, path := range expectedPresent {
+		if !paths[path] {
+			t.Errorf("expected path %q not found in expanded entries", path)
+		}
+	}
+
+	// MCP files should NOT remain at original registry path
+	expectedAbsent := []string{
+		"mcp/claude-code.json",
+		"mcp/vscode.json",
+		"mcp/cursor.json",
+	}
+	for _, path := range expectedAbsent {
+		if paths[path] {
+			t.Errorf("MCP config should not be at original path %q — should be projected", path)
+		}
+	}
+
+	if len(expanded) != 4 {
+		t.Fatalf("expandMCPTargets() returned %d entries, want 4", len(expanded))
+	}
+}
+
+func TestExpandMCPTargetsUnknownFilePassesThrough(t *testing.T) {
+	entries := []SourceEntry{
+		{RelativePath: "mcp/unknown-tool.json", FullPath: "/x"},
+	}
+	expanded := expandMCPTargets(entries)
+	if len(expanded) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(expanded))
+	}
+	if expanded[0].RelativePath != "mcp/unknown-tool.json" {
+		t.Errorf("unknown MCP file should keep original path, got %q", expanded[0].RelativePath)
+	}
+}
+
+func TestExpandMCPTargetsNonJSONIgnored(t *testing.T) {
+	entries := []SourceEntry{
+		{RelativePath: "mcp/README.md", FullPath: "/x"},
+	}
+	expanded := expandMCPTargets(entries)
+	if expanded[0].RelativePath != "mcp/README.md" {
+		t.Errorf("non-JSON in mcp/ should pass through, got %q", expanded[0].RelativePath)
+	}
+}
+
+func TestExpandToolTargetsIncludesMCPProjection(t *testing.T) {
+	toolDirs := []ToolDir{
+		{Dir: ".claude", SkillsSubdir: "skills"},
+	}
+
+	entries := []SourceEntry{
+		{RelativePath: "mcp/claude-code.json", FullPath: "/registry/mcp/claude-code.json"},
+		{RelativePath: "skills/testing/SKILL.md", FullPath: "/registry/skills/testing/SKILL.md"},
+	}
+
+	expanded := ExpandToolTargets(entries, toolDirs)
+
+	paths := make(map[string]bool)
+	for _, e := range expanded {
+		paths[e.RelativePath] = true
+	}
+
+	if !paths[".mcp.json"] {
+		t.Error("MCP config should be projected to .mcp.json")
+	}
+	if !paths[".claude/skills/testing/SKILL.md"] {
+		t.Error("skill should be projected to .claude/skills/testing/SKILL.md")
+	}
+}
+
 func TestExpandToolTargetsNoToolDirsFallback(t *testing.T) {
 	entries := []SourceEntry{
 		{RelativePath: "skills/code-review/SKILL.md", FullPath: "/x"},
