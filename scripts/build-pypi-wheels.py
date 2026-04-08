@@ -44,6 +44,7 @@ wheels = go_to_wheel.build_wheels(
     entry_point="csaw",
     set_version_var="main.version",
     description="Mount, not install. AI workspace configuration from git-backed registries.",
+    requires_python=">=3.8",
     author="Nicholas Cooper",
     license_="MIT",
     url="https://github.com/csaw-ai/csaw",
