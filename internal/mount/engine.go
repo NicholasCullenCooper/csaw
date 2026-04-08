@@ -41,7 +41,9 @@ type Result struct {
 }
 
 func Apply(projectRoot string, paths runtime.Paths, entries []SourceEntry, resolver ConflictResolver) (Result, error) {
-	if err := ensureUniqueTargets(entries); err != nil {
+	var err error
+	entries, err = resolveConflictsByPriority(entries)
+	if err != nil {
 		return Result{}, err
 	}
 
@@ -296,27 +298,65 @@ func Repair(projectRoot string) (Result, []drift.Status, error) {
 	return result, drift.InspectMountState(projectRoot, state, lm), nil
 }
 
-func ensureUniqueTargets(entries []SourceEntry) error {
-	conflicts := make(map[string][]string)
+func resolveConflictsByPriority(entries []SourceEntry) ([]SourceEntry, error) {
+	groups := make(map[string][]SourceEntry)
 	for _, entry := range entries {
-		conflicts[entry.RelativePath] = append(conflicts[entry.RelativePath], entry.SourceName)
+		groups[entry.RelativePath] = append(groups[entry.RelativePath], entry)
 	}
 
+	resolved := make([]SourceEntry, 0, len(entries))
 	var problems []string
-	for path, sourceNames := range conflicts {
-		if len(sourceNames) < 2 {
+
+	for _, entry := range entries {
+		group := groups[entry.RelativePath]
+		if len(group) < 2 {
+			resolved = append(resolved, entry)
 			continue
 		}
-		sort.Strings(sourceNames)
-		problems = append(problems, fmt.Sprintf("%s (%s)", path, strings.Join(sourceNames, ", ")))
+
+		// Find the winner (highest priority)
+		best := group[0]
+		tied := false
+		for _, candidate := range group[1:] {
+			if candidate.Priority > best.Priority {
+				best = candidate
+				tied = false
+			} else if candidate.Priority == best.Priority {
+				tied = true
+			}
+		}
+
+		if tied {
+			names := make([]string, len(group))
+			for i, g := range group {
+				names[i] = g.SourceName
+			}
+			sort.Strings(names)
+			problems = append(problems, fmt.Sprintf("%s (%s)", entry.RelativePath, strings.Join(names, ", ")))
+			continue
+		}
+
+		// Only add the winner once
+		if entry.SourceName == best.SourceName {
+			resolved = append(resolved, best)
+		}
 	}
 
-	if len(problems) == 0 {
-		return nil
+	if len(problems) > 0 {
+		sort.Strings(problems)
+		// Deduplicate problem strings (each conflict is reported once per group member)
+		deduped := problems[:0]
+		seen := make(map[string]bool)
+		for _, p := range problems {
+			if !seen[p] {
+				seen[p] = true
+				deduped = append(deduped, p)
+			}
+		}
+		return nil, fmt.Errorf("ambiguous mount selection; multiple sources with equal priority provide the same target path: %s\nUse source priority to resolve: csaw source add <name> <url> --priority <n>", strings.Join(deduped, "; "))
 	}
 
-	sort.Strings(problems)
-	return fmt.Errorf("ambiguous mount selection; multiple sources provide the same target path: %s", strings.Join(problems, "; "))
+	return resolved, nil
 }
 
 func filterMountedStateEntries(entries []workspace.MountedStateEntry, selection Selection) ([]workspace.MountedStateEntry, error) {

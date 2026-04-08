@@ -31,6 +31,7 @@ type SourceEntry struct {
 	RelativePath  string
 	QualifiedPath string
 	FullPath      string
+	Priority      int
 }
 
 func NewPlanner() Planner {
@@ -168,6 +169,7 @@ func EnumerateSourceEntries(source sources.CatalogSource) ([]SourceEntry, error)
 			RelativePath:  relativePath,
 			QualifiedPath: source.Name + "/" + relativePath,
 			FullPath:      path,
+			Priority:      source.Priority,
 		})
 		return nil
 	})

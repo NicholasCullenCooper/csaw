@@ -9,11 +9,15 @@
 - `cmd/csaw`: Cobra wiring for the public CLI surface
 - `internal/runtime`: filesystem locations, platform-aware normalization, and repo discovery
 - `internal/git`: small interface around `git` shell execution for testability
-- `internal/sources`: global config and source registry bookkeeping
+- `internal/sources`: global config, source registry bookkeeping, and push operations
 - `internal/profiles`: `csaw.yml` loading, validation, and inheritance
-- `internal/mount`: include or exclude selection and glob matching
-- `internal/workspace`: `.git/info/exclude`, `.csaw-stash`, and mounted symlink inspection
+- `internal/mount`: include or exclude selection, glob matching, and priority-based conflict resolution
+- `internal/workspace`: `.git/info/exclude`, `.csaw-stash`, and mounted link inspection
 - `internal/drift`: health classification for mounted links
+- `internal/linkmode`: cross-platform linking (symlinks with hardlink fallback on Windows)
+- `internal/registry`: registry scaffolding (`csaw init`)
+- `internal/pinning`: per-project source pinning to branches/tags
+- `internal/fork`: file forking between sources
 - `internal/inspect`: summary rendering and markdown preview helpers
 - `internal/output`: terminal styling helpers shared across commands
 - `internal/docs`: repository validation helpers used by CI and local checks
@@ -33,20 +37,23 @@ The bootstrap locks in these seams early so Phase 1 and Phase 2 work can expand 
 Implemented now:
 
 - CLI command surface and command wiring
-- source config persistence
-- source catalogs and personal-registry push
+- source config persistence with priority field
+- source catalogs, generalized push (any source), and registry scaffolding (`csaw init`)
 - profile parsing, inheritance, and cross-source resolution
-- mount selection, `.csawignore`, duplicate-target detection, and restore snapshots
+- mount selection, `.csawignore`, priority-based conflict resolution, auto-unmount, and restore snapshots
 - workspace stash, exclude helpers, current mount state, and restore state
 - mounted-link discovery, drift inspection, and repair
+- cross-platform linking (symlinks with hardlink fallback on Windows)
+- per-project source pinning (`csaw pin`/`unpin`) via git worktrees
+- file forking between sources (`csaw fork`)
 - inspect and status summaries
 - repository validation tests
 
-Deferred in the active plan:
+Deferred:
 
 - richer layered provenance in inspect output
-- clearer UX for source collisions and other ambiguous multi-source selections
-- structured context switching
+- structured context switching (MCP, model, env composition)
+- trust model for third-party sources
 
 ## Design Rules
 

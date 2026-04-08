@@ -4,14 +4,18 @@
 
 ```bash
 # Install
-go install github.com/csaw-ai/csaw/cmd/csaw@latest
+uv tool install csaw
 
-# Add a source (git repo or local directory)
+# Create a new registry
+csaw init ~/my-ai-config
+csaw source add personal ~/my-ai-config --priority 10
+
+# Add a team source (git repo)
 csaw source add team git@github.com:org/ai-config.git
 csaw pull team
 
-# Or local
-csaw source add local ~/my-ai-config
+# Or a local directory
+csaw source add local ~/shared-config
 ```
 
 ## Mount
@@ -22,7 +26,10 @@ csaw mount --profile team/backend       # mount a named profile
 csaw mount agents/go.md                 # mount specific files
 csaw mount --profile team/core --force  # overwrite conflicts
 csaw mount --restore                    # re-mount previous selection
+csaw mount --keep --profile team/extra  # add to existing mount (don't replace)
 ```
+
+Mounting a profile **replaces** the previous mount by default. Use `--keep` to add on top.
 
 ## Unmount
 
@@ -56,7 +63,39 @@ csaw source add name url-or-path        # add a source
 csaw source remove name                 # remove a source
 csaw pull                               # update all remote sources
 csaw pull team                          # update one source
-csaw push -m "updated rules"            # push personal registry
+csaw push team -m "updated rules"       # push source changes
+csaw push                               # auto-detect dirty source and push
+```
+
+## Pin a Branch
+
+```bash
+csaw pin team@feature/new-rules         # pin this project to a branch
+csaw pull team                          # pulls that branch
+csaw mount --profile team/backend       # mounts from the branch
+csaw unpin team                         # back to default branch
+```
+
+## Fork a File
+
+```bash
+csaw fork team/agents/base.md --into personal  # copy for personal editing
+```
+
+## Source Priority
+
+When two sources provide the same file, higher priority wins:
+
+```bash
+csaw source add personal ~/my-config --priority 10  # wins over default (0)
+csaw source add team git@github.com:org/config.git   # priority 0 (default)
+```
+
+## Create a Registry
+
+```bash
+csaw init ~/my-ai-config                # scaffold with csaw.yml, agents/, skills/
+csaw init ~/my-ai-config --name myteam  # custom name
 ```
 
 ## Repair
@@ -122,7 +161,13 @@ my-registry/
 
 **Profiles** — Named file selections with glob patterns. Can inherit from each other.
 
-**Sources** — Git repos or local dirs containing agent files. Team + personal + community.
+**Sources** — Git repos or local dirs containing agent files. Add as many as you need.
+
+**Priority** — When sources overlap, higher priority wins. Set with `--priority` on `source add`.
+
+**Pinning** — Lock a source to a branch/tag per project with `csaw pin`. Uses git worktrees.
+
+**Fork** — Copy a team file into your own source for personal editing with `csaw fork`.
 
 **Tool directories** — Skills mount into `.claude/skills/`, `.opencode/skills/`, etc. where AI tools discover them natively.
 

@@ -9,9 +9,8 @@ import (
 )
 
 const (
-	DirName         = ".csaw"
-	SourcesDirName  = "sources"
-	PersonalDirName = "personal"
+	DirName        = ".csaw"
+	SourcesDirName = "sources"
 	ContextsDirName = "contexts"
 	StateDirName    = "state"
 	ConfigFileName  = "config.yml"
@@ -31,7 +30,6 @@ var noiseFiles = map[string]struct{}{
 type Paths struct {
 	Root     string
 	Sources  string
-	Personal string
 	Contexts string
 	State    string
 	Config   string
@@ -63,7 +61,6 @@ func BuildPaths(root string) Paths {
 	return Paths{
 		Root:     root,
 		Sources:  filepath.Join(root, SourcesDirName),
-		Personal: filepath.Join(root, PersonalDirName),
 		Contexts: filepath.Join(root, ContextsDirName),
 		State:    filepath.Join(root, StateDirName),
 		Config:   filepath.Join(root, ConfigFileName),

@@ -13,11 +13,14 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/csaw-ai/csaw/internal/drift"
+	"github.com/csaw-ai/csaw/internal/fork"
 	"github.com/csaw-ai/csaw/internal/git"
 	"github.com/csaw-ai/csaw/internal/inspect"
 	"github.com/csaw-ai/csaw/internal/linkmode"
 	"github.com/csaw-ai/csaw/internal/mount"
 	"github.com/csaw-ai/csaw/internal/output"
+	"github.com/csaw-ai/csaw/internal/pinning"
+	"github.com/csaw-ai/csaw/internal/registry"
 	"github.com/csaw-ai/csaw/internal/runtime"
 	"github.com/csaw-ai/csaw/internal/sources"
 	"github.com/csaw-ai/csaw/internal/workspace"
@@ -34,6 +37,7 @@ func newRootCommand() *cobra.Command {
 	}
 
 	cmd.AddCommand(newVersionCommand())
+	cmd.AddCommand(newInitCommand())
 	cmd.AddCommand(newSourceCommand())
 	cmd.AddCommand(newMountCommand())
 	cmd.AddCommand(newUnmountCommand())
@@ -44,6 +48,9 @@ func newRootCommand() *cobra.Command {
 	cmd.AddCommand(newPullCommand())
 	cmd.AddCommand(newPushCommand())
 	cmd.AddCommand(newStatusCommand())
+	cmd.AddCommand(newPinCommand())
+	cmd.AddCommand(newUnpinCommand())
+	cmd.AddCommand(newForkCommand())
 	cmd.AddCommand(newShowCommand())
 	cmd.AddCommand(newHideCommand())
 
@@ -58,6 +65,34 @@ func newVersionCommand() *cobra.Command {
 			fmt.Fprintln(cmd.OutOrStdout(), version)
 		},
 	}
+}
+
+func newInitCommand() *cobra.Command {
+	var name string
+
+	cmd := &cobra.Command{
+		Use:   "init [dir]",
+		Short: "Scaffold a new csaw registry",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			dir := "."
+			if len(args) == 1 {
+				dir = args[0]
+			}
+
+			result, err := registry.Init(context.Background(), git.ExecGit{}, dir, name)
+			if err != nil {
+				return err
+			}
+
+			output.Successf("initialized registry %q at %s", result.Name, result.Path)
+			fmt.Fprintf(cmd.OutOrStdout(), "\n  Next: %s\n", output.Faint("csaw source add "+result.Name+" "+result.Path))
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&name, "name", "", "registry name (defaults to directory name)")
+	return cmd
 }
 
 func newSourceCommand() *cobra.Command {
@@ -155,6 +190,7 @@ func newMountCommand() *cobra.Command {
 	var forceAll bool
 	var skipConflicts bool
 	var restore bool
+	var keep bool
 
 	cmd := &cobra.Command{
 		Use:   "mount [patterns...]",
@@ -214,6 +250,19 @@ func newMountCommand() *cobra.Command {
 				}
 			}
 
+			// Auto-unmount previous mount unless --keep is set
+			if !keep {
+				currentState, err := workspace.ReadMountState(projectRoot)
+				if err != nil {
+					return err
+				}
+				if len(currentState.Entries) > 0 {
+					if _, err := mount.Unmount(projectRoot, mount.Selection{}); err != nil {
+						return err
+					}
+				}
+			}
+
 			// Expand skill entries into tool-specific directories
 			toolDirs := mount.DetectToolDirs(projectRoot)
 			entries = mount.ExpandToolTargets(entries, toolDirs)
@@ -249,6 +298,7 @@ func newMountCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&forceAll, "force", false, "overwrite conflicts and stash originals")
 	cmd.Flags().BoolVar(&skipConflicts, "skip-conflicts", false, "skip files that conflict with existing paths")
 	cmd.Flags().BoolVar(&restore, "restore", false, "restore the previous mount selection")
+	cmd.Flags().BoolVar(&keep, "keep", false, "keep existing mounts instead of replacing them")
 
 	return cmd
 }
@@ -520,28 +570,62 @@ func newPushCommand() *cobra.Command {
 	var message string
 
 	cmd := &cobra.Command{
-		Use:   "push",
-		Short: "Push changes in the personal registry",
+		Use:   "push [source]",
+		Short: "Commit and push changes in a source registry",
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			manager, err := newSourcesManager()
 			if err != nil {
 				return err
 			}
 
-			err = manager.PushPersonal(context.Background(), message)
+			var name string
+			if len(args) == 1 {
+				name = args[0]
+			} else {
+				cfg, err := manager.Load()
+				if err != nil {
+					return err
+				}
+				var dirty []string
+				for _, source := range cfg.Sources {
+					root := source.CheckoutPath(manager.Paths)
+					if _, err := os.Stat(filepath.Join(root, ".git")); err != nil {
+						continue
+					}
+					status, err := manager.Git.Run(context.Background(), root, "status", "--porcelain")
+					if err != nil {
+						continue
+					}
+					if strings.TrimSpace(status) != "" {
+						dirty = append(dirty, source.Name)
+					}
+				}
+				switch len(dirty) {
+				case 0:
+					output.Infof("nothing to push")
+					return nil
+				case 1:
+					name = dirty[0]
+				default:
+					return fmt.Errorf("multiple sources have changes: %s\nSpecify one: csaw push <source>", strings.Join(dirty, ", "))
+				}
+			}
+
+			err = manager.Push(context.Background(), name, message)
 			if errors.Is(err, sources.ErrNothingToPush) {
-				output.Infof("nothing to push in personal registry")
+				output.Infof("nothing to push in %s", name)
 				return nil
 			}
 			if err != nil {
 				return err
 			}
 
-			output.Successf("pushed personal registry changes")
+			output.Successf("pushed %s", name)
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&message, "message", "m", "", "commit message for the personal registry push")
+	cmd.Flags().StringVarP(&message, "message", "m", "", "commit message")
 	return cmd
 }
 
@@ -606,6 +690,147 @@ func newStatusCommand() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+func newPinCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "pin <source>@<ref>",
+		Short: "Pin a source to a branch or tag for this project",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			parts := strings.SplitN(args[0], "@", 2)
+			if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+				return fmt.Errorf("usage: csaw pin <source>@<ref>")
+			}
+			sourceName, ref := parts[0], parts[1]
+
+			manager, err := newSourcesManager()
+			if err != nil {
+				return err
+			}
+
+			source, err := manager.Get(sourceName)
+			if err != nil {
+				return err
+			}
+
+			if source.Kind != sources.KindRemote {
+				return fmt.Errorf("pinning is only supported for remote sources (use git directly for local sources)")
+			}
+
+			projectRoot, err := runtime.FindRepoRoot(".")
+			if err != nil {
+				return err
+			}
+
+			if _, err := manager.WorktreeCheckout(context.Background(), source, ref, projectRoot); err != nil {
+				return err
+			}
+
+			state, err := pinning.Read(projectRoot)
+			if err != nil {
+				return err
+			}
+			state = pinning.Set(state, sourceName, ref)
+			if err := pinning.Write(projectRoot, state); err != nil {
+				return err
+			}
+
+			output.Successf("pinned %s to %s", sourceName, ref)
+			return nil
+		},
+	}
+}
+
+func newUnpinCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "unpin <source>",
+		Short: "Unpin a source, returning to the default branch",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			sourceName := args[0]
+
+			manager, err := newSourcesManager()
+			if err != nil {
+				return err
+			}
+
+			source, err := manager.Get(sourceName)
+			if err != nil {
+				return err
+			}
+
+			projectRoot, err := runtime.FindRepoRoot(".")
+			if err != nil {
+				return err
+			}
+
+			state, err := pinning.Read(projectRoot)
+			if err != nil {
+				return err
+			}
+
+			if _, ok := pinning.Get(state, sourceName); !ok {
+				output.Infof("%s is not pinned", sourceName)
+				return nil
+			}
+
+			if err := manager.WorktreeRemove(context.Background(), source, projectRoot); err != nil {
+				output.Warnf("could not remove worktree: %v", err)
+			}
+
+			state = pinning.Remove(state, sourceName)
+			if err := pinning.Write(projectRoot, state); err != nil {
+				return err
+			}
+
+			output.Successf("unpinned %s", sourceName)
+			return nil
+		},
+	}
+}
+
+func newForkCommand() *cobra.Command {
+	var into string
+
+	cmd := &cobra.Command{
+		Use:   "fork <source/path>",
+		Short: "Copy a file from one source into another for personal editing",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			manager, err := newSourcesManager()
+			if err != nil {
+				return err
+			}
+
+			if into == "" {
+				cfg, err := manager.Load()
+				if err != nil {
+					return err
+				}
+				into = cfg.DefaultForkTarget
+			}
+			if into == "" {
+				return fmt.Errorf("specify target with --into or set default_fork_target in config.yml")
+			}
+
+			catalog, err := manager.ExistingCatalog()
+			if err != nil {
+				return err
+			}
+
+			result, err := fork.Fork(args[0], into, catalog)
+			if err != nil {
+				return err
+			}
+
+			output.Successf("forked %s/%s into %s", result.FromSource, result.RelativePath, result.IntoSource)
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&into, "into", "", "target source to fork into")
+	return cmd
 }
 
 func newShowCommand() *cobra.Command {

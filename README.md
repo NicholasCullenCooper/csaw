@@ -79,17 +79,18 @@ go install github.com/csaw-ai/csaw/cmd/csaw@latest
 
 ## Quick Start
 
-### 1. Add a source
+### 1. Create or add a source
 
 A source is any git repo (or local directory) containing agent files and skills.
 
 ```bash
-# From a git repo
+# Create a new registry
+csaw init ~/my-ai-config
+csaw source add personal ~/my-ai-config --priority 10
+
+# Or add an existing team registry
 csaw source add team git@github.com:your-org/ai-config.git
 csaw pull team
-
-# Or a local directory
-csaw source add local ~/my-ai-config
 ```
 
 ### 2. Mount a profile
@@ -189,7 +190,8 @@ csaw hide AGENTS.md    # add back → hidden from git
 
 | Command | What it does |
 |---|---|
-| `csaw mount [patterns]` | Mount files. Interactive picker if no profile/patterns given. |
+| `csaw init [dir]` | Scaffold a new registry with csaw.yml, agents/, skills/. |
+| `csaw mount [patterns]` | Mount files. Replaces any previous mount. Interactive picker if no args. |
 | `csaw mount --profile name` | Mount a named profile. |
 | `csaw mount --restore` | Re-mount the previous selection. |
 | `csaw unmount [patterns]` | Remove mounted files, restore originals. |
@@ -199,7 +201,10 @@ csaw hide AGENTS.md    # add back → hidden from git
 | `csaw update` | Repair drifted links. |
 | `csaw diff path` | Show diff between mounted file and its source. |
 | `csaw pull [source]` | Pull latest from remote sources. |
-| `csaw push -m "msg"` | Push personal registry changes. |
+| `csaw push [source] -m "msg"` | Commit and push source changes. |
+| `csaw pin source@ref` | Pin a source to a branch or tag for this project. |
+| `csaw unpin source` | Unpin, return to default branch. |
+| `csaw fork source/path` | Copy a file into another source for personal editing. |
 | `csaw show path` | Make a mounted file visible to git. |
 | `csaw hide path` | Hide a mounted file from git. |
 | `csaw source add name url` | Add a git or local source. |
@@ -218,7 +223,11 @@ csaw hide AGENTS.md    # add back → hidden from git
 | `--force` | mount | Overwrite conflicts, stash originals. |
 | `--skip-conflicts` | mount | Skip files that conflict. |
 | `--restore` | mount | Re-mount the previous selection. |
+| `--keep` | mount | Keep existing mounts instead of replacing them. |
 | `--source name` | inspect | Show details for a specific source. |
+| `--into source` | fork | Target source to fork into. |
+| `--name name` | init | Registry name (defaults to directory name). |
+| `--priority n` | source add | Source priority (higher wins on conflict). |
 
 ## Profiles
 

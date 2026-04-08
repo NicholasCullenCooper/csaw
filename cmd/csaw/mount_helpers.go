@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/csaw-ai/csaw/internal/mount"
 	"github.com/csaw-ai/csaw/internal/output"
+	"github.com/csaw-ai/csaw/internal/pinning"
 	"github.com/csaw-ai/csaw/internal/profiles"
 	"github.com/csaw-ai/csaw/internal/runtime"
 	"github.com/csaw-ai/csaw/internal/sources"
@@ -76,6 +78,27 @@ func collectMountEntries(manager sources.Manager, paths runtime.Paths, selection
 		return nil, err
 	}
 
+	// Resolve pinned sources to worktree paths
+	projectRoot, _ := runtime.FindRepoRoot(".")
+	if projectRoot != "" {
+		pinState, _ := pinning.Read(projectRoot)
+		for i, entry := range catalog {
+			ref, ok := pinning.Get(pinState, entry.Name)
+			if !ok || entry.Kind != sources.KindRemote {
+				continue
+			}
+			source, err := manager.Get(entry.Name)
+			if err != nil {
+				continue
+			}
+			worktreePath, err := manager.WorktreeCheckout(context.Background(), source, ref, projectRoot)
+			if err != nil {
+				return nil, fmt.Errorf("pin %s@%s: %w", entry.Name, ref, err)
+			}
+			catalog[i].Root = worktreePath
+		}
+	}
+
 	if selection.Profile != "" {
 		resolver, err := profiles.NewCatalogResolver(paths, catalog)
 		if err != nil {
@@ -113,9 +136,6 @@ func collectMountEntries(manager sources.Manager, paths runtime.Paths, selection
 }
 
 func findNamedSource(manager sources.Manager, name string) (sources.Source, error) {
-	if name == "personal" {
-		return sources.Source{Name: "personal", Kind: sources.KindLocal, Path: manager.Paths.Personal}, nil
-	}
 	return manager.Get(name)
 }
 

@@ -21,14 +21,16 @@ const (
 )
 
 type Source struct {
-	Name string `yaml:"name"`
-	Kind string `yaml:"kind"`
-	URL  string `yaml:"url,omitempty"`
-	Path string `yaml:"path,omitempty"`
+	Name     string `yaml:"name"`
+	Kind     string `yaml:"kind"`
+	URL      string `yaml:"url,omitempty"`
+	Path     string `yaml:"path,omitempty"`
+	Priority int    `yaml:"priority,omitempty"`
 }
 
 type Config struct {
-	Sources []Source `yaml:"sources,omitempty"`
+	Sources          []Source `yaml:"sources,omitempty"`
+	DefaultForkTarget string  `yaml:"default_fork_target,omitempty"`
 }
 
 type Manager struct {
@@ -75,7 +77,7 @@ func (s Source) CheckoutPath(paths runtime.Paths) string {
 }
 
 func (m Manager) EnsureDirectories() error {
-	for _, dir := range []string{m.Paths.Root, m.Paths.Sources, m.Paths.Personal, m.Paths.Contexts, m.Paths.State} {
+	for _, dir := range []string{m.Paths.Root, m.Paths.Sources, m.Paths.Contexts, m.Paths.State} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
 		}

@@ -28,25 +28,64 @@ func joinArgs(values []string) string {
 	return filepath.ToSlash(filepath.Join(values...))
 }
 
-func TestCatalogIncludesPersonal(t *testing.T) {
-	paths := runtime.BuildPaths(filepath.Join(t.TempDir(), ".csaw"))
+func TestCatalogFromConfig(t *testing.T) {
+	root := t.TempDir()
+	paths := runtime.BuildPaths(filepath.Join(root, ".csaw"))
 	manager := Manager{Paths: paths}
 
 	catalog, err := manager.Catalog()
 	if err != nil {
 		t.Fatalf("Catalog() error = %v", err)
 	}
-	if len(catalog) == 0 || catalog[0].Name != "personal" {
-		t.Fatalf("Catalog() = %#v, want personal source", catalog)
+	if len(catalog) != 0 {
+		t.Fatalf("Catalog() = %#v, want empty catalog", catalog)
 	}
 }
 
-func TestPushPersonal(t *testing.T) {
+func TestCatalogPreservesPriority(t *testing.T) {
 	root := t.TempDir()
 	paths := runtime.BuildPaths(filepath.Join(root, ".csaw"))
-	personalGit := filepath.Join(paths.Personal, ".git")
-	if err := os.MkdirAll(personalGit, 0o755); err != nil {
-		t.Fatalf("MkdirAll() error = %v", err)
+
+	sourceDir := filepath.Join(root, "my-source")
+	if err := os.MkdirAll(sourceDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	manager := Manager{Paths: paths}
+	if err := manager.Add(Source{Name: "high", Kind: KindLocal, Path: sourceDir, Priority: 10}); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Add(Source{Name: "low", Kind: KindLocal, Path: sourceDir, Priority: 0}); err != nil {
+		t.Fatal(err)
+	}
+
+	catalog, err := manager.Catalog()
+	if err != nil {
+		t.Fatalf("Catalog() error = %v", err)
+	}
+	if len(catalog) != 2 {
+		t.Fatalf("Catalog() len = %d, want 2", len(catalog))
+	}
+
+	// Catalog is sorted alphabetically
+	for _, entry := range catalog {
+		if entry.Name == "high" && entry.Priority != 10 {
+			t.Fatalf("high priority = %d, want 10", entry.Priority)
+		}
+		if entry.Name == "low" && entry.Priority != 0 {
+			t.Fatalf("low priority = %d, want 0", entry.Priority)
+		}
+	}
+}
+
+func TestPush(t *testing.T) {
+	root := t.TempDir()
+	paths := runtime.BuildPaths(filepath.Join(root, ".csaw"))
+
+	sourceDir := filepath.Join(root, "my-source")
+	sourceGit := filepath.Join(sourceDir, ".git")
+	if err := os.MkdirAll(sourceGit, 0o755); err != nil {
+		t.Fatal(err)
 	}
 
 	git := &recordingGit{
@@ -55,12 +94,41 @@ func TestPushPersonal(t *testing.T) {
 		},
 	}
 	manager := Manager{Paths: paths, Git: git}
+	if err := manager.Add(Source{Name: "team", Kind: KindLocal, Path: sourceDir}); err != nil {
+		t.Fatal(err)
+	}
 
-	if err := manager.PushPersonal(context.Background(), "test commit"); err != nil {
-		t.Fatalf("PushPersonal() error = %v", err)
+	if err := manager.Push(context.Background(), "team", "test commit"); err != nil {
+		t.Fatalf("Push() error = %v", err)
 	}
 
 	if got, want := len(git.calls), 4; got != want {
 		t.Fatalf("len(calls) = %d, want %d", got, want)
+	}
+}
+
+func TestPushNothingToPush(t *testing.T) {
+	root := t.TempDir()
+	paths := runtime.BuildPaths(filepath.Join(root, ".csaw"))
+
+	sourceDir := filepath.Join(root, "my-source")
+	sourceGit := filepath.Join(sourceDir, ".git")
+	if err := os.MkdirAll(sourceGit, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	git := &recordingGit{
+		outputs: map[string]string{
+			joinArgs([]string{"status", "--porcelain"}): "",
+		},
+	}
+	manager := Manager{Paths: paths, Git: git}
+	if err := manager.Add(Source{Name: "team", Kind: KindLocal, Path: sourceDir}); err != nil {
+		t.Fatal(err)
+	}
+
+	err := manager.Push(context.Background(), "team", "test commit")
+	if err != ErrNothingToPush {
+		t.Fatalf("Push() error = %v, want ErrNothingToPush", err)
 	}
 }
