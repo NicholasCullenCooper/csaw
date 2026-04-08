@@ -20,9 +20,11 @@ import (
 	"github.com/csaw-ai/csaw/internal/mount"
 	"github.com/csaw-ai/csaw/internal/output"
 	"github.com/csaw-ai/csaw/internal/pinning"
+	"github.com/csaw-ai/csaw/internal/profiles"
 	"github.com/csaw-ai/csaw/internal/registry"
 	"github.com/csaw-ai/csaw/internal/runtime"
 	"github.com/csaw-ai/csaw/internal/sources"
+	"github.com/csaw-ai/csaw/internal/tui"
 	"github.com/csaw-ai/csaw/internal/workspace"
 )
 
@@ -86,7 +88,42 @@ func newInitCommand() *cobra.Command {
 			}
 
 			output.Successf("initialized registry %q at %s", result.Name, result.Path)
-			fmt.Fprintf(cmd.OutOrStdout(), "\n  Next: %s\n", output.Faint("csaw source add "+result.Name+" "+result.Path))
+
+			if !isInteractive() {
+				fmt.Fprintf(cmd.OutOrStdout(), "\n  %s\n", tui.HintLine("Next:", "csaw source add "+result.Name+" "+result.Path))
+				return nil
+			}
+
+			// Offer to register as a source
+			wizResult, err := tui.RunWizard([]tui.Step{
+				{
+					Kind:    tui.StepConfirm,
+					Key:     "register",
+					Title:   "Register as a source?",
+					Default: "y",
+				},
+			})
+			if err != nil || wizResult.Aborted || wizResult.Values["register"] != "y" {
+				fmt.Fprintf(cmd.OutOrStdout(), "\n  %s\n", tui.HintLine("Later:", "csaw source add "+result.Name+" "+result.Path))
+				return nil
+			}
+
+			manager, err := newSourcesManager()
+			if err != nil {
+				return err
+			}
+
+			source := sources.Source{
+				Name:     result.Name,
+				Kind:     sources.KindLocal,
+				Path:     result.Path,
+				Priority: 10,
+			}
+			if err := manager.Add(source); err != nil {
+				return err
+			}
+
+			output.Successf("registered source %q with priority 10", result.Name)
 			return nil
 		},
 	}
@@ -132,6 +169,54 @@ func newSourceCommand() *cobra.Command {
 					return err
 				}
 				output.Successf("cloned %s", source.Name)
+			}
+
+			// Show available profiles and offer to mount
+			if isInteractive() {
+				paths, err := runtime.ResolvePaths()
+				if err != nil {
+					return nil
+				}
+				catalog, err := manager.ExistingCatalog()
+				if err != nil {
+					return nil
+				}
+
+				resolver, err := profiles.NewCatalogResolver(paths, catalog)
+				if err != nil {
+					return nil
+				}
+				allProfiles, err := resolver.All()
+				if err != nil || len(allProfiles) == 0 {
+					return nil
+				}
+
+				// Build picker items for profiles from this source
+				items := []tui.PickerItem{{Name: "skip", Description: "I'll mount later"}}
+				for _, name := range profiles.SortedNames(allProfiles) {
+					items = append(items, tui.PickerItem{
+						Name:        name,
+						Description: allProfiles[name].Description,
+					})
+				}
+
+				fmt.Println()
+				wizResult, err := tui.RunWizard([]tui.Step{
+					{
+						Kind:    tui.StepSelect,
+						Key:     "profile",
+						Title:   "Mount a profile now?",
+						Options: items,
+					},
+				})
+				if err != nil || wizResult.Aborted {
+					return nil
+				}
+
+				selected := wizResult.Values["profile"]
+				if selected != "" && selected != "skip" {
+					fmt.Fprintf(cmd.OutOrStdout(), "\n  %s\n", tui.HintLine("Run:", "csaw mount --profile "+selected))
+				}
 			}
 
 			return nil
@@ -285,6 +370,24 @@ func newMountCommand() *cobra.Command {
 
 			// If no profile, no patterns, and not restoring — show interactive picker
 			if profile == "" && len(args) == 0 && !restore {
+				// Check if any sources are configured
+				cfg, err := manager.Load()
+				if err != nil {
+					return err
+				}
+				if len(cfg.Sources) == 0 {
+					if !isInteractive() {
+						return errors.New("no sources configured; run: csaw source add <name> <url>")
+					}
+					fmt.Println(tui.ResultPanel("welcome to csaw", []string{
+						output.Faint("No sources configured yet. Get started:"),
+					}, []string{
+						tui.HintLine("Create a registry:", "csaw init ~/my-ai-config"),
+						tui.HintLine("Add a team source:", "csaw source add team <git-url>"),
+					}))
+					return nil
+				}
+
 				picked, err := pickProfile(manager, paths)
 				if err != nil {
 					return err
@@ -353,13 +456,38 @@ func newMountCommand() *cobra.Command {
 				return nil
 			}
 
-			fmt.Println(inspect.RenderMountResult(
-				result.Linked,
-				result.Stashed,
-				result.Skipped,
-				result.AlreadyLinked,
-				len(toolDirs),
-			))
+			// Collect mounted file paths for the panel
+			var mountedFiles []string
+			var sourceNames []string
+			seenSources := make(map[string]bool)
+			for _, entry := range entries {
+				mountedFiles = append(mountedFiles, entry.RelativePath)
+				if !seenSources[entry.SourceName] {
+					seenSources[entry.SourceName] = true
+					sourceNames = append(sourceNames, entry.SourceName)
+				}
+			}
+
+			// Limit displayed files
+			displayFiles := mountedFiles
+			if len(displayFiles) > 10 {
+				displayFiles = append(displayFiles[:9], fmt.Sprintf("... and %d more", len(mountedFiles)-9))
+			}
+
+			stats := fmt.Sprintf("%d files mounted", result.Linked)
+			if result.Stashed > 0 {
+				stats += fmt.Sprintf(" · %d stashed", result.Stashed)
+			}
+			if len(toolDirs) > 0 {
+				stats += fmt.Sprintf(" · %d tool dirs", len(toolDirs))
+			}
+
+			hints := []string{
+				tui.HintLine("Inspect:", "csaw inspect"),
+				tui.HintLine("Unmount:", "csaw unmount"),
+			}
+
+			fmt.Println(tui.MountPanel(displayFiles, sourceNames, stats, hints))
 			return nil
 		},
 	}
@@ -395,6 +523,7 @@ func newUnmountCommand() *cobra.Command {
 			}
 
 			fmt.Printf("%s %s\n", output.SymbolOK, inspect.RenderUnmountResult(result.Removed, result.Restored))
+			fmt.Printf("\n  %s\n", tui.HintLine("Remount:", "csaw mount --restore"))
 			return nil
 		},
 	}
@@ -975,6 +1104,14 @@ func newHideCommand() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+func isInteractive() bool {
+	info, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return info.Mode()&os.ModeCharDevice != 0
 }
 
 func newSourcesManager() (sources.Manager, error) {
