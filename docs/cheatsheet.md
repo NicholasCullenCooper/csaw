@@ -105,14 +105,15 @@ csaw update                             # repair broken links
 ## Where Files Go
 
 ```
-Skills    →  .claude/skills/   .opencode/skills/   .agents/skills/
-AGENTS.md →  project root
-CLAUDE.md →  project root
-agents/*  →  project root
-commands/ →  project root
+AGENTS.md   →  project root (read by Codex, Cursor, Copilot, Windsurf)
+CLAUDE.md   →  project root (read by Claude Code)
+agents/*.md →  .claude/rules/  .cursor/rules/  (composable instructions)
+skills/     →  .claude/skills/  .opencode/skills/  .agents/skills/
+mcp/        →  .mcp.json  .vscode/mcp.json  .cursor/mcp.json
+commands/   →  project root
 ```
 
-`.agents/skills/` is always created as a fallback. Other tool directories are used only if they already exist.
+Agent instruction files under `agents/` are projected into tool-native rule directories where they're loaded as composable instructions alongside AGENTS.md. `.agents/skills/` is always created as a fallback. Other tool directories are used only if they already exist.
 
 ## Profile Format (`csaw.yml`)
 

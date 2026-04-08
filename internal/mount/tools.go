@@ -3,37 +3,75 @@ package mount
 import (
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
-// ToolDir describes a tool's skill directory convention.
+// ToolDir describes a tool's skill and rule directory conventions.
 type ToolDir struct {
 	// Dir is the dot-directory name (e.g., ".claude").
 	Dir string
 	// SkillsSubdir is the path under Dir where skills are stored (e.g., "skills").
 	SkillsSubdir string
+	// RulesSubdir is the path under Dir where rule/instruction files are stored.
+	// Empty means this tool doesn't have a rules directory.
+	RulesSubdir string
 }
 
-// KnownToolDirs lists the tool directories csaw auto-detects. Each tool that
-// supports the SKILL.md standard gets an entry here.
-var KnownToolDirs = []ToolDir{
-	{Dir: ".claude", SkillsSubdir: "skills"},
-	{Dir: ".opencode", SkillsSubdir: "skills"},
-	{Dir: ".agents", SkillsSubdir: "skills"},
-	{Dir: ".codex", SkillsSubdir: "skills"},
+// ToolRegistry maps short tool names to their directory conventions.
+var ToolRegistry = map[string]ToolDir{
+	"claude":   {Dir: ".claude", SkillsSubdir: "skills", RulesSubdir: "rules"},
+	"opencode": {Dir: ".opencode", SkillsSubdir: "skills"},
+	"codex":    {Dir: ".codex", SkillsSubdir: "skills"},
+	"cursor":   {Dir: ".cursor", SkillsSubdir: "", RulesSubdir: "rules"},
+	"windsurf": {Dir: ".windsurf", SkillsSubdir: "", RulesSubdir: "rules"},
+}
+
+// KnownToolDirs returns all known tool directories.
+func KnownToolDirs() []ToolDir {
+	var dirs []ToolDir
+	for _, tool := range ToolRegistry {
+		dirs = append(dirs, tool)
+	}
+	return dirs
+}
+
+// AllToolNames returns all known tool names sorted alphabetically.
+func AllToolNames() []string {
+	names := make([]string, 0, len(ToolRegistry))
+	for name := range ToolRegistry {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // StandardFallback is always used as a skill mount target, created if needed.
 var StandardFallback = ToolDir{Dir: ".agents", SkillsSubdir: "skills"}
 
-// DetectToolDirs returns tool directories to mount skills into. It detects
-// which known tool directories already exist, and always includes .agents/
-// as the standard fallback (creating it if needed).
-func DetectToolDirs(projectRoot string) []ToolDir {
+// ResolveToolDirs determines which tool directories to use by combining:
+// 1. Configured tools (from config.yml) — the baseline
+// 2. Auto-detected tool directories in the project — merged in
+// 3. .agents/ fallback — always included
+func ResolveToolDirs(projectRoot string, configuredTools []string) []ToolDir {
 	found := make(map[string]bool)
 	var dirs []ToolDir
 
-	for _, tool := range KnownToolDirs {
+	// Start with configured tools
+	for _, name := range configuredTools {
+		if tool, ok := ToolRegistry[name]; ok {
+			if !found[tool.Dir] {
+				found[tool.Dir] = true
+				dirs = append(dirs, tool)
+			}
+		}
+	}
+
+	// Add auto-detected tool dirs (even if not in config)
+	for _, tool := range ToolRegistry {
+		if found[tool.Dir] {
+			continue
+		}
 		dir := filepath.Join(projectRoot, tool.Dir)
 		if info, err := os.Stat(dir); err == nil && info.IsDir() {
 			found[tool.Dir] = true
@@ -58,6 +96,14 @@ func isSkillEntry(entry SourceEntry) bool {
 	return strings.HasSuffix(rel, "/SKILL.md") && containsSegment(rel, "skills")
 }
 
+// isAgentEntry returns true if the source entry is an agent instruction file
+// under the agents/ directory (e.g., agents/base.md, agents/go.md).
+// Root-level files like AGENTS.md and CLAUDE.md are NOT agent entries — they
+// mount directly to the project root.
+func isAgentEntry(entry SourceEntry) bool {
+	return strings.HasPrefix(entry.RelativePath, "agents/") && strings.HasSuffix(entry.RelativePath, ".md")
+}
+
 // skillName extracts the skill directory name from a skill entry path.
 // e.g., "skills/code-review/SKILL.md" → "code-review"
 func skillName(entry SourceEntry) string {
@@ -80,31 +126,60 @@ func ExpandToolTargets(entries []SourceEntry, toolDirs []ToolDir) []SourceEntry 
 
 	var expanded []SourceEntry
 	for _, entry := range entries {
-		if !isSkillEntry(entry) {
-			// Non-skill: keep at original path
-			expanded = append(expanded, entry)
+		if isSkillEntry(entry) {
+			if len(toolDirs) == 0 {
+				expanded = append(expanded, entry)
+				continue
+			}
+			name := skillName(entry)
+			for _, tool := range toolDirs {
+				if tool.SkillsSubdir == "" {
+					continue
+				}
+				toolRelPath := filepath.ToSlash(
+					filepath.Join(tool.Dir, tool.SkillsSubdir, name, "SKILL.md"),
+				)
+				expanded = append(expanded, SourceEntry{
+					SourceName:    entry.SourceName,
+					RelativePath:  toolRelPath,
+					QualifiedPath: entry.QualifiedPath + "→" + toolRelPath,
+					FullPath:      entry.FullPath,
+					Priority:      entry.Priority,
+				})
+			}
 			continue
 		}
 
-		if len(toolDirs) == 0 {
-			// No tool dirs at all: fall back to original path
-			expanded = append(expanded, entry)
+		if isAgentEntry(entry) {
+			// Mount agent instruction files into tool rule directories
+			// (e.g., agents/base.md → .claude/rules/base.md)
+			baseName := filepath.Base(entry.RelativePath)
+			mounted := false
+			for _, tool := range toolDirs {
+				if tool.RulesSubdir == "" {
+					continue
+				}
+				toolRelPath := filepath.ToSlash(
+					filepath.Join(tool.Dir, tool.RulesSubdir, baseName),
+				)
+				expanded = append(expanded, SourceEntry{
+					SourceName:    entry.SourceName,
+					RelativePath:  toolRelPath,
+					QualifiedPath: entry.QualifiedPath + "→" + toolRelPath,
+					FullPath:      entry.FullPath,
+					Priority:      entry.Priority,
+				})
+				mounted = true
+			}
+			if !mounted {
+				// No tool has a rules dir — keep at original path
+				expanded = append(expanded, entry)
+			}
 			continue
 		}
 
-		// Skill: mount only into tool directories, not at original path
-		name := skillName(entry)
-		for _, tool := range toolDirs {
-			toolRelPath := filepath.ToSlash(
-				filepath.Join(tool.Dir, tool.SkillsSubdir, name, "SKILL.md"),
-			)
-			expanded = append(expanded, SourceEntry{
-				SourceName:    entry.SourceName,
-				RelativePath:  toolRelPath,
-				QualifiedPath: entry.QualifiedPath + "→" + toolRelPath,
-				FullPath:      entry.FullPath,
-			})
-		}
+		// Everything else (AGENTS.md, CLAUDE.md, etc.): keep at original path
+		expanded = append(expanded, entry)
 	}
 
 	return expanded

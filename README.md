@@ -224,6 +224,7 @@ csaw hide AGENTS.md    # add back → hidden from git
 | `--skip-conflicts` | mount | Skip files that conflict. |
 | `--restore` | mount | Re-mount the previous selection. |
 | `--keep` | mount | Keep existing mounts instead of replacing them. |
+| `--tools list` | mount | Target tools (e.g., `--tools claude,cursor`). |
 | `--source name` | inspect | Show details for a specific source. |
 | `--into source` | fork | Target source to fork into. |
 | `--name name` | init | Registry name (defaults to directory name). |

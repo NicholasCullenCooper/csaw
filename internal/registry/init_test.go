@@ -32,7 +32,7 @@ func TestInit(t *testing.T) {
 		t.Fatalf("Name = %q, want %q", result.Name, "my-config")
 	}
 
-	for _, sub := range []string{"agents", "skills/commit-message"} {
+	for _, sub := range []string{"skills/code-review", "skills/commit-message"} {
 		info, err := os.Stat(filepath.Join(dir, sub))
 		if err != nil {
 			t.Fatalf("Stat(%s) error = %v", sub, err)
@@ -42,7 +42,7 @@ func TestInit(t *testing.T) {
 		}
 	}
 
-	for _, file := range []string{"csaw.yml", ".csawignore", "agents/base.md", "skills/commit-message/SKILL.md"} {
+	for _, file := range []string{"csaw.yml", ".csawignore", "AGENTS.md", "skills/code-review/SKILL.md", "skills/commit-message/SKILL.md"} {
 		if _, err := os.Stat(filepath.Join(dir, file)); err != nil {
 			t.Fatalf("Stat(%s) error = %v", file, err)
 		}

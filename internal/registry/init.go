@@ -16,7 +16,7 @@ type InitResult struct {
 var starterProfile = `default:
   description: Mount everything
   include:
-    - agents/**
+    - AGENTS.md
     - skills/**
 `
 
@@ -24,13 +24,41 @@ var starterIgnore = `# Patterns listed here are excluded from mounting by defaul
 # Use --include-ignored to override.
 `
 
-var starterAgent = `# Agent Instructions
+var starterAgents = `# Agent Instructions
 
-Add your base coding preferences, conventions, and rules here.
-This file will be mounted as AGENTS.md in your projects.
+## Code Style
+- Write clear, readable code with meaningful names
+- Keep functions focused and small
+- Add comments only where the logic isn't self-evident
+
+## Workflow
+- Run tests before committing
+- Write descriptive commit messages
+- Keep PRs focused on a single concern
+
+## Preferences
+- Prefer simple solutions over clever ones
+- Fix the root cause, not the symptom
+- Leave code cleaner than you found it
 `
 
-var starterSkill = `---
+var starterSkillCodeReview = `---
+name: code-review
+description: Thorough, constructive code review
+---
+
+When reviewing code:
+
+1. **Correctness first** — Does it do what it claims? Are there edge cases?
+2. **Readability** — Can someone unfamiliar with the code understand it?
+3. **Simplicity** — Is there a simpler way to achieve the same result?
+4. **Tests** — Are the important paths tested? Are tests clear and maintainable?
+5. **Security** — Any injection risks, auth issues, or data exposure?
+
+Be specific in feedback. Instead of "this is confusing", say what's confusing and suggest an alternative. Acknowledge good decisions, not just problems.
+`
+
+var starterSkillCommitMsg = `---
 name: commit-message
 description: Write clear, conventional commit messages
 ---
@@ -58,24 +86,28 @@ func Init(ctx context.Context, g git.Git, dir string, name string) (InitResult, 
 		return InitResult{}, err
 	}
 
-	for _, sub := range []string{"agents", "skills/commit-message"} {
+	for _, sub := range []string{"skills/code-review", "skills/commit-message"} {
 		if err := os.MkdirAll(filepath.Join(absDir, sub), 0o755); err != nil {
 			return InitResult{}, err
 		}
 	}
 
 	// Write starter files only if they don't exist
-	starters := map[string]string{
-		"csaw.yml":                       starterProfile,
-		".csawignore":                    starterIgnore,
-		"agents/base.md":                 starterAgent,
-		"skills/commit-message/SKILL.md": starterSkill,
+	starters := []struct {
+		path    string
+		content string
+	}{
+		{"csaw.yml", starterProfile},
+		{".csawignore", starterIgnore},
+		{"AGENTS.md", starterAgents},
+		{"skills/code-review/SKILL.md", starterSkillCodeReview},
+		{"skills/commit-message/SKILL.md", starterSkillCommitMsg},
 	}
 
-	for relPath, content := range starters {
-		fullPath := filepath.Join(absDir, relPath)
+	for _, s := range starters {
+		fullPath := filepath.Join(absDir, s.path)
 		if _, err := os.Stat(fullPath); os.IsNotExist(err) {
-			if err := os.WriteFile(fullPath, []byte(content), 0o644); err != nil {
+			if err := os.WriteFile(fullPath, []byte(s.content), 0o644); err != nil {
 				return InitResult{}, err
 			}
 		}

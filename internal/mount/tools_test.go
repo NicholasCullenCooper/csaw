@@ -6,47 +6,65 @@ import (
 	"testing"
 )
 
-func TestDetectToolDirsWithExisting(t *testing.T) {
+func TestResolveToolDirsWithConfig(t *testing.T) {
 	dir := t.TempDir()
 
-	// Create .claude and .opencode, but not .codex
-	os.MkdirAll(filepath.Join(dir, ".claude"), 0o755)
+	// Configure claude, auto-detect opencode
 	os.MkdirAll(filepath.Join(dir, ".opencode"), 0o755)
 
-	found := DetectToolDirs(dir)
+	found := ResolveToolDirs(dir, []string{"claude"})
 
-	// Should find .claude, .opencode, and always include .agents (created as fallback)
-	if len(found) != 3 {
-		names := make([]string, len(found))
-		for i, d := range found {
-			names[i] = d.Dir
+	names := make(map[string]bool)
+	for _, d := range found {
+		names[d.Dir] = true
+	}
+	for _, expected := range []string{".claude", ".opencode", ".agents"} {
+		if !names[expected] {
+			t.Errorf("expected %s in resolved dirs", expected)
 		}
-		t.Fatalf("DetectToolDirs() found %d dirs %v, want 3 (.claude, .opencode, .agents)", len(found), names)
 	}
 }
 
-func TestDetectToolDirsAlwaysIncludesAgents(t *testing.T) {
+func TestResolveToolDirsNoConfig(t *testing.T) {
 	dir := t.TempDir()
 
-	// No tool directories exist — .agents should be created
-	found := DetectToolDirs(dir)
+	// No config, no existing dirs — only .agents fallback
+	found := ResolveToolDirs(dir, nil)
 
 	if len(found) != 1 {
-		t.Fatalf("DetectToolDirs() found %d dirs, want 1 (.agents)", len(found))
+		t.Fatalf("ResolveToolDirs() found %d dirs, want 1 (.agents)", len(found))
 	}
 	if found[0].Dir != ".agents" {
 		t.Errorf("found[0].Dir = %q, want .agents", found[0].Dir)
 	}
 
-	// Verify .agents was created on disk
 	if _, err := os.Stat(filepath.Join(dir, ".agents")); err != nil {
 		t.Errorf(".agents directory was not created: %v", err)
 	}
 }
 
-func TestExpandToolTargetsSkillsGoToToolDirsOnly(t *testing.T) {
+func TestResolveToolDirsAutoDetect(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, ".claude"), 0o755)
+	os.MkdirAll(filepath.Join(dir, ".cursor"), 0o755)
+
+	found := ResolveToolDirs(dir, nil)
+
+	names := make(map[string]bool)
+	for _, d := range found {
+		names[d.Dir] = true
+	}
+	if !names[".claude"] {
+		t.Error("expected .claude to be auto-detected")
+	}
+	if !names[".cursor"] {
+		t.Error("expected .cursor to be auto-detected")
+	}
+}
+
+func TestExpandToolTargetsSkillsAndAgents(t *testing.T) {
 	toolDirs := []ToolDir{
-		{Dir: ".claude", SkillsSubdir: "skills"},
+		{Dir: ".claude", SkillsSubdir: "skills", RulesSubdir: "rules"},
 		{Dir: ".agents", SkillsSubdir: "skills"},
 	}
 
@@ -84,14 +102,13 @@ func TestExpandToolTargetsSkillsGoToToolDirsOnly(t *testing.T) {
 		paths[e.RelativePath] = true
 	}
 
-	// Non-skill files: kept at original paths
 	expectedPresent := []string{
-		"AGENTS.md",
-		"agents/implementer.md",
-		".claude/skills/code-review/SKILL.md",
-		".agents/skills/code-review/SKILL.md",
-		".claude/skills/go-patterns/SKILL.md",
-		".agents/skills/go-patterns/SKILL.md",
+		"AGENTS.md",                              // root file: kept at original path
+		".claude/rules/implementer.md",           // agent: projected to .claude/rules/
+		".claude/skills/code-review/SKILL.md",    // skill: projected to .claude/skills/
+		".agents/skills/code-review/SKILL.md",    // skill: projected to .agents/skills/
+		".claude/skills/go-patterns/SKILL.md",    // skill: projected to .claude/skills/
+		".agents/skills/go-patterns/SKILL.md",    // skill: projected to .agents/skills/
 	}
 	for _, path := range expectedPresent {
 		if !paths[path] {
@@ -99,18 +116,19 @@ func TestExpandToolTargetsSkillsGoToToolDirsOnly(t *testing.T) {
 		}
 	}
 
-	// Skill files: NOT at original registry path
+	// Agent and skill files should NOT be at original registry paths
 	expectedAbsent := []string{
+		"agents/implementer.md",
 		"skills/code-review/SKILL.md",
 		"skills/go-patterns/SKILL.md",
 	}
 	for _, path := range expectedAbsent {
 		if paths[path] {
-			t.Errorf("skill should not be at original path %q — should only be in tool dirs", path)
+			t.Errorf("should not be at original path %q — should be projected to tool dirs", path)
 		}
 	}
 
-	// AGENTS.md: 1 + agents/implementer.md: 1 + 2 skills × 2 tool dirs = 6
+	// AGENTS.md: 1 + agents/implementer.md → .claude/rules: 1 + 2 skills × 2 tool dirs = 6
 	if len(expanded) != 6 {
 		t.Fatalf("ExpandToolTargets() returned %d entries, want 6", len(expanded))
 	}
@@ -206,7 +224,7 @@ func TestExpandMCPTargetsNonJSONIgnored(t *testing.T) {
 
 func TestExpandToolTargetsIncludesMCPProjection(t *testing.T) {
 	toolDirs := []ToolDir{
-		{Dir: ".claude", SkillsSubdir: "skills"},
+		{Dir: ".claude", SkillsSubdir: "skills", RulesSubdir: "rules"},
 	}
 
 	entries := []SourceEntry{

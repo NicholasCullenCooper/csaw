@@ -29,8 +29,9 @@ type Source struct {
 }
 
 type Config struct {
-	Sources          []Source `yaml:"sources,omitempty"`
-	DefaultForkTarget string  `yaml:"default_fork_target,omitempty"`
+	Sources           []Source `yaml:"sources,omitempty"`
+	DefaultForkTarget string   `yaml:"default_fork_target,omitempty"`
+	Tools             []string `yaml:"tools,omitempty"`
 }
 
 type Manager struct {

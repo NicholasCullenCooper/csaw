@@ -348,6 +348,7 @@ func newMountCommand() *cobra.Command {
 	var skipConflicts bool
 	var restore bool
 	var keep bool
+	var toolsFlag []string
 
 	cmd := &cobra.Command{
 		Use:   "mount [patterns...]",
@@ -438,8 +439,43 @@ func newMountCommand() *cobra.Command {
 				}
 			}
 
-			// Expand skill entries into tool-specific directories
-			toolDirs := mount.DetectToolDirs(projectRoot)
+			// Resolve tool directories: CLI flag > config > auto-detect
+			configuredTools := toolsFlag
+			if len(configuredTools) == 0 {
+				cfg, _ := manager.Load()
+				configuredTools = cfg.Tools
+			}
+
+			// If no tools configured and interactive, ask
+			if len(configuredTools) == 0 && isInteractive() {
+				detected := mount.ResolveToolDirs(projectRoot, nil)
+				hasRealTools := false
+				for _, d := range detected {
+					if d.Dir != ".agents" {
+						hasRealTools = true
+						break
+					}
+				}
+				if !hasRealTools {
+					items := make([]tui.MultiSelectItem, 0, len(mount.ToolRegistry))
+					for _, name := range mount.AllToolNames() {
+						items = append(items, tui.MultiSelectItem{
+							Key:   name,
+							Label: toolDisplayName(name),
+						})
+					}
+					msResult, err := tui.RunMultiSelect("Which AI tools do you use?", items)
+					if err == nil && !msResult.Aborted && len(msResult.Selected) > 0 {
+						configuredTools = msResult.Selected
+						// Save to config for future mounts
+						cfg, _ := manager.Load()
+						cfg.Tools = configuredTools
+						_ = manager.Save(cfg)
+					}
+				}
+			}
+
+			toolDirs := mount.ResolveToolDirs(projectRoot, configuredTools)
 			entries = mount.ExpandToolTargets(entries, toolDirs)
 
 			result, err := mount.Apply(projectRoot, paths, entries, promptConflictResolver{
@@ -499,6 +535,7 @@ func newMountCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&skipConflicts, "skip-conflicts", false, "skip files that conflict with existing paths")
 	cmd.Flags().BoolVar(&restore, "restore", false, "restore the previous mount selection")
 	cmd.Flags().BoolVar(&keep, "keep", false, "keep existing mounts instead of replacing them")
+	cmd.Flags().StringSliceVar(&toolsFlag, "tools", nil, "target tools (e.g., claude,cursor)")
 
 	return cmd
 }
@@ -1104,6 +1141,21 @@ func newHideCommand() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+var toolDisplayNames = map[string]string{
+	"claude":   "Claude Code",
+	"cursor":   "Cursor",
+	"opencode": "OpenCode",
+	"codex":    "Codex",
+	"windsurf": "Windsurf",
+}
+
+func toolDisplayName(key string) string {
+	if name, ok := toolDisplayNames[key]; ok {
+		return name
+	}
+	return key
 }
 
 func isInteractive() bool {
