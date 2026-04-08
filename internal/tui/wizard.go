@@ -239,6 +239,11 @@ func (m wizardModel) advance() (tea.Model, tea.Cmd) {
 }
 
 func (m wizardModel) View() string {
+	// Bubbletea calls View() one final time after tea.Quit — guard against
+	// m.current being past the end of the steps slice.
+	if m.current >= len(m.steps) {
+		return ""
+	}
 	step := m.steps[m.current]
 
 	var content strings.Builder
