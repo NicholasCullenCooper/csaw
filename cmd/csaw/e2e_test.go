@@ -47,12 +47,21 @@ func newE2EEnv(t *testing.T) *e2eEnv {
 	oldHome := os.Getenv("CSAW_HOME")
 	os.Setenv("CSAW_HOME", csawHome)
 
+	// Replace stdin with a pipe so isInteractive() returns false.
+	// This prevents bubbletea TUI flows from hanging in CI.
+	oldStdin := os.Stdin
+	r, w, _ := os.Pipe()
+	w.Close() // close write end immediately → reads return EOF
+	os.Stdin = r
+
 	// cd into the project
 	oldDir, _ := os.Getwd()
 	os.Chdir(projectDir)
 
 	t.Cleanup(func() {
 		os.Chdir(oldDir)
+		os.Stdin = oldStdin
+		r.Close()
 		if oldHome != "" {
 			os.Setenv("CSAW_HOME", oldHome)
 		} else {
