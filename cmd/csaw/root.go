@@ -40,6 +40,7 @@ func newRootCommand() *cobra.Command {
 
 	cmd.AddCommand(newVersionCommand())
 	cmd.AddCommand(newInitCommand())
+	cmd.AddCommand(newConfigCommand())
 	cmd.AddCommand(newSourceCommand())
 	cmd.AddCommand(newMountCommand())
 	cmd.AddCommand(newUnmountCommand())
@@ -161,6 +162,129 @@ func newInitCommand() *cobra.Command {
 	cmd.Flags().StringVar(&name, "name", "", "registry name (defaults to directory name)")
 	cmd.Flags().BoolVar(&adopt, "adopt", false, "adopt existing AI config files from the current project")
 	return cmd
+}
+
+func newConfigCommand() *cobra.Command {
+	rootCmd := &cobra.Command{
+		Use:   "config",
+		Short: "View and set csaw configuration",
+	}
+
+	validKeys := []string{"tools", "default_fork_target"}
+
+	rootCmd.AddCommand(&cobra.Command{
+		Use:   "set <key> <value>",
+		Short: "Set a config value",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			key, value := args[0], args[1]
+
+			manager, err := newSourcesManager()
+			if err != nil {
+				return err
+			}
+
+			cfg, err := manager.Load()
+			if err != nil {
+				return err
+			}
+
+			switch key {
+			case "tools":
+				tools := strings.Split(value, ",")
+				for _, t := range tools {
+					t = strings.TrimSpace(t)
+					if _, ok := mount.ToolRegistry[t]; !ok {
+						return fmt.Errorf("unknown tool %q; valid tools: %s", t, strings.Join(mount.AllToolNames(), ", "))
+					}
+				}
+				cfg.Tools = tools
+			case "default_fork_target":
+				if _, err := manager.Get(value); err != nil {
+					return fmt.Errorf("source %q not found; add it first with: csaw source add %s <url>", value, value)
+				}
+				cfg.DefaultForkTarget = value
+			default:
+				return fmt.Errorf("unknown config key %q; valid keys: %s", key, strings.Join(validKeys, ", "))
+			}
+
+			if err := manager.Save(cfg); err != nil {
+				return err
+			}
+			output.Successf("set %s = %s", key, value)
+			return nil
+		},
+	})
+
+	rootCmd.AddCommand(&cobra.Command{
+		Use:   "get <key>",
+		Short: "Get a config value",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			key := args[0]
+
+			manager, err := newSourcesManager()
+			if err != nil {
+				return err
+			}
+
+			cfg, err := manager.Load()
+			if err != nil {
+				return err
+			}
+
+			switch key {
+			case "tools":
+				if len(cfg.Tools) == 0 {
+					output.Muted("not set")
+				} else {
+					fmt.Fprintln(cmd.OutOrStdout(), strings.Join(cfg.Tools, ","))
+				}
+			case "default_fork_target":
+				if cfg.DefaultForkTarget == "" {
+					output.Muted("not set")
+				} else {
+					fmt.Fprintln(cmd.OutOrStdout(), cfg.DefaultForkTarget)
+				}
+			default:
+				return fmt.Errorf("unknown config key %q; valid keys: %s", key, strings.Join(validKeys, ", "))
+			}
+			return nil
+		},
+	})
+
+	rootCmd.AddCommand(&cobra.Command{
+		Use:   "list",
+		Short: "Show all configuration",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			manager, err := newSourcesManager()
+			if err != nil {
+				return err
+			}
+
+			cfg, err := manager.Load()
+			if err != nil {
+				return err
+			}
+
+			output.Header("csaw config")
+			fmt.Println()
+			if len(cfg.Tools) > 0 {
+				output.Label("tools:", strings.Join(cfg.Tools, ", "))
+			} else {
+				output.Label("tools:", output.Faint("not set"))
+			}
+			if cfg.DefaultForkTarget != "" {
+				output.Label("fork target:", cfg.DefaultForkTarget)
+			} else {
+				output.Label("fork target:", output.Faint("not set"))
+			}
+			output.Label("sources:", fmt.Sprintf("%d", len(cfg.Sources)))
+			return nil
+		},
+	})
+
+	return rootCmd
 }
 
 func newSourceCommand() *cobra.Command {
@@ -830,18 +954,11 @@ func newPullCommand() *cobra.Command {
 
 			if len(args) == 1 {
 				err := manager.Pull(context.Background(), args[0], stash)
-				var dirtyErr *sources.DirtySourceError
-				if errors.As(err, &dirtyErr) {
-					output.Warnf("%s has uncommitted changes", dirtyErr.Source)
-					fmt.Fprintf(cmd.OutOrStdout(), "\n  %s\n", tui.HintLine("Commit:", "cd "+dirtyErr.Path+" && git add -A && git commit -m \"...\""))
-					fmt.Fprintf(cmd.OutOrStdout(), "  %s\n", tui.HintLine("Or stash:", "csaw pull "+dirtyErr.Source+" --stash"))
-					return fmt.Errorf("pull aborted for %s", dirtyErr.Source)
+				if err == nil {
+					output.Successf("pulled %s", args[0])
+					return nil
 				}
-				if err != nil {
-					return err
-				}
-				output.Successf("pulled %s", args[0])
-				return nil
+				return handlePullError(cmd, err)
 			}
 
 			results, err := manager.PullAll(context.Background(), stash)
@@ -851,15 +968,19 @@ func newPullCommand() *cobra.Command {
 
 			var hasErrors bool
 			for _, r := range results {
-				var dirtyErr *sources.DirtySourceError
 				if r.Err == nil {
 					output.Successf("pulled %s", r.Source)
-				} else if errors.As(r.Err, &dirtyErr) {
+					continue
+				}
+				hasErrors = true
+				var dirtyErr *sources.DirtySourceError
+				var divErr *sources.DivergedSourceError
+				if errors.As(r.Err, &dirtyErr) {
 					output.Warnf("%s has uncommitted changes (use --stash)", r.Source)
-					hasErrors = true
+				} else if errors.As(r.Err, &divErr) {
+					output.Warnf("%s has diverged (%d local, %d remote commits)", divErr.Source, divErr.Ahead, divErr.Behind)
 				} else {
 					output.Errorf("%s: %v", r.Source, r.Err)
-					hasErrors = true
 				}
 			}
 
@@ -1226,6 +1347,27 @@ func toolDisplayName(key string) string {
 		return name
 	}
 	return key
+}
+
+func handlePullError(cmd *cobra.Command, err error) error {
+	var dirtyErr *sources.DirtySourceError
+	var divErr *sources.DivergedSourceError
+
+	switch {
+	case errors.As(err, &dirtyErr):
+		output.Warnf("%s has uncommitted changes", dirtyErr.Source)
+		fmt.Fprintf(cmd.OutOrStdout(), "\n  %s\n", tui.HintLine("Commit:", "cd "+dirtyErr.Path+" && git add -A && git commit -m \"...\""))
+		fmt.Fprintf(cmd.OutOrStdout(), "  %s\n", tui.HintLine("Or stash:", "csaw pull "+dirtyErr.Source+" --stash"))
+		return fmt.Errorf("pull aborted for %s", dirtyErr.Source)
+
+	case errors.As(err, &divErr):
+		output.Warnf("%s has diverged (%d local, %d remote commits)", divErr.Source, divErr.Ahead, divErr.Behind)
+		fmt.Fprintf(cmd.OutOrStdout(), "\n  %s\n", tui.HintLine("Resolve:", "cd "+divErr.Path+" && git pull --rebase"))
+		return fmt.Errorf("pull aborted for %s", divErr.Source)
+
+	default:
+		return err
+	}
 }
 
 func isInteractive() bool {

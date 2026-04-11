@@ -105,7 +105,44 @@ func (m Manager) Load() (Config, error) {
 	}
 
 	sort.Slice(cfg.Sources, func(i, j int) bool { return cfg.Sources[i].Name < cfg.Sources[j].Name })
+
+	if warnings := ValidateConfig(cfg); len(warnings) > 0 {
+		for _, w := range warnings {
+			fmt.Fprintf(os.Stderr, "warning: %s\n", w)
+		}
+	}
+
 	return cfg, nil
+}
+
+// ValidateConfig checks a config for structural issues and returns warnings.
+// It does not error — broken configs are loaded with warnings for backward compat.
+func ValidateConfig(cfg Config) []string {
+	var warnings []string
+
+	// Check for duplicate source names
+	seen := make(map[string]bool)
+	for _, source := range cfg.Sources {
+		if source.Name == "" {
+			warnings = append(warnings, "source with empty name in config.yml")
+			continue
+		}
+		if seen[source.Name] {
+			warnings = append(warnings, fmt.Sprintf("duplicate source name %q in config.yml", source.Name))
+		}
+		seen[source.Name] = true
+
+		if source.Kind == "" {
+			warnings = append(warnings, fmt.Sprintf("source %q has empty kind", source.Name))
+		}
+	}
+
+	// Check default_fork_target references an existing source
+	if cfg.DefaultForkTarget != "" && !seen[cfg.DefaultForkTarget] {
+		warnings = append(warnings, fmt.Sprintf("default_fork_target %q does not match any configured source", cfg.DefaultForkTarget))
+	}
+
+	return warnings
 }
 
 func (m Manager) Save(cfg Config) error {
@@ -190,6 +227,20 @@ func (e *DirtySourceError) Error() string {
 	return fmt.Sprintf("source %q has uncommitted changes at %s", e.Source, e.Path)
 }
 
+// DivergedSourceError is returned when a source's local and remote branches
+// have diverged (both have commits the other doesn't).
+type DivergedSourceError struct {
+	Source string
+	Path   string
+	Ahead  int
+	Behind int
+}
+
+func (e *DivergedSourceError) Error() string {
+	return fmt.Sprintf("source %q has diverged (%d local, %d remote commits) at %s",
+		e.Source, e.Ahead, e.Behind, e.Path)
+}
+
 func (m Manager) Pull(ctx context.Context, name string, stash bool) error {
 	source, err := m.Get(name)
 	if err != nil {
@@ -228,8 +279,41 @@ func (m Manager) Pull(ctx context.Context, name string, stash bool) error {
 		defer m.Git.Run(ctx, checkout, "stash", "pop")
 	}
 
-	_, err = m.Git.Run(ctx, checkout, "pull", "--ff-only")
+	// Fetch and check for divergence before pulling
+	if _, err := m.Git.Run(ctx, checkout, "fetch"); err != nil {
+		return err
+	}
+
+	behindStr, _ := m.Git.Run(ctx, checkout, "rev-list", "--count", "HEAD..@{u}")
+	aheadStr, _ := m.Git.Run(ctx, checkout, "rev-list", "--count", "@{u}..HEAD")
+	behind := parseCount(behindStr)
+	ahead := parseCount(aheadStr)
+
+	if ahead > 0 && behind > 0 {
+		return &DivergedSourceError{Source: name, Path: checkout, Ahead: ahead, Behind: behind}
+	}
+
+	if behind == 0 {
+		// Already up to date
+		return nil
+	}
+
+	_, err = m.Git.Run(ctx, checkout, "merge", "--ff-only", "@{u}")
 	return err
+}
+
+func parseCount(s string) int {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0
+	}
+	n := 0
+	for _, c := range s {
+		if c >= '0' && c <= '9' {
+			n = n*10 + int(c-'0')
+		}
+	}
+	return n
 }
 
 // PullResult tracks the outcome of pulling a single source.

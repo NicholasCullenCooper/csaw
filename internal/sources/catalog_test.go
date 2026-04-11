@@ -196,20 +196,20 @@ func TestPullDirtyWithStash(t *testing.T) {
 	}
 
 	hasStash := false
-	hasPull := false
+	hasFetch := false
 	for _, cmd := range commands {
 		if cmd == "stash" {
 			hasStash = true
 		}
-		if cmd == "pull" {
-			hasPull = true
+		if cmd == "fetch" {
+			hasFetch = true
 		}
 	}
 	if !hasStash {
 		t.Error("expected stash command")
 	}
-	if !hasPull {
-		t.Error("expected pull command")
+	if !hasFetch {
+		t.Error("expected fetch command")
 	}
 }
 
@@ -235,5 +235,71 @@ func TestPullCleanSource(t *testing.T) {
 	err := manager.Pull(context.Background(), "team", false)
 	if err != nil {
 		t.Fatalf("Pull() error = %v", err)
+	}
+}
+
+func TestPullDivergedSource(t *testing.T) {
+	root := t.TempDir()
+	paths := runtime.BuildPaths(filepath.Join(root, ".csaw"))
+
+	sourceDir := filepath.Join(paths.Sources, "team")
+	if err := os.MkdirAll(sourceDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	git := &recordingGit{
+		outputs: map[string]string{
+			joinArgs([]string{"status", "--porcelain"}):             "",
+			joinArgs([]string{"rev-list", "--count", "HEAD..@{u}"}): "3",
+			joinArgs([]string{"rev-list", "--count", "@{u}..HEAD"}): "2",
+		},
+	}
+	manager := Manager{Paths: paths, Git: git}
+	if err := manager.Add(Source{Name: "team", Kind: KindRemote, URL: "git@example.com:org/repo.git"}); err != nil {
+		t.Fatal(err)
+	}
+
+	err := manager.Pull(context.Background(), "team", false)
+	var divErr *DivergedSourceError
+	if !errors.As(err, &divErr) {
+		t.Fatalf("Pull() error = %v, want DivergedSourceError", err)
+	}
+	if divErr.Ahead != 2 || divErr.Behind != 3 {
+		t.Fatalf("DivergedSourceError ahead=%d behind=%d, want 2/3", divErr.Ahead, divErr.Behind)
+	}
+}
+
+func TestValidateConfigDuplicates(t *testing.T) {
+	cfg := Config{
+		Sources: []Source{
+			{Name: "team", Kind: KindRemote},
+			{Name: "team", Kind: KindLocal},
+		},
+	}
+	warnings := ValidateConfig(cfg)
+	if len(warnings) == 0 {
+		t.Fatal("expected warning for duplicate source name")
+	}
+}
+
+func TestValidateConfigBadForkTarget(t *testing.T) {
+	cfg := Config{
+		Sources:           []Source{{Name: "team", Kind: KindRemote}},
+		DefaultForkTarget: "nonexistent",
+	}
+	warnings := ValidateConfig(cfg)
+	if len(warnings) == 0 {
+		t.Fatal("expected warning for invalid default_fork_target")
+	}
+}
+
+func TestValidateConfigClean(t *testing.T) {
+	cfg := Config{
+		Sources:           []Source{{Name: "team", Kind: KindRemote}},
+		DefaultForkTarget: "team",
+	}
+	warnings := ValidateConfig(cfg)
+	if len(warnings) != 0 {
+		t.Fatalf("expected no warnings, got: %v", warnings)
 	}
 }

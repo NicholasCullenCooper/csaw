@@ -12,6 +12,7 @@ import (
 	"github.com/csaw-ai/csaw/internal/drift"
 	"github.com/csaw-ai/csaw/internal/linkmode"
 	"github.com/csaw-ai/csaw/internal/output"
+	"github.com/csaw-ai/csaw/internal/pinning"
 	"github.com/csaw-ai/csaw/internal/runtime"
 	"github.com/csaw-ai/csaw/internal/sources"
 	"github.com/csaw-ai/csaw/internal/workspace"
@@ -22,6 +23,7 @@ type Summary struct {
 	Paths       runtime.Paths
 	Sources     []sources.Source
 	Mounted     []drift.Status
+	Pins        []pinning.Pin
 }
 
 func BuildSummary(ctx context.Context, projectRoot string, paths runtime.Paths, manager sources.Manager) (Summary, error) {
@@ -48,11 +50,14 @@ func BuildSummary(ctx context.Context, projectRoot string, paths runtime.Paths, 
 		mounted = drift.InspectLinks(links)
 	}
 
+	pinState, _ := pinning.Read(projectRoot)
+
 	return Summary{
 		ProjectRoot: projectRoot,
 		Paths:       paths,
 		Sources:     cfg.Sources,
 		Mounted:     mounted,
+		Pins:        pinState.Pins,
 	}, nil
 }
 
@@ -68,18 +73,39 @@ func RenderSummary(summary Summary) string {
 	writeLabel(&b, "sources", fmt.Sprintf("%d", len(summary.Sources)))
 	writeLabel(&b, "mounted", fmt.Sprintf("%d", len(summary.Mounted)))
 
+	if len(summary.Pins) > 0 {
+		writeLabel(&b, "pinned", fmt.Sprintf("%d", len(summary.Pins)))
+	}
+
+	// Build pin lookup
+	pinMap := make(map[string]string)
+	for _, pin := range summary.Pins {
+		pinMap[pin.Source] = pin.Ref
+	}
+
 	// Sources
 	if len(summary.Sources) > 0 {
 		b.WriteString("\n")
 		b.WriteString(output.Bold("Sources"))
 		b.WriteString("\n")
 		for _, source := range summary.Sources {
-			b.WriteString(fmt.Sprintf("  %s %s %s %s\n",
+			meta := string(source.Kind)
+			if source.Priority != 0 {
+				meta += fmt.Sprintf(", priority %d", source.Priority)
+			}
+
+			line := fmt.Sprintf("  %s %s %s %s",
 				output.Accent(source.Name),
-				output.Faint("("+string(source.Kind)+")"),
+				output.Faint("("+meta+")"),
 				output.Faint("→"),
 				source.CheckoutPath(summary.Paths),
-			))
+			)
+
+			if ref, ok := pinMap[source.Name]; ok {
+				line += " " + output.Warn("[pinned → "+ref+"]")
+			}
+
+			b.WriteString(line + "\n")
 		}
 	}
 
