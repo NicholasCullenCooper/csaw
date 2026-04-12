@@ -13,13 +13,13 @@ Handled by GoReleaser from a single `.goreleaser.yml`, triggered by a git tag.
 | Channel | Command | Audience |
 |---|---|---|
 | GitHub Releases | Download binary | Everyone (baseline) |
-| Homebrew Cask | `brew install --cask csaw-ai/tap/csaw` | macOS and Linux devs |
+| Homebrew Cask | `brew install --cask NicholasCullenCooper/tap/csaw` | macOS and Linux devs |
 | Scoop | `scoop install csaw` | Windows devs |
 | PyPI | `uv tool install csaw` | Python ecosystem / cross-platform |
 
 **Repos:**
-- `csaw-ai/homebrew-tap` — GoReleaser auto-populates the cask on release
-- `csaw-ai/scoop-bucket` — GoReleaser auto-populates the manifest on release
+- `NicholasCullenCooper/homebrew-tap` — GoReleaser auto-populates the cask on release
+- `NicholasCullenCooper/scoop-bucket` — GoReleaser auto-populates the manifest on release
 
 **PyPI** — uses [go-to-wheel](https://github.com/simonw/go-to-wheel) to package compiled Go binaries as Python wheels. Each wheel embeds the binary for a specific platform (e.g., `macosx_11_0_arm64`, `manylinux_2_17_x86_64`). pip/uv automatically selects the correct wheel. A thin Python wrapper calls `os.execvp()` to run the embedded binary. Build script: `scripts/build-pypi-wheels.py`. Published via trusted publishing (OIDC) in the `pypi` job of the release workflow.
 
@@ -29,15 +29,15 @@ Handled by GoReleaser from a single `.goreleaser.yml`, triggered by a git tag.
 |---|---|---|
 | npm | `npx csaw` / `npm install -g csaw` | Node/frontend ecosystem |
 
-**npm** — follow the [esbuild pattern](https://github.com/evanw/esbuild/issues/789): publish scoped platform packages (`@csaw-ai/csaw-darwin-arm64`, `@csaw-ai/csaw-linux-x64`, etc.) as optional dependencies of a main `csaw` package. npm installs only the matching platform package. A thin JS wrapper finds and execs the binary. No postinstall scripts.
+**npm** — follow the [esbuild pattern](https://github.com/evanw/esbuild/issues/789): publish scoped platform packages (`@NicholasCullenCooper/csaw-darwin-arm64`, `@NicholasCullenCooper/csaw-linux-x64`, etc.) as optional dependencies of a main `csaw` package. npm installs only the matching platform package. A thin JS wrapper finds and execs the binary. No postinstall scripts.
 
 ### Phase 3 — Completeness
 
 | Channel | Command | Audience |
 |---|---|---|
-| Winget | `winget install csaw-ai.csaw` | Windows corporate |
-| Nix | `nix run github:csaw-ai/csaw` | NixOS users |
-| Docker | `docker run ghcr.io/csaw-ai/csaw` | CI pipelines |
+| Winget | `winget install NicholasCullenCooper.csaw` | Windows corporate |
+| Nix | `nix run github:NicholasCullenCooper/csaw` | NixOS users |
+| Docker | `docker run ghcr.io/NicholasCullenCooper/csaw` | CI pipelines |
 | AUR | `yay -S csaw` | Arch Linux |
 
 GoReleaser supports Winget manifest generation, Nix package generation, Docker images, and AUR out of the box.
@@ -71,8 +71,8 @@ git tag -a v0.1.1 -m "..." && git push origin v0.1.1
   GoReleaser job:
     ├── Cross-compile (linux/mac/win x amd64/arm64)
     ├── GitHub Release + checksums + changelog
-    ├── Homebrew cask → csaw-ai/homebrew-tap
-    └── Scoop manifest → csaw-ai/scoop-bucket
+    ├── Homebrew cask → NicholasCullenCooper/homebrew-tap
+    └── Scoop manifest → NicholasCullenCooper/scoop-bucket
 
   PyPI job (runs after GoReleaser):
     ├── go-to-wheel builds 8 platform wheels
@@ -96,10 +96,10 @@ This populates the `version` variable in `cmd/csaw/root.go` that `csaw version` 
 
 ```bash
 # macOS / Linux
-brew install --cask csaw-ai/tap/csaw
+brew install --cask NicholasCullenCooper/tap/csaw
 
 # Windows
-scoop bucket add csaw-ai https://github.com/csaw-ai/scoop-bucket
+scoop bucket add NicholasCullenCooper https://github.com/NicholasCullenCooper/scoop-bucket
 scoop install csaw
 
 # Any platform (recommended)
@@ -120,8 +120,8 @@ The binary is identical across all channels. Only the packaging differs.
 | What | Effort | Needed by |
 |---|---|---|
 | `.goreleaser.yml` in this repo | Low | First release |
-| `csaw-ai/homebrew-tap` GitHub repo | Trivial | First release |
-| `csaw-ai/scoop-bucket` GitHub repo | Trivial | First release |
+| `NicholasCullenCooper/homebrew-tap` GitHub repo | Trivial | First release |
+| `NicholasCullenCooper/scoop-bucket` GitHub repo | Trivial | First release |
 | GitHub Actions release workflow | Medium | First release |
 | ~~PyPI publishing workflow (go-to-wheel)~~ | ~~Medium~~ | ~~Done (v0.1.2)~~ |
 | npm packages (esbuild pattern) | Medium | Phase 2 |

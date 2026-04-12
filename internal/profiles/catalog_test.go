@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/csaw-ai/csaw/internal/runtime"
-	"github.com/csaw-ai/csaw/internal/sources"
+	"github.com/NicholasCullenCooper/csaw/internal/runtime"
+	"github.com/NicholasCullenCooper/csaw/internal/sources"
 )
 
 func TestCatalogResolverCrossSourceExtends(t *testing.T) {

@@ -3,45 +3,39 @@
 
 Output docs/assets/demo.gif
 Set Theme "Catppuccin Mocha"
-Set FontSize 16
+Set FontSize 15
 Set Width 900
-Set Height 520
+Set Height 550
 Set Padding 20
-Set TypingSpeed 40ms
+Set TypingSpeed 35ms
 
-# Show sources
-Type "csaw source list"
+# Add a source
+Type "csaw source add team git@github.com:your-org/ai-config.git"
 Enter
-Sleep 1200ms
+Sleep 2000ms
 
-# Mount with a profile
+# Mount a profile
 Enter
-Type "mkdir -p .claude && csaw mount --profile dotagent/go --force"
+Type "csaw mount --profile team/backend"
 Enter
-Sleep 1800ms
+Sleep 2500ms
 
-# Inspect the result
+# Inspect
 Enter
 Type "csaw inspect"
 Enter
 Sleep 3000ms
 
-# Health check
+# Check health
 Enter
 Type "csaw check"
 Enter
 Sleep 1200ms
 
-# Status overview
-Enter
-Type "csaw status"
-Enter
-Sleep 1500ms
-
 # Clean unmount
 Enter
 Type "csaw unmount"
 Enter
-Sleep 1200ms
+Sleep 1500ms
 
 Sleep 800ms

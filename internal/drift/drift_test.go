@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/csaw-ai/csaw/internal/linkmode"
-	"github.com/csaw-ai/csaw/internal/workspace"
+	"github.com/NicholasCullenCooper/csaw/internal/linkmode"
+	"github.com/NicholasCullenCooper/csaw/internal/workspace"
 )
 
 func TestInspectMountStateClassifiesDrift(t *testing.T) {

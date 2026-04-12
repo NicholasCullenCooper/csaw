@@ -47,7 +47,7 @@ wheels = go_to_wheel.build_wheels(
     requires_python=">=3.8",
     author="Nicholas Cooper",
     license_="MIT",
-    url="https://github.com/csaw-ai/csaw",
+    url="https://github.com/NicholasCullenCooper/csaw",
     readme="README.md",
 )
 

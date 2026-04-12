@@ -7,10 +7,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/csaw-ai/csaw/internal/drift"
-	"github.com/csaw-ai/csaw/internal/linkmode"
-	"github.com/csaw-ai/csaw/internal/runtime"
-	"github.com/csaw-ai/csaw/internal/workspace"
+	"github.com/NicholasCullenCooper/csaw/internal/drift"
+	"github.com/NicholasCullenCooper/csaw/internal/linkmode"
+	"github.com/NicholasCullenCooper/csaw/internal/runtime"
+	"github.com/NicholasCullenCooper/csaw/internal/workspace"
 )
 
 type ConflictAction string

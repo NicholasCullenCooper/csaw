@@ -1,61 +1,57 @@
 <p align="center">
   <h1 align="center">csaw</h1>
   <p align="center">
-    <strong>Mount, not install.</strong> Your AI workspace — symlinked from registries, reversible, inspectable.
+    <strong>Mount, not install.</strong> One registry of AI rules, skills, and configs — mounted into every project, never committed, never drifted.
   </p>
   <p align="center">
-    <a href="https://github.com/csaw-ai/csaw/actions"><img src="https://github.com/csaw-ai/csaw/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+    <a href="https://github.com/NicholasCullenCooper/csaw/actions"><img src="https://github.com/NicholasCullenCooper/csaw/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
     <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
-    <a href="https://github.com/csaw-ai/csaw/releases"><img src="https://img.shields.io/github/v/release/csaw-ai/csaw?include_prereleases&label=version" alt="Version"></a>
+    <a href="https://github.com/NicholasCullenCooper/csaw/releases"><img src="https://img.shields.io/github/v/release/NicholasCullenCooper/csaw?include_prereleases&label=version" alt="Version"></a>
     <a href="https://pypi.org/project/csaw/"><img src="https://img.shields.io/pypi/v/csaw" alt="PyPI"></a>
   </p>
   <p align="center">
-    Works with: Claude Code · OpenCode · Codex · Cursor · Windsurf · Gemini CLI
+    Works with: Claude Code · Codex · Cursor · Copilot · Windsurf · OpenCode · Gemini CLI
   </p>
-</p>
-
-<p align="center">
-  <img src="docs/assets/demo.gif" alt="csaw demo" width="800">
 </p>
 
 ---
 
-csaw manages agent instructions, skills, and configs from git-backed registries — symlinked into your projects, mounted into tool-native directories, and removed without a trace.
+Your AI tools need configuration — AGENTS.md, skills, rules, MCP configs. Today those files are copy-pasted into every repo, they drift between projects, they clutter your git history, and onboarding a teammate means "copy these files from the wiki."
 
-```bash
-csaw mount                        # pick a profile interactively
-csaw mount --profile team/backend # or specify directly
-csaw inspect                      # see everything that's active
-csaw unmount                      # clean removal, no trace
+**csaw fixes this.** You keep one registry of AI config. csaw symlinks it into your projects. Update the registry, every project sees the change instantly. Unmount, and your repo is clean — no files left behind, no commits to revert.
+
 ```
-
-## Why csaw?
-
-Your AI coding tools (Claude Code, OpenCode, Codex, Cursor) need configuration files — AGENTS.md, skills, rules. Today you copy them between projects, they drift, and switching between setups means manually swapping files.
-
-csaw mounts these files from a central registry using symlinks. When you're done, unmount. When you switch tasks, switch profiles. Your project's git history stays clean.
-
-|  | Copy & paste | csaw |
-|---|---|---|
-| **Install** | Copy files into repo | Symlink from registry |
-| **Update** | Re-copy, hope nothing drifted | Pull registry, links update live |
-| **Undo** | Delete files, hope you got them all | `csaw unmount` — originals restored |
-| **Switch** | Manual file swapping | `csaw mount --profile frontend` |
-| **Git** | Config files in your history | Hidden from git automatically |
-| **Tools** | Manually place in each tool's dir | Auto-detected, auto-mounted |
+your-registry/                         your-project/
+  AGENTS.md                     ──→      AGENTS.md (symlink)
+  skills/                                .claude/skills/
+    code-review/SKILL.md        ──→        code-review/SKILL.md (symlink)
+    testing/SKILL.md            ──→        testing/SKILL.md (symlink)
+  agents/                                .claude/rules/
+    go.md                       ──→        go.md (symlink)
+```
 
 ## Install
 
 ```bash
-# Recommended (any platform)
 uv tool install csaw
+```
 
+<details>
+<summary>Other install methods</summary>
+
+```bash
 # macOS / Linux
-brew install --cask csaw-ai/tap/csaw
+brew install --cask NicholasCullenCooper/tap/csaw
 
 # Windows
-scoop bucket add csaw-ai https://github.com/csaw-ai/scoop-bucket
+scoop bucket add csaw https://github.com/NicholasCullenCooper/scoop-bucket
 scoop install csaw
+
+# pipx
+pipx install csaw
+
+# Go from source
+go install github.com/NicholasCullenCooper/csaw/cmd/csaw@latest
 ```
 
 > **macOS note (Homebrew):** If you see "Apple could not verify", run:
@@ -64,43 +60,92 @@ scoop install csaw
 > ```
 > This is normal for unsigned CLI tools distributed via Homebrew casks.
 
-<details>
-<summary>Other install methods</summary>
-
-```bash
-# pipx
-pipx install csaw
-
-# Go from source (requires Go 1.22+)
-go install github.com/csaw-ai/csaw/cmd/csaw@latest
-```
-
 </details>
 
-## Quick Start
-
-### 1. Create or add a source
-
-A source is any git repo (or local directory) containing agent files and skills.
+## Get Started in 60 Seconds
 
 ```bash
-# Add a team registry (auto-clones)
+# Add your team's AI config registry
 csaw source add team git@github.com:your-org/ai-config.git
+# ✔ registered source "team"
+# ✔ cloned team
 
-# Or create your own
-csaw init ~/my-ai-config
-csaw source add personal ~/my-ai-config --priority 10
+# Mount into your project
+cd ~/my-project
+csaw mount --profile team/backend
 ```
 
-### 2. Mount a profile
+```
+╭──────────────────────────────────────────────╮
+│                                              │
+│  mounted                                     │
+│                                              │
+│  team                                        │
+│   ✔ AGENTS.md                                │
+│   ✔ .claude/skills/code-review/SKILL.md      │
+│   ✔ .claude/skills/testing/SKILL.md          │
+│   ✔ .claude/rules/go.md                      │
+│                                              │
+│  4 files mounted · 2 tool dirs               │
+│                                              │
+│  Inspect: csaw inspect                       │
+│  Unmount: csaw unmount                       │
+│                                              │
+╰──────────────────────────────────────────────╯
+```
 
-Profiles are named sets of files defined in a `csaw.yml` in the source:
+That's it. Your AI tools see the files. Your git history doesn't.
+
+## Why Not Just Copy the Files?
+
+**They drift.** You update your team's AGENTS.md. Now it's different in 12 repos. Which version does each repo have? Nobody knows.
+
+**They clutter.** Every AI tool wants its own config files — `.cursorrules`, `copilot-instructions.md`, AGENTS.md, skills in `.claude/skills/`. That's 10+ files committed to every repo, creating PR noise and merge conflicts.
+
+**They're fragile.** New person joins. "Copy these files from the wiki." They miss one. Their AI gives bad advice. Nobody notices for a week.
+
+**They're permanent.** You tried a new AI config. It didn't work. Now you have to find and delete 6 files across 3 tool directories — and hope you didn't miss one.
+
+csaw solves all of this:
+
+- **One source of truth.** Update your registry, every project gets the change via symlinks — instantly, no reinstall.
+- **Nothing in git.** Mounted files are hidden from git automatically. No commits, no PRs, no merge conflicts.
+- **Clean undo.** `csaw unmount` removes everything and restores any files that were there before.
+- **Onboard in one command.** `csaw source add team <url>` — the whole team's config, ready to mount.
+- **Drift detection.** `csaw check` finds broken links and files that don't match their source.
+
+## Create Your Own Registry
+
+```bash
+csaw init ~/my-ai-config
+# ✔ initialized registry "my-ai-config"
+# Creates: csaw.yml, AGENTS.md, skills/code-review/, skills/commit-message/
+```
+
+A registry is just a git repo with markdown files:
+
+```
+my-ai-config/
+  csaw.yml              ← profiles (which files to mount)
+  AGENTS.md             ← your coding rules and preferences
+  skills/
+    code-review/
+      SKILL.md          ← reusable skill
+    commit-message/
+      SKILL.md
+```
+
+Every file is standard markdown — usable with or without csaw.
+
+## Profiles
+
+Profiles define named sets of files. Put them in `csaw.yml`:
 
 ```yaml
-# csaw.yml
 backend:
+  description: Go backend development
   include:
-    - agents/base.md
+    - AGENTS.md
     - agents/go.md
     - skills/code-review/**
     - skills/testing/**
@@ -112,176 +157,75 @@ frontend:
     - skills/react-patterns/**
 ```
 
-Mount one:
+Mount one: `csaw mount --profile team/backend`
 
-```bash
-csaw mount --profile team/backend
-```
+Or just `csaw mount` for an interactive picker.
 
-Or just run `csaw mount` — you'll get an interactive picker showing all available profiles with descriptions.
+## Where Files Get Mounted
 
-### 3. Inspect what's active
-
-```bash
-csaw inspect
-```
+csaw automatically mounts files where each AI tool expects them:
 
 ```
-csaw inspect
-
-  project:       /home/you/api-server
-  csaw home:     /home/you/.csaw
-  sources:       1
-  mounted:       12
-
-Sources
-  team (remote) → /home/you/.csaw/sources/team
-
-Mounted files
-
-  team
-    ✔ .claude/skills/code-review/SKILL.md
-    ✔ .claude/skills/testing/SKILL.md
-    ✔ .agents/skills/code-review/SKILL.md
-    ✔ .agents/skills/testing/SKILL.md
-    ✔ AGENTS.md
-    ✔ agents/base.md
-    ✔ agents/go.md
-    ...
+Registry path        →   Project path                    →   Discovered by
+─────────────────────────────────────────────────────────────────────────────
+AGENTS.md            →   AGENTS.md                       →   Codex, Cursor, Copilot, Windsurf
+CLAUDE.md            →   CLAUDE.md                       →   Claude Code
+agents/go.md         →   .claude/rules/go.md             →   Claude Code
+                         .cursor/rules/go.md             →   Cursor
+skills/foo/SKILL.md  →   .claude/skills/foo/SKILL.md     →   Claude Code
+                         .agents/skills/foo/SKILL.md     →   Codex, Copilot
+mcp/claude-code.json →   .mcp.json                       →   Claude Code
 ```
 
-### 4. Work normally
+You write files once in registry-standard paths. csaw projects them into every tool's native directory.
 
-Open your AI tool. Skills are mounted into tool-native directories (`.claude/skills/`, `.opencode/skills/`, `.agents/skills/`) where they're automatically discovered. AGENTS.md is at your project root.
+Mounted files are automatically hidden from git via `.git/info/exclude`. Use `csaw show <path>` to make a file visible, `csaw hide <path>` to hide it again.
 
-### 5. Clean up
+<details>
+<summary><strong>Full command reference</strong></summary>
 
-```bash
-csaw unmount           # remove everything, restore originals
-csaw mount --restore   # re-mount what was there before
-```
-
-## How It Works
-
-csaw uses **symlinks**, not file copies. Your registry is the source of truth:
-
-```
-your-project/
-  .claude/skills/code-review/SKILL.md  →  ~/.csaw/sources/team/skills/code-review/SKILL.md
-  .agents/skills/code-review/SKILL.md  →  ~/.csaw/sources/team/skills/code-review/SKILL.md
-  AGENTS.md                            →  ~/.csaw/sources/team/AGENTS.md
-```
-
-- **Skills** mount into tool-native directories (`.claude/skills/`, `.opencode/skills/`, `.agents/skills/`). These are typically gitignored, so git stays clean.
-- **AGENTS.md** and other non-skill files mount at the project root, with entries in `.git/info/exclude` to keep them out of git status.
-- csaw checks `.gitignore` first — if a path is already covered, no extra exclude is needed.
-
-### Git visibility
-
-By default, mounted files are hidden from git. To make a file visible:
-
-```bash
-csaw show AGENTS.md    # remove from git exclude → visible to git
-csaw hide AGENTS.md    # add back → hidden from git
-```
-
-## Commands
+### Commands
 
 | Command | What it does |
 |---|---|
-| `csaw init [dir]` | Scaffold a new registry with csaw.yml, agents/, skills/. |
-| `csaw mount [patterns]` | Mount files. Replaces any previous mount. Interactive picker if no args. |
-| `csaw mount --profile name` | Mount a named profile. |
-| `csaw mount --restore` | Re-mount the previous selection. |
-| `csaw unmount [patterns]` | Remove mounted files, restore originals. |
-| `csaw inspect` | Show full state: sources, mounted files, health. |
-| `csaw inspect --source name` | Browse a source's contents. |
-| `csaw check` | Detect broken or drifted symlinks. |
-| `csaw update` | Repair drifted links. |
-| `csaw diff path` | Show diff between mounted file and its source. |
-| `csaw pull [source]` | Pull latest from remote sources. |
-| `csaw push [source] -m "msg"` | Commit and push source changes. |
-| `csaw pin source@ref` | Pin a source to a branch or tag for this project. |
-| `csaw unpin source` | Unpin, return to default branch. |
-| `csaw fork source/path` | Copy a file into another source for personal editing. |
-| `csaw show path` | Make a mounted file visible to git. |
-| `csaw hide path` | Hide a mounted file from git. |
-| `csaw source add name url` | Add a source (auto-clones remote). |
+| `csaw init [dir]` | Scaffold a new registry. `--adopt` to import from existing project. |
+| `csaw source add name url` | Add a source (auto-clones remote). `--priority n` for conflict resolution. |
 | `csaw source remove name` | Remove a source. |
 | `csaw source clone name dir` | Clone a remote source locally for contributing. |
 | `csaw source list` | List configured sources. |
-| `csaw status` | Show mounted files, sources, stashed originals. |
-| `csaw version` | Print version. |
+| `csaw mount [patterns]` | Mount files. Replaces previous mount. Interactive picker if no args. |
+| `csaw mount --profile name` | Mount a named profile. |
+| `csaw mount --restore` | Re-mount the previous selection. |
+| `csaw unmount [patterns]` | Remove mounted files, restore originals. |
+| `csaw inspect` | Show full state: sources, mounts, priorities, pins. |
+| `csaw check` | Detect broken or drifted symlinks. |
+| `csaw update` | Repair drifted links. |
+| `csaw diff path` | Diff a mounted file against its source. |
+| `csaw pull [source]` | Pull latest from remote sources. `--stash` to handle dirty state. |
+| `csaw push [source] -m "msg"` | Commit and push source changes. |
+| `csaw pin source@ref` | Pin a source to a branch or tag for this project. |
+| `csaw unpin source` | Unpin, return to default branch. |
+| `csaw fork source/path` | Copy a file into another source for editing. `--into target`. |
+| `csaw config set key value` | Set config (tools, default_fork_target). |
+| `csaw config list` | Show all configuration. |
+| `csaw show / hide path` | Control git visibility of mounted files. |
+| `csaw status` | Quick summary of sources and mounts. |
 
-### Flags
+### Key Flags
 
 | Flag | Commands | What it does |
 |---|---|---|
-| `--profile name` | mount | Use a named profile for file selection. |
-| `--exclude glob` | mount | Exclude files matching a pattern. |
-| `--include-ignored` | mount | Include files hidden by `.csawignore`. |
+| `--profile name` | mount | Named profile to mount. |
 | `--force` | mount | Overwrite conflicts, stash originals. |
-| `--skip-conflicts` | mount | Skip files that conflict. |
-| `--restore` | mount | Re-mount the previous selection. |
-| `--keep` | mount | Keep existing mounts instead of replacing them. |
+| `--keep` | mount | Add to existing mounts instead of replacing. |
 | `--tools list` | mount | Target tools (e.g., `--tools claude,cursor`). |
-| `--source name` | inspect | Show details for a specific source. |
-| `--into source` | fork | Target source to fork into. |
-| `--name name` | init | Registry name (defaults to directory name). |
+| `--restore` | mount | Re-mount the previous selection. |
+| `--adopt` | init | Import existing AI config files from current project. |
+| `--stash` | pull | Stash uncommitted changes before pulling. |
 | `--priority n` | source add | Source priority (higher wins on conflict). |
+| `--into source` | fork | Target source to fork into. |
 
-## Profiles
-
-Profiles live in `csaw.yml` at the root of any source. They support glob patterns and inheritance:
-
-```yaml
-base:
-  description: Shared foundation for all profiles
-  include:
-    - AGENTS.md
-    - skills/code-review/**
-
-backend:
-  description: Go backend development
-  extends: base
-  include:
-    - agents/go.md
-    - skills/go-patterns/**
-    - skills/testing/**
-
-security:
-  extends: base
-  include:
-    - skills/security-review/**
-  exclude:
-    - skills/testing/**
-```
-
-Profiles from different sources can reference each other: `extends: team/base`.
-
-## Registry Structure
-
-A csaw source is just a directory (usually a git repo) with agent files and an optional `csaw.yml`:
-
-```
-my-ai-config/
-  csaw.yml              # profiles (optional)
-  .csawignore           # files hidden from default mounts (optional)
-  AGENTS.md             # root agent instructions
-  agents/
-    base.md
-    go.md
-    react.md
-  skills/
-    code-review/
-      SKILL.md
-    testing/
-      SKILL.md
-    go-patterns/
-      SKILL.md
-```
-
-Every file is standard markdown — usable without csaw.
+</details>
 
 ## Contributing
 

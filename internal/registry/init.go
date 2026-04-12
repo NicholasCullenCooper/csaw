@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/csaw-ai/csaw/internal/git"
-	"github.com/csaw-ai/csaw/internal/mount"
+	"github.com/NicholasCullenCooper/csaw/internal/git"
+	"github.com/NicholasCullenCooper/csaw/internal/mount"
 )
 
 type InitResult struct {

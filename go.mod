@@ -1,4 +1,4 @@
-module github.com/csaw-ai/csaw
+module github.com/NicholasCullenCooper/csaw
 
 go 1.26
 
