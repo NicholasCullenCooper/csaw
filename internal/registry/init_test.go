@@ -93,13 +93,13 @@ func TestInitWithAdopt(t *testing.T) {
 		t.Fatalf("skill content = %q, want %q", string(content), "test skill")
 	}
 
-	// Verify agent rule was copied
-	content, err = os.ReadFile(filepath.Join(registryDir, "agents", "go.md"))
+	// Verify rule was copied (now goes to rules/, not agents/)
+	content, err = os.ReadFile(filepath.Join(registryDir, "rules", "go.md"))
 	if err != nil {
-		t.Fatalf("adopted agent rule not found: %v", err)
+		t.Fatalf("adopted rule not found: %v", err)
 	}
 	if string(content) != "go rules" {
-		t.Fatalf("agent rule content = %q, want %q", string(content), "go rules")
+		t.Fatalf("rule content = %q, want %q", string(content), "go rules")
 	}
 
 	// Verify csaw.yml was updated with adopted patterns

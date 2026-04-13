@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// ToolDir describes a tool's skill and rule directory conventions.
+// ToolDir describes a tool's directory conventions for skills, rules, and agents.
 type ToolDir struct {
 	// Dir is the dot-directory name (e.g., ".claude").
 	Dir string
@@ -16,15 +16,18 @@ type ToolDir struct {
 	// RulesSubdir is the path under Dir where rule/instruction files are stored.
 	// Empty means this tool doesn't have a rules directory.
 	RulesSubdir string
+	// AgentsSubdir is the path under Dir where subagent definitions are stored.
+	// Empty means this tool doesn't support subagents.
+	AgentsSubdir string
 }
 
 // ToolRegistry maps short tool names to their directory conventions.
 var ToolRegistry = map[string]ToolDir{
-	"claude":   {Dir: ".claude", SkillsSubdir: "skills", RulesSubdir: "rules"},
+	"claude":   {Dir: ".claude", SkillsSubdir: "skills", RulesSubdir: "rules", AgentsSubdir: "agents"},
 	"opencode": {Dir: ".opencode", SkillsSubdir: "skills"},
-	"codex":    {Dir: ".codex", SkillsSubdir: "skills"},
-	"cursor":   {Dir: ".cursor", SkillsSubdir: "", RulesSubdir: "rules"},
-	"windsurf": {Dir: ".windsurf", SkillsSubdir: "", RulesSubdir: "rules"},
+	"codex":    {Dir: ".codex", SkillsSubdir: "skills", AgentsSubdir: "agents"},
+	"cursor":   {Dir: ".cursor", RulesSubdir: "rules", AgentsSubdir: "agents"},
+	"windsurf": {Dir: ".windsurf", RulesSubdir: "rules"},
 }
 
 // KnownToolDirs returns all known tool directories.
@@ -96,12 +99,19 @@ func isSkillEntry(entry SourceEntry) bool {
 	return strings.HasSuffix(rel, "/SKILL.md") && containsSegment(rel, "skills")
 }
 
-// isAgentEntry returns true if the source entry is an agent instruction file
-// under the agents/ directory (e.g., agents/base.md, agents/go.md).
-// Root-level files like AGENTS.md and CLAUDE.md are NOT agent entries — they
-// mount directly to the project root.
+// isAgentEntry returns true if the source entry is a subagent definition
+// under the agents/ directory (e.g., agents/code-reviewer.md, agents/planner.md).
+// These are projected into tool-native agent directories (.claude/agents/, etc.).
+// Root-level AGENTS.md is NOT an agent entry — it mounts to project root.
 func isAgentEntry(entry SourceEntry) bool {
 	return strings.HasPrefix(entry.RelativePath, "agents/") && strings.HasSuffix(entry.RelativePath, ".md")
+}
+
+// isRuleEntry returns true if the source entry is a rule/instruction file
+// under the rules/ directory (e.g., rules/go-conventions.md).
+// These are projected into tool-native rule directories (.claude/rules/, etc.).
+func isRuleEntry(entry SourceEntry) bool {
+	return strings.HasPrefix(entry.RelativePath, "rules/") && strings.HasSuffix(entry.RelativePath, ".md")
 }
 
 // skillName extracts the skill directory name from a skill entry path.
@@ -151,30 +161,16 @@ func ExpandToolTargets(entries []SourceEntry, toolDirs []ToolDir) []SourceEntry 
 		}
 
 		if isAgentEntry(entry) {
-			// Mount agent instruction files into tool rule directories
-			// (e.g., agents/base.md → .claude/rules/base.md)
-			baseName := filepath.Base(entry.RelativePath)
-			mounted := false
-			for _, tool := range toolDirs {
-				if tool.RulesSubdir == "" {
-					continue
-				}
-				toolRelPath := filepath.ToSlash(
-					filepath.Join(tool.Dir, tool.RulesSubdir, baseName),
-				)
-				expanded = append(expanded, SourceEntry{
-					SourceName:    entry.SourceName,
-					RelativePath:  toolRelPath,
-					QualifiedPath: entry.QualifiedPath + "→" + toolRelPath,
-					FullPath:      entry.FullPath,
-					Priority:      entry.Priority,
-				})
-				mounted = true
-			}
-			if !mounted {
-				// No tool has a rules dir — keep at original path
-				expanded = append(expanded, entry)
-			}
+			// Mount subagent definitions into tool agent directories
+			// (e.g., agents/code-reviewer.md → .claude/agents/code-reviewer.md)
+			expanded = appendProjected(expanded, entry, toolDirs, func(t ToolDir) string { return t.AgentsSubdir })
+			continue
+		}
+
+		if isRuleEntry(entry) {
+			// Mount rule files into tool rule directories
+			// (e.g., rules/go-conventions.md → .claude/rules/go-conventions.md)
+			expanded = appendProjected(expanded, entry, toolDirs, func(t ToolDir) string { return t.RulesSubdir })
 			continue
 		}
 
@@ -248,6 +244,35 @@ func expandMCPTargets(entries []SourceEntry) []SourceEntry {
 	return expanded
 }
 
+// appendProjected projects a registry entry into tool-native directories using
+// the provided subdir selector. If no tool has the relevant subdir, the entry
+// is kept at its original path.
+func appendProjected(expanded []SourceEntry, entry SourceEntry, toolDirs []ToolDir, subdirFn func(ToolDir) string) []SourceEntry {
+	baseName := filepath.Base(entry.RelativePath)
+	mounted := false
+	for _, tool := range toolDirs {
+		subdir := subdirFn(tool)
+		if subdir == "" {
+			continue
+		}
+		toolRelPath := filepath.ToSlash(
+			filepath.Join(tool.Dir, subdir, baseName),
+		)
+		expanded = append(expanded, SourceEntry{
+			SourceName:    entry.SourceName,
+			RelativePath:  toolRelPath,
+			QualifiedPath: entry.QualifiedPath + "→" + toolRelPath,
+			FullPath:      entry.FullPath,
+			Priority:      entry.Priority,
+		})
+		mounted = true
+	}
+	if !mounted {
+		expanded = append(expanded, entry)
+	}
+	return expanded
+}
+
 func containsSegment(path string, segment string) bool {
 	for _, part := range strings.Split(path, "/") {
 		if part == segment {
@@ -309,7 +334,7 @@ func ScanAdoptableFiles(projectRoot string) []AdoptableFile {
 		}
 	}
 
-	// Agent instructions from tool rule directories (reverse: .claude/rules/base.md → agents/base.md)
+	// Rules from tool rule directories (reverse: .claude/rules/go.md → rules/go.md)
 	for _, tool := range ToolRegistry {
 		if tool.RulesSubdir == "" {
 			continue
@@ -323,13 +348,39 @@ func ScanAdoptableFiles(projectRoot string) []AdoptableFile {
 			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
 				continue
 			}
-			registryPath := "agents/" + entry.Name()
+			registryPath := "rules/" + entry.Name()
 			if seen[registryPath] {
 				continue
 			}
 			seen[registryPath] = true
 			files = append(files, AdoptableFile{
 				ProjectPath:  filepath.ToSlash(filepath.Join(tool.Dir, tool.RulesSubdir, entry.Name())),
+				RegistryPath: registryPath,
+			})
+		}
+	}
+
+	// Subagent definitions from tool agent directories (reverse: .claude/agents/reviewer.md → agents/reviewer.md)
+	for _, tool := range ToolRegistry {
+		if tool.AgentsSubdir == "" {
+			continue
+		}
+		agentsDir := filepath.Join(projectRoot, tool.Dir, tool.AgentsSubdir)
+		entries, err := os.ReadDir(agentsDir)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+				continue
+			}
+			registryPath := "agents/" + entry.Name()
+			if seen[registryPath] {
+				continue
+			}
+			seen[registryPath] = true
+			files = append(files, AdoptableFile{
+				ProjectPath:  filepath.ToSlash(filepath.Join(tool.Dir, tool.AgentsSubdir, entry.Name())),
 				RegistryPath: registryPath,
 			})
 		}

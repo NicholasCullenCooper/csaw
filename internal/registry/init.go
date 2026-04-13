@@ -20,11 +20,14 @@ var starterProfile = `default:
   description: Mount everything
   include:
     - AGENTS.md
+    - rules/**
     - skills/**
+    - agents/**
 `
 
 var starterIgnore = `# Patterns listed here are excluded from mounting by default.
-# Use --include-ignored to override.
+# Use --include-ignored or --include-experimental to override.
+skills/experimental/**
 `
 
 var starterAgents = `# Agent Instructions
@@ -89,7 +92,7 @@ func Init(ctx context.Context, g git.Git, dir string, name string) (InitResult, 
 		return InitResult{}, err
 	}
 
-	for _, sub := range []string{"skills/code-review", "skills/commit-message"} {
+	for _, sub := range []string{"rules", "agents", "skills/code-review", "skills/commit-message", "skills/experimental"} {
 		if err := os.MkdirAll(filepath.Join(absDir, sub), 0o755); err != nil {
 			return InitResult{}, err
 		}

@@ -62,37 +62,17 @@ func TestResolveToolDirsAutoDetect(t *testing.T) {
 	}
 }
 
-func TestExpandToolTargetsSkillsAndAgents(t *testing.T) {
+func TestExpandToolTargetsAllProjections(t *testing.T) {
 	toolDirs := []ToolDir{
-		{Dir: ".claude", SkillsSubdir: "skills", RulesSubdir: "rules"},
+		{Dir: ".claude", SkillsSubdir: "skills", RulesSubdir: "rules", AgentsSubdir: "agents"},
 		{Dir: ".agents", SkillsSubdir: "skills"},
 	}
 
 	entries := []SourceEntry{
-		{
-			SourceName:    "dotagent",
-			RelativePath:  "AGENTS.md",
-			QualifiedPath: "dotagent/AGENTS.md",
-			FullPath:      "/registry/AGENTS.md",
-		},
-		{
-			SourceName:    "dotagent",
-			RelativePath:  "agents/implementer.md",
-			QualifiedPath: "dotagent/agents/implementer.md",
-			FullPath:      "/registry/agents/implementer.md",
-		},
-		{
-			SourceName:    "dotagent",
-			RelativePath:  "skills/code-review/SKILL.md",
-			QualifiedPath: "dotagent/skills/code-review/SKILL.md",
-			FullPath:      "/registry/skills/code-review/SKILL.md",
-		},
-		{
-			SourceName:    "dotagent",
-			RelativePath:  "skills/go-patterns/SKILL.md",
-			QualifiedPath: "dotagent/skills/go-patterns/SKILL.md",
-			FullPath:      "/registry/skills/go-patterns/SKILL.md",
-		},
+		{SourceName: "reg", RelativePath: "AGENTS.md", QualifiedPath: "reg/AGENTS.md", FullPath: "/reg/AGENTS.md"},
+		{SourceName: "reg", RelativePath: "agents/reviewer.md", QualifiedPath: "reg/agents/reviewer.md", FullPath: "/reg/agents/reviewer.md"},
+		{SourceName: "reg", RelativePath: "rules/go-conventions.md", QualifiedPath: "reg/rules/go-conventions.md", FullPath: "/reg/rules/go-conventions.md"},
+		{SourceName: "reg", RelativePath: "skills/code-review/SKILL.md", QualifiedPath: "reg/skills/code-review/SKILL.md", FullPath: "/reg/skills/code-review/SKILL.md"},
 	}
 
 	expanded := ExpandToolTargets(entries, toolDirs)
@@ -103,12 +83,11 @@ func TestExpandToolTargetsSkillsAndAgents(t *testing.T) {
 	}
 
 	expectedPresent := []string{
-		"AGENTS.md",                           // root file: kept at original path
-		".claude/rules/implementer.md",        // agent: projected to .claude/rules/
-		".claude/skills/code-review/SKILL.md", // skill: projected to .claude/skills/
-		".agents/skills/code-review/SKILL.md", // skill: projected to .agents/skills/
-		".claude/skills/go-patterns/SKILL.md", // skill: projected to .claude/skills/
-		".agents/skills/go-patterns/SKILL.md", // skill: projected to .agents/skills/
+		"AGENTS.md",                           // root file: kept
+		".claude/agents/reviewer.md",          // subagent → .claude/agents/
+		".claude/rules/go-conventions.md",     // rule → .claude/rules/
+		".claude/skills/code-review/SKILL.md", // skill → .claude/skills/
+		".agents/skills/code-review/SKILL.md", // skill → .agents/skills/
 	}
 	for _, path := range expectedPresent {
 		if !paths[path] {
@@ -116,21 +95,20 @@ func TestExpandToolTargetsSkillsAndAgents(t *testing.T) {
 		}
 	}
 
-	// Agent and skill files should NOT be at original registry paths
 	expectedAbsent := []string{
-		"agents/implementer.md",
+		"agents/reviewer.md",
+		"rules/go-conventions.md",
 		"skills/code-review/SKILL.md",
-		"skills/go-patterns/SKILL.md",
 	}
 	for _, path := range expectedAbsent {
 		if paths[path] {
-			t.Errorf("should not be at original path %q — should be projected to tool dirs", path)
+			t.Errorf("should not be at original path %q — should be projected", path)
 		}
 	}
 
-	// AGENTS.md: 1 + agents/implementer.md → .claude/rules: 1 + 2 skills × 2 tool dirs = 6
-	if len(expanded) != 6 {
-		t.Fatalf("ExpandToolTargets() returned %d entries, want 6", len(expanded))
+	// AGENTS.md: 1 + agent→.claude: 1 + rule→.claude: 1 + skill×2 tools: 2 = 5
+	if len(expanded) != 5 {
+		t.Fatalf("ExpandToolTargets() returned %d entries, want 5", len(expanded))
 	}
 }
 
@@ -140,11 +118,13 @@ func TestScanAdoptableFiles(t *testing.T) {
 	// Create various AI config files
 	os.MkdirAll(filepath.Join(dir, ".claude", "skills", "testing"), 0o755)
 	os.MkdirAll(filepath.Join(dir, ".claude", "rules"), 0o755)
+	os.MkdirAll(filepath.Join(dir, ".claude", "agents"), 0o755)
 	os.MkdirAll(filepath.Join(dir, ".agents", "skills", "testing"), 0o755) // duplicate skill
 	os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("x"), 0o644)
 	os.WriteFile(filepath.Join(dir, ".claude", "skills", "testing", "SKILL.md"), []byte("x"), 0o644)
 	os.WriteFile(filepath.Join(dir, ".agents", "skills", "testing", "SKILL.md"), []byte("x"), 0o644) // same skill
 	os.WriteFile(filepath.Join(dir, ".claude", "rules", "go.md"), []byte("x"), 0o644)
+	os.WriteFile(filepath.Join(dir, ".claude", "agents", "reviewer.md"), []byte("x"), 0o644)
 	os.WriteFile(filepath.Join(dir, ".mcp.json"), []byte("{}"), 0o644)
 
 	files := ScanAdoptableFiles(dir)
@@ -154,15 +134,19 @@ func TestScanAdoptableFiles(t *testing.T) {
 		found[f.RegistryPath] = f.ProjectPath
 	}
 
-	// Should find AGENTS.md, one copy of the testing skill, the go rule, and mcp config
-	expected := []string{"AGENTS.md", "skills/testing/SKILL.md", "agents/go.md", "mcp/claude-code.json"}
+	expected := []string{
+		"AGENTS.md",
+		"skills/testing/SKILL.md",
+		"rules/go.md",        // was agents/go.md, now rules/go.md
+		"agents/reviewer.md", // subagent definition
+		"mcp/claude-code.json",
+	}
 	for _, e := range expected {
 		if _, ok := found[e]; !ok {
 			t.Errorf("expected registry path %q not found (found: %v)", e, found)
 		}
 	}
 
-	// Duplicate skill should be deduplicated
 	if len(files) != len(expected) {
 		t.Errorf("len = %d, want %d (deduplication failed?)", len(files), len(expected))
 	}
@@ -266,7 +250,7 @@ func TestExpandMCPTargetsNonJSONIgnored(t *testing.T) {
 
 func TestExpandToolTargetsIncludesMCPProjection(t *testing.T) {
 	toolDirs := []ToolDir{
-		{Dir: ".claude", SkillsSubdir: "skills", RulesSubdir: "rules"},
+		{Dir: ".claude", SkillsSubdir: "skills", RulesSubdir: "rules", AgentsSubdir: "agents"},
 	}
 
 	entries := []SourceEntry{

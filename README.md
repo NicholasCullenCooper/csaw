@@ -32,11 +32,14 @@ Keep your AI config in **one git repo** (a registry). csaw **symlinks** it into 
 ```
 your-registry/                         your-project/
   AGENTS.md                     ──→      AGENTS.md (symlink)
+  rules/                                 .claude/rules/
+    go-conventions.md           ──→        go-conventions.md (symlink)
+  agents/                                .claude/agents/
+    code-reviewer.md            ──→        code-reviewer.md (symlink)
   skills/                                .claude/skills/
     code-review/SKILL.md        ──→        code-review/SKILL.md (symlink)
-    testing/SKILL.md            ──→        testing/SKILL.md (symlink)
-  agents/                                .claude/rules/
-    go.md                       ──→        go.md (symlink)
+  mcp/                                   .mcp.json (symlink)
+    claude-code.json            ──→
 ```
 
 Nothing is committed to your project. Git never sees the files. Unmount, and they're gone.
@@ -251,29 +254,39 @@ Higher number wins. If two sources have the same priority and provide the same f
 
 ---
 
-## Keeping Experimental Skills Private
+## Experimental Skills
 
-You're working on a new skill but it's not ready for the team. Keep it in your personal registry:
+Working on a new skill? Put it in `skills/experimental/`:
 
 ```
 ~/my-ai-config/
   skills/
-    debug-strategy/SKILL.md     ← experimental, only you have this
-    commit-message/SKILL.md     ← your personal version
+    code-review/SKILL.md         ← stable, always mounted
+    experimental/
+      debug-strategy/SKILL.md    ← hidden from default mounts
 ```
 
-Only files you mount end up in your project. Your team's registry doesn't have `debug-strategy`, so they never see it.
-
-When you're confident the skill works, share it with the team:
+The `.csawignore` file hides `skills/experimental/**` by default. To test an experimental skill:
 
 ```bash
-# Option 1: Copy it manually
-cp ~/my-ai-config/skills/debug-strategy/ ~/team-config/skills/debug-strategy/
-cd ~/team-config && git add -A && git commit -m "add debug strategy skill" && git push
+csaw mount --profile personal/default --include-experimental
+```
 
-# Option 2: If you've cloned the team source locally
+When you're confident it works, promote it:
+
+```bash
+csaw promote personal/skills/experimental/debug-strategy
+# ✔ promoted debug-strategy from experimental to stable
+#   Push: csaw push personal -m "promote debug-strategy"
+```
+
+This moves it from `skills/experimental/debug-strategy/` to `skills/debug-strategy/` — now it mounts by default.
+
+To share a promoted skill with the team:
+
+```bash
 csaw fork personal/skills/debug-strategy/SKILL.md --into team
-csaw push team -m "add debug strategy skill"
+csaw push team -m "add debug-strategy skill"
 ```
 
 ---
@@ -423,18 +436,19 @@ Every symlink is removed. If csaw stashed any original files during mount (becau
 
 ## Where Files Get Mounted
 
-csaw automatically puts files where each AI tool expects them:
+csaw knows the four pillars of AI tool configuration and projects each to the right place:
 
 ```
-Registry path          Project path                     Discovered by
-───────────────────────────────────────────────────────────────────────────
-AGENTS.md              AGENTS.md                        Codex, Cursor, Copilot, Windsurf
-CLAUDE.md              CLAUDE.md                        Claude Code
-agents/go.md           .claude/rules/go.md              Claude Code
-                       .cursor/rules/go.md              Cursor
-skills/foo/SKILL.md    .claude/skills/foo/SKILL.md      Claude Code
-                       .agents/skills/foo/SKILL.md      Codex, Copilot
-mcp/claude-code.json   .mcp.json                        Claude Code
+Registry path           Project path                     What it is
+────────────────────────────────────────────────────────────────────────────
+AGENTS.md               AGENTS.md                        Project guidance (the standard)
+rules/go.md             .claude/rules/go.md              Always-on coding standards
+                        .cursor/rules/go.md
+agents/reviewer.md      .claude/agents/reviewer.md       Subagent definitions
+                        .cursor/agents/reviewer.md
+skills/foo/SKILL.md     .claude/skills/foo/SKILL.md      On-demand reusable workflows
+                        .agents/skills/foo/SKILL.md
+mcp/claude-code.json    .mcp.json                        Tool/data connectivity
 ```
 
 You write files once in your registry. csaw projects them into every tool's native directory.
@@ -477,15 +491,21 @@ A csaw source is just a git repo with markdown files:
 my-ai-config/
   csaw.yml              ← profiles (which files to mount)
   .csawignore           ← files hidden from default mounts
-  AGENTS.md             ← root agent instructions
-  agents/               ← composable rule files
-    go.md
-    react.md
-  skills/               ← reusable skills
+  AGENTS.md             ← project guidance (the standard)
+  rules/                ← always-on coding standards
+    go-conventions.md
+    testing-standards.md
+  agents/               ← subagent definitions (separate context windows)
+    code-reviewer.md
+    planner.md
+  skills/               ← on-demand reusable workflows
     code-review/
       SKILL.md
     testing/
       SKILL.md
+    experimental/       ← work in progress (hidden by .csawignore)
+      new-idea/
+        SKILL.md
   mcp/                  ← MCP server configs
     claude-code.json
 ```
@@ -541,6 +561,7 @@ Profiles support glob patterns and inheritance. `extends` pulls in everything fr
 | `csaw pin source@ref` | Pin source to a branch/tag for this project. |
 | `csaw unpin source` | Unpin, return to default branch. |
 | `csaw fork source/path` | Copy a file into another source. `--into target`. |
+| `csaw promote source/skills/experimental/name` | Promote experimental skill to stable. |
 | `csaw config set key value` | Set config (tools, default_fork_target). |
 | `csaw config list` | Show configuration. |
 | `csaw show / hide path` | Control git visibility of mounted files. |
@@ -555,6 +576,7 @@ Profiles support glob patterns and inheritance. `extends` pulls in everything fr
 | `--keep` | mount | Add to existing mount instead of replacing. |
 | `--tools list` | mount | Target tools (e.g., `--tools claude,cursor`). |
 | `--restore` | mount | Re-mount previous selection. |
+| `--include-experimental` | mount | Include experimental skills (hidden by .csawignore). |
 | `--adopt` | init | Import existing AI config from current project. |
 | `--stash` | pull | Stash uncommitted changes before pulling. |
 | `--priority n` | source add | Source priority (higher wins on conflict). |

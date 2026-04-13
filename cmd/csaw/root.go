@@ -54,6 +54,7 @@ func newRootCommand() *cobra.Command {
 	cmd.AddCommand(newPinCommand())
 	cmd.AddCommand(newUnpinCommand())
 	cmd.AddCommand(newForkCommand())
+	cmd.AddCommand(newPromoteCommand())
 	cmd.AddCommand(newShowCommand())
 	cmd.AddCommand(newHideCommand())
 
@@ -686,6 +687,7 @@ func newMountCommand() *cobra.Command {
 	cmd.Flags().StringVar(&profile, "profile", "", "named profile to use for mount selection")
 	cmd.Flags().StringArrayVar(&excludes, "exclude", nil, "exclude matching file or glob")
 	cmd.Flags().BoolVar(&includeIgnored, "include-ignored", false, "include files hidden by .csawignore")
+	cmd.Flags().BoolVar(&includeIgnored, "include-experimental", false, "include experimental skills (alias for --include-ignored)")
 	cmd.Flags().BoolVar(&forceAll, "force", false, "overwrite conflicts and stash originals")
 	cmd.Flags().BoolVar(&skipConflicts, "skip-conflicts", false, "skip files that conflict with existing paths")
 	cmd.Flags().BoolVar(&restore, "restore", false, "restore the previous mount selection")
@@ -1260,6 +1262,68 @@ func newForkCommand() *cobra.Command {
 
 	cmd.Flags().StringVar(&into, "into", "", "target source to fork into")
 	return cmd
+}
+
+func newPromoteCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "promote <source/skills/experimental/name>",
+		Short: "Promote an experimental skill to stable",
+		Long: `Move a skill from skills/experimental/ to skills/ in a source registry.
+
+Example:
+  csaw promote personal/skills/experimental/debug-strategy
+
+This moves skills/experimental/debug-strategy/ to skills/debug-strategy/
+in the personal source.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			parts := strings.SplitN(args[0], "/", 2)
+			if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+				return fmt.Errorf("usage: csaw promote <source/skills/experimental/name>")
+			}
+			sourceName, relPath := parts[0], parts[1]
+
+			// Validate it's an experimental skill path
+			if !strings.HasPrefix(relPath, "skills/experimental/") {
+				return fmt.Errorf("can only promote from skills/experimental/; got %q", relPath)
+			}
+
+			skillName := strings.TrimPrefix(relPath, "skills/experimental/")
+			skillName = strings.TrimSuffix(skillName, "/")
+			if skillName == "" {
+				return fmt.Errorf("missing skill name")
+			}
+
+			manager, err := newSourcesManager()
+			if err != nil {
+				return err
+			}
+
+			source, err := manager.Get(sourceName)
+			if err != nil {
+				return err
+			}
+
+			root := source.CheckoutPath(manager.Paths)
+			srcDir := filepath.Join(root, "skills", "experimental", skillName)
+			dstDir := filepath.Join(root, "skills", skillName)
+
+			if _, err := os.Stat(srcDir); os.IsNotExist(err) {
+				return fmt.Errorf("experimental skill not found: %s", srcDir)
+			}
+			if _, err := os.Stat(dstDir); err == nil {
+				return fmt.Errorf("stable skill already exists: %s", dstDir)
+			}
+
+			if err := os.Rename(srcDir, dstDir); err != nil {
+				return err
+			}
+
+			output.Successf("promoted %s from experimental to stable", skillName)
+			fmt.Fprintf(cmd.OutOrStdout(), "\n  %s\n", tui.HintLine("Push:", "csaw push "+sourceName+" -m \"promote "+skillName+"\""))
+			return nil
+		},
+	}
 }
 
 func newShowCommand() *cobra.Command {
