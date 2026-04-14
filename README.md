@@ -104,10 +104,14 @@ This creates a ready-to-use registry:
 ```
 ~/my-ai-config/
   csaw.yml              ← default profile
+  .csawignore           ← hides skills/experimental/** by default
   AGENTS.md             ← your coding rules
+  rules/                ← always-on standards
+  agents/               ← subagent definitions
   skills/
     code-review/SKILL.md
     commit-message/SKILL.md
+    experimental/       ← work-in-progress skills
 ```
 
 Now mount it into your project:
@@ -165,12 +169,12 @@ csaw init --adopt ~/my-ai-config
 │                                       │
 │   ✔ AGENTS.md                         │
 │   ✔ skills/testing/SKILL.md           │
-│   ✔ agents/go.md                      │
+│   ✔ rules/go.md                       │
 │                                       │
 ╰───────────────────────────────────────╯
 ```
 
-csaw scans your project, finds AI config files, and copies them into the new registry with the correct structure. It reverses the projection — `.claude/skills/testing/SKILL.md` becomes `skills/testing/SKILL.md` in the registry, `.claude/rules/go.md` becomes `agents/go.md`.
+csaw scans your project, finds AI config files, and copies them into the new registry with the correct structure. It reverses the projection — `.claude/skills/testing/SKILL.md` becomes `skills/testing/SKILL.md` in the registry, `.claude/rules/go.md` becomes `rules/go.md`, `.claude/agents/reviewer.md` becomes `agents/reviewer.md`.
 
 Now you can delete the originals from your project, register the source, and mount instead:
 
@@ -406,6 +410,8 @@ Protection is **advisory within csaw** — it prevents csaw's own mechanisms fro
 
 > Future work: content-hash verification. csaw could record the SHA of each protected file at mount time and detect if someone replaces the symlink with a modified copy. `csaw check --strict` would fail the check. This isn't built yet — filed as tech debt.
 
+---
+
 ## Forking a Team File
 
 You like the team's `AGENTS.md` but want to customize it. Fork it:
@@ -485,7 +491,7 @@ Mounted files are hidden from git via `.git/info/exclude`. Use `csaw show <path>
 
 ## Configuring Tools
 
-On first mount, csaw asks which AI tools you use:
+If csaw can't auto-detect any tool directories in your project on first mount, it asks which AI tools you use:
 
 ```
 ╭──────────────────────────────────────────╮
@@ -547,15 +553,15 @@ backend:
   description: Go backend development
   include:
     - AGENTS.md
-    - agents/go.md
+    - rules/go-conventions.md
     - skills/code-review/**
     - skills/testing/**
 
 frontend:
   extends: backend
   include:
-    - agents/react.md
-    - skills/react-patterns/**
+    - rules/react-patterns.md
+    - skills/react-testing/**
 ```
 
 Profiles support glob patterns and inheritance. `extends` pulls in everything from the parent.
