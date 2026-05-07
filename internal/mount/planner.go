@@ -18,6 +18,9 @@ type Selection struct {
 	ExcludePatterns []string
 	Profile         string
 	IncludeIgnored  bool
+	// Kinds restricts the selection to entries matching one of the given kinds.
+	// When empty, all kinds are included.
+	Kinds []Kind
 }
 
 type Planner interface {
@@ -40,7 +43,26 @@ func NewPlanner() Planner {
 }
 
 func (selection Selection) IsEmpty() bool {
-	return len(selection.IncludePatterns) == 0 && len(selection.ExcludePatterns) == 0 && selection.Profile == "" && !selection.IncludeIgnored
+	return len(selection.IncludePatterns) == 0 && len(selection.ExcludePatterns) == 0 && selection.Profile == "" && !selection.IncludeIgnored && len(selection.Kinds) == 0
+}
+
+// FilterByKind returns only entries whose kind matches one of the given kinds.
+// If kinds is empty, the input is returned unchanged.
+func FilterByKind(entries []SourceEntry, kinds []Kind) []SourceEntry {
+	if len(kinds) == 0 {
+		return entries
+	}
+	allowed := make(map[Kind]bool, len(kinds))
+	for _, k := range kinds {
+		allowed[k] = true
+	}
+	filtered := make([]SourceEntry, 0, len(entries))
+	for _, entry := range entries {
+		if allowed[KindOf(entry)] {
+			filtered = append(filtered, entry)
+		}
+	}
+	return filtered
 }
 
 func (selection Selection) String() string {
@@ -228,6 +250,14 @@ func ApplyIgnore(entries []SourceEntry, patterns []string) ([]SourceEntry, error
 }
 
 func FilterSourceEntries(entries []SourceEntry, selection Selection) ([]SourceEntry, error) {
+	var allowedKinds map[Kind]bool
+	if len(selection.Kinds) > 0 {
+		allowedKinds = make(map[Kind]bool, len(selection.Kinds))
+		for _, k := range selection.Kinds {
+			allowedKinds[k] = true
+		}
+	}
+
 	filtered := make([]SourceEntry, 0, len(entries))
 
 	for _, entry := range entries {
@@ -244,6 +274,10 @@ func FilterSourceEntries(entries []SourceEntry, selection Selection) ([]SourceEn
 			return nil, err
 		}
 		if exclude {
+			continue
+		}
+
+		if allowedKinds != nil && !allowedKinds[KindOf(entry)] {
 			continue
 		}
 

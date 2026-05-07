@@ -1,11 +1,142 @@
 package mount
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 )
+
+// Kind classifies a registry entry by what kind of AI workspace artifact it is.
+// Each kind has its own conventions for where files live in the registry and
+// where they project into tool directories.
+type Kind string
+
+const (
+	KindAgent       Kind = "agent"
+	KindSkill       Kind = "skill"
+	KindRule        Kind = "rule"
+	KindMCP         Kind = "mcp"
+	KindInstruction Kind = "instruction"
+	KindOther       Kind = "other"
+)
+
+// AllKinds returns the set of user-selectable kinds, in display order.
+var AllKinds = []Kind{KindAgent, KindSkill, KindRule, KindMCP, KindInstruction}
+
+// KindOf classifies a registry-side source entry by inspecting its path.
+func KindOf(entry SourceEntry) Kind {
+	switch {
+	case isAgentEntry(entry):
+		return KindAgent
+	case isSkillEntry(entry):
+		return KindSkill
+	case isRuleEntry(entry):
+		return KindRule
+	case isMCPEntry(entry):
+		return KindMCP
+	case isInstructionEntry(entry):
+		return KindInstruction
+	default:
+		return KindOther
+	}
+}
+
+// isInstructionEntry returns true for top-level instruction files like
+// AGENTS.md, CLAUDE.md that mount to the project root and are always loaded.
+func isInstructionEntry(entry SourceEntry) bool {
+	rel := entry.RelativePath
+	if strings.Contains(rel, "/") {
+		return false
+	}
+	return rel == "AGENTS.md" || rel == "CLAUDE.md" || rel == "AGENT.md"
+}
+
+// ParseKind maps a user-supplied name (singular or plural) to a Kind value.
+func ParseKind(s string) (Kind, error) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "agent", "agents":
+		return KindAgent, nil
+	case "skill", "skills":
+		return KindSkill, nil
+	case "rule", "rules":
+		return KindRule, nil
+	case "mcp", "mcps":
+		return KindMCP, nil
+	case "instruction", "instructions":
+		return KindInstruction, nil
+	default:
+		return "", fmt.Errorf("unknown kind %q (valid: agents, skills, rules, mcp, instructions)", s)
+	}
+}
+
+// KindLabel returns the user-facing plural label for a Kind.
+func KindLabel(k Kind) string {
+	switch k {
+	case KindAgent:
+		return "agents"
+	case KindSkill:
+		return "skills"
+	case KindRule:
+		return "rules"
+	case KindMCP:
+		return "mcp"
+	case KindInstruction:
+		return "instructions"
+	default:
+		return "other"
+	}
+}
+
+// KindOfProjectPath classifies a project-relative mounted path by destination.
+// This is the post-projection classifier used by inspect to group mounted
+// files by what they are.
+func KindOfProjectPath(rel string) Kind {
+	rel = filepath.ToSlash(rel)
+
+	if !strings.Contains(rel, "/") {
+		if rel == "AGENTS.md" || rel == "CLAUDE.md" || rel == "AGENT.md" {
+			return KindInstruction
+		}
+	}
+
+	for _, target := range KnownMCPTargets {
+		if rel == target.ProjectPath {
+			return KindMCP
+		}
+	}
+	base := filepath.Base(rel)
+	if base == "mcp.json" || base == ".mcp.json" {
+		return KindMCP
+	}
+
+	for _, tool := range ToolRegistry {
+		prefix := tool.Dir + "/"
+		if !strings.HasPrefix(rel, prefix) {
+			continue
+		}
+		rest := strings.TrimPrefix(rel, prefix)
+		if tool.AgentsSubdir != "" && strings.HasPrefix(rest, tool.AgentsSubdir+"/") {
+			return KindAgent
+		}
+		if tool.SkillsSubdir != "" && strings.HasPrefix(rest, tool.SkillsSubdir+"/") {
+			return KindSkill
+		}
+		if tool.RulesSubdir != "" && strings.HasPrefix(rest, tool.RulesSubdir+"/") {
+			return KindRule
+		}
+	}
+
+	if strings.HasPrefix(rel, StandardFallback.Dir+"/") {
+		rest := strings.TrimPrefix(rel, StandardFallback.Dir+"/")
+		if StandardFallback.SkillsSubdir != "" && strings.HasPrefix(rest, StandardFallback.SkillsSubdir+"/") {
+			return KindSkill
+		}
+	}
+
+	return KindOther
+}
 
 // ToolDir describes a tool's directory conventions for skills, rules, and agents.
 type ToolDir struct {

@@ -505,6 +505,7 @@ func newMountCommand() *cobra.Command {
 	var restore bool
 	var keep bool
 	var toolsFlag []string
+	var kindsFlag []string
 
 	cmd := &cobra.Command{
 		Use:   "mount [patterns...]",
@@ -555,11 +556,21 @@ func newMountCommand() *cobra.Command {
 				profile = picked
 			}
 
+			var kinds []mount.Kind
+			for _, raw := range kindsFlag {
+				kind, err := mount.ParseKind(raw)
+				if err != nil {
+					return err
+				}
+				kinds = append(kinds, kind)
+			}
+
 			selection := mount.Selection{
 				IncludePatterns: append([]string(nil), args...),
 				ExcludePatterns: append([]string(nil), excludes...),
 				Profile:         profile,
 				IncludeIgnored:  includeIgnored,
+				Kinds:           kinds,
 			}
 
 			var entries []mount.SourceEntry
@@ -693,6 +704,7 @@ func newMountCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&restore, "restore", false, "restore the previous mount selection")
 	cmd.Flags().BoolVar(&keep, "keep", false, "keep existing mounts instead of replacing them")
 	cmd.Flags().StringSliceVar(&toolsFlag, "tools", nil, "target tools (e.g., claude,cursor)")
+	cmd.Flags().StringSliceVar(&kindsFlag, "kind", nil, "filter by kind: agents, skills, rules, mcp, instructions (repeatable)")
 
 	return cmd
 }

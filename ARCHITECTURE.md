@@ -38,22 +38,27 @@ Implemented now:
 
 - CLI command surface and command wiring
 - source config persistence with priority field
-- source catalogs, generalized push (any source), and registry scaffolding (`csaw init`)
-- profile parsing, inheritance, and cross-source resolution
-- mount selection, `.csawignore`, priority-based conflict resolution, auto-unmount, and restore snapshots
-- workspace stash, exclude helpers, current mount state, and restore state
+- source catalogs, generalized push (any source), and registry scaffolding (`csaw init`, `--adopt`)
+- profile parsing, inheritance, source-level policy (protected paths), and cross-source resolution
+- mount selection, `.csawignore`, priority-based conflict resolution, protected-path enforcement, auto-unmount, and restore snapshots
+- kind classification (instructions, rules, agents, skills, mcp) with `--kind` filtering and per-kind grouping in `inspect`
+- workspace stash, exclude helpers (`csaw show`/`hide`), current mount state, and restore state
 - mounted-link discovery, drift inspection, and repair
 - cross-platform linking (symlinks with hardlink fallback on Windows)
 - per-project source pinning (`csaw pin`/`unpin`) via git worktrees
 - file forking between sources (`csaw fork`)
-- inspect and status summaries
+- skill lifecycle promotion (`csaw promote` from `skills/experimental/` to `skills/`)
+- inspect and status summaries (sources with priority, pins, protected counts, mounted files grouped by kind)
+- tool routing for Claude Code, Cursor, Codex, OpenCode, Windsurf
+- MCP config projection (`mcp/claude-code.json` → `.mcp.json`, etc.)
 - repository validation tests
 
 Deferred:
 
-- richer layered provenance in inspect output
-- structured context switching (MCP, model, env composition)
-- trust model for third-party sources
+- richer layered provenance in inspect output (per-value source attribution beyond per-file)
+- structured context switching (MCP composition with merge semantics, env vars, model preferences)
+- trust model for third-party sources (signing, content-hash verification of protected files)
+- security audit (`csaw audit` for prompt-injection and exfil scanning)
 
 ## Design Rules
 

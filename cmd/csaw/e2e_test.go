@@ -303,6 +303,39 @@ func TestE2EMountRestore(t *testing.T) {
 	}
 }
 
+func TestE2EMountKindFilter(t *testing.T) {
+	env := newE2EEnv(t)
+
+	reg := env.createRegistry("reg", map[string]string{
+		"csaw.yml":                    "default:\n  include:\n    - \"**/*\"\n",
+		"AGENTS.md":                   "instructions",
+		"agents/reviewer.md":          "agent",
+		"rules/go.md":                 "rule",
+		"skills/code-review/SKILL.md": "skill",
+		"mcp/claude-code.json":        "{}",
+		"notes/non-ai-context.md":     "other",
+	})
+
+	env.run("source", "add", "reg", reg)
+	env.run("mount", "--profile", "reg/default", "--kind", "agents", "--tools", "claude")
+
+	if !env.fileExists(".claude/agents/reviewer.md") {
+		t.Fatal("agent should be mounted when --kind agents is used")
+	}
+	if env.fileExists("AGENTS.md") {
+		t.Fatal("instructions should not be mounted when filtering to agents")
+	}
+	if env.fileExists(".claude/rules/go.md") {
+		t.Fatal("rules should not be mounted when filtering to agents")
+	}
+	if env.fileExists(".claude/skills/code-review/SKILL.md") {
+		t.Fatal("skills should not be mounted when filtering to agents")
+	}
+	if env.fileExists(".mcp.json") {
+		t.Fatal("mcp config should not be mounted when filtering to agents")
+	}
+}
+
 func TestE2EFork(t *testing.T) {
 	env := newE2EEnv(t)
 

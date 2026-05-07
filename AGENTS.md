@@ -8,7 +8,7 @@ This file is the agent map, not the whole manual. Read the linked docs before ma
 
 ## Current Milestone
 
-The CLI is post-v0.2 with core mount engine, multi-source support, and distribution (PyPI, Homebrew, Scoop). Active work focuses on onboarding UX, cross-platform robustness, and workflow polish.
+The CLI is post-v0.2 with core mount engine, multi-source composition (priority + protected files + fork + promote + pin), kind classification (instructions/rules/agents/skills/mcp) with `--kind` filtering, and distribution (PyPI, Homebrew, Scoop). Positioning is multi-source AI workspace governance for staff engineers, contractors, and teams with mandated AI policy. Active work focuses on first-class agent treatment, security audit (`csaw audit`), and continued cross-platform/UX polish.
 
 ## Read First
 

@@ -1,7 +1,8 @@
 <p align="center">
   <h1 align="center">csaw</h1>
   <p align="center">
-    <strong>Mount, not install.</strong> One registry of AI rules, skills, and configs — mounted into every project, never committed, never drifted.
+    <strong>Multi-source AI workspace governance.</strong><br>
+    Mount team and client AI configs alongside personal ones — with protected paths, priority resolution, forkable lineage, and per-project pinning.
   </p>
   <p align="center">
     <a href="https://github.com/NicholasCullenCooper/csaw/actions"><img src="https://github.com/NicholasCullenCooper/csaw/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -16,18 +17,31 @@
 
 ---
 
-## The Problem
+## Who csaw is for
 
-Your AI tools need configuration — AGENTS.md, skills, rules, MCP configs. Today:
+You have **more than one source of AI configuration**:
 
-- **They're copy-pasted everywhere.** The same AGENTS.md lives in 12 repos. Each copy drifts independently.
-- **They clutter git.** Every AI tool wants its own config files. That's 10+ files committed to every repo, creating PR noise and merge conflicts.
-- **Onboarding is manual.** New person joins. "Copy these files from the wiki." They miss one. Their AI gives bad advice.
-- **Cleanup is impossible.** You tried an experimental AI config. Now you have to find and delete 6 files across 3 tool directories — and hope you didn't miss one.
+- **Staff engineers across multiple clients or product teams** — each codebase has its own rules, skills, and policies you must respect.
+- **Contractors and consultants juggling clients** — each engagement demands its own MCP servers, conventions, and security posture, and these must not bleed across projects.
+- **Teams with mandated AI policy** — a security or platform team publishes config that engineers must use, with personal preferences layered on top without being able to break the mandate.
+- **Individuals composing personal config** with one or more team or community sources.
 
-## The Fix
+If you only have one set of AI files to manage, simpler tools work fine. csaw earns its complexity when you have multiple stakeholders in your AI workspace.
 
-Keep your AI config in **one git repo** (a registry). csaw **symlinks** it into your projects. Update the registry, every project sees the change instantly. Unmount, and it's like csaw was never there.
+## The problem
+
+Multi-stakeholder AI config is a governance problem:
+
+- **No source of truth across projects.** A team's `AGENTS.md` gets copy-pasted into every repo. Each copy drifts independently. The "real" version is whoever pushed last.
+- **No way to enforce policy.** Security mandates a rule. A developer overrides it locally. Nobody notices.
+- **No client isolation.** Contractor on Client A's repo runs with personal MCP servers connected to Client B's databases. One slip from data exposure.
+- **No layering.** Team has shared rules; you want personal additions on top. Composing them per repo is manual, so nobody bothers.
+- **No lineage.** Fork a team skill, customize for your style, push improvements back? Manual copy-paste, no record of what diverged.
+- **Cleanup is impossible.** Tried an experimental config; now hunting through 3 tool directories and 6 files.
+
+## What csaw does
+
+Keep your AI config in one or more **git-backed sources** — personal, team, per-client, community. csaw mounts them into your projects via symlinks, composing across sources with priority resolution, protected files that can't be overridden, per-project pinning to specific git refs, and forkable lineage between sources. Update a source — every project sees the change instantly. Unmount, and it's like csaw was never there.
 
 ```
 your-registry/                         your-project/
@@ -216,26 +230,27 @@ Every project sees the update instantly through the symlinks. No re-mounting nee
 
 ---
 
-## Having Your Own Config Alongside the Team
+## Composing Multiple Sources
 
-You want the team's shared config **plus** your personal preferences. Create a personal registry:
+You want a team or client's shared config **plus** your personal preferences. Or you're a contractor with `client-acme` and `client-globex` configs, never to bleed across projects. Add multiple sources:
 
 ```bash
 csaw init ~/my-ai-config
 csaw source add personal ~/my-ai-config --priority 10
+csaw source add client-acme git@github.com:acme/ai-config.git --priority 50
 ```
 
-Now you have two sources. Mount uses both:
+Now mount uses all configured sources:
 
 ```bash
-csaw mount --profile team/backend
+csaw mount --profile client-acme/backend
 ```
 
-If personal has `skills/debug-strategy/SKILL.md` and team has `skills/code-review/SKILL.md`, **both** get mounted — they're different files, no conflict.
+If personal has `skills/debug-strategy/SKILL.md` and client-acme has `skills/code-review/SKILL.md`, **both** get mounted — they're different files, no conflict.
 
-### What if both have the same file?
+### What if two sources provide the same file?
 
-If both personal and team provide `AGENTS.md`, **priority decides**. Personal has priority 10, team has priority 0 (default). Personal wins.
+**Priority decides.** Higher number wins.
 
 ```bash
 csaw inspect
@@ -243,8 +258,8 @@ csaw inspect
 
 ```
 Sources
+  client-acme (remote, priority 50) → ~/.csaw/sources/client-acme
   personal (local, priority 10) → ~/my-ai-config
-  team (remote) → ~/.csaw/sources/team
 ```
 
 You can set priority on any source:
@@ -254,7 +269,37 @@ csaw source add team git@github.com:org/config.git --priority 0
 csaw source add personal ~/my-config --priority 10     # wins on conflicts
 ```
 
-Higher number wins. If two sources have the same priority and provide the same file, csaw errors and tells you to resolve it.
+If two sources have the same priority and provide the same file, csaw errors and tells you to resolve it explicitly.
+
+---
+
+## Protected Files
+
+When a source needs to enforce that certain files **cannot be overridden** — a team's mandatory security rules, a client's required `AGENTS.md` — mark them as protected in that source's `csaw.yml`:
+
+```yaml
+csaw:
+  protected:
+    - AGENTS.md
+    - rules/security.md
+
+backend:
+  include:
+    - AGENTS.md
+    - rules/**
+```
+
+When a file is protected:
+
+- **Priority is bypassed.** Even if personal has priority 100, the protected source wins for that file.
+- **Fork is refused.** `csaw fork client-acme/AGENTS.md --into personal` returns an error.
+- **Protection is visible.** `csaw inspect` marks protected files with a `*` under the source.
+
+This is the mechanism for team and client governance — let a team or client's source publish required files, layer personal preferences on top, and csaw won't let the personal layer break the protected ones.
+
+Protection is **advisory within csaw** — it prevents csaw's own mechanisms from bypassing the rules. A developer can still manually delete a symlink and write their own file in its place. csaw doesn't try to stop that. This is an open-source tool, not an enterprise MDM.
+
+> Future work: content-hash verification. csaw could record the SHA of each protected file at mount time and detect if someone replaces the symlink with a modified copy. `csaw check --strict` would fail the check. Tracked as tech debt.
 
 ---
 
@@ -384,34 +429,6 @@ Back to main.
 
 ---
 
-## Team Governance: Protected Files
-
-A team can mark certain files as **protected** — files that should not be overridden by personal sources or forked for customization. Put this in the team registry's `csaw.yml`:
-
-```yaml
-csaw:
-  protected:
-    - AGENTS.md
-    - rules/security.md
-
-backend:
-  include:
-    - AGENTS.md
-    - rules/**
-```
-
-When a file is protected:
-
-- **Priority is bypassed.** If personal has priority 100 and team's `AGENTS.md` is protected, team's version wins regardless.
-- **Fork is refused.** `csaw fork team/AGENTS.md --into personal` returns an error.
-- **Protection is visible.** `csaw inspect` marks protected files with a `*` under the source.
-
-Protection is **advisory within csaw** — it prevents csaw's own mechanisms from bypassing team rules. A developer can still manually delete a symlink and write their own file in its place. csaw doesn't try to stop that. This is an open-source tool, not an enterprise MDM.
-
-> Future work: content-hash verification. csaw could record the SHA of each protected file at mount time and detect if someone replaces the symlink with a modified copy. `csaw check --strict` would fail the check. This isn't built yet — filed as tech debt.
-
----
-
 ## Forking a Team File
 
 You like the team's `AGENTS.md` but want to customize it. Fork it:
@@ -466,26 +483,33 @@ Every symlink is removed. If csaw stashed any original files during mount (becau
 
 ---
 
-## Where Files Get Mounted
+## The Kinds
 
-csaw knows the four pillars of AI tool configuration and projects each to the right place:
+csaw treats AI workspace artifacts as five distinct kinds, each with its own conventions and projection target:
 
+| Kind | Registry path | Projects to | When loaded |
+|---|---|---|---|
+| **Instructions** | `AGENTS.md`, `CLAUDE.md` | Project root | Every turn — always in context |
+| **Rules** | `rules/*.md` | `.claude/rules/`, `.cursor/rules/`, etc. | Every turn — always-on coding standards |
+| **Agents** | `agents/*.md` | `.claude/agents/`, `.cursor/agents/`, etc. | When invoked — specialized subagent personas |
+| **Skills** | `skills/*/SKILL.md` | `.claude/skills/`, `.opencode/skills/`, etc. | When relevant — on-demand procedural workflows |
+| **MCP** | `mcp/*.json` | `.mcp.json`, `.cursor/mcp.json`, `.vscode/mcp.json` | Session start — tool/data connectivity |
+
+**Agents vs skills.** Both are spawnable, both are markdown with frontmatter. The distinction: an *agent* defines a persona (a subagent with its own tools, scope, and prompt — Claude's `.claude/agents/code-reviewer.md`); a *skill* defines a procedure (a step-by-step workflow loaded only when relevant). Use agents when you want a specialist to take over for a focused task; use skills when you want guidance the main agent can pull in mid-task.
+
+**Rules vs instructions.** Both are always loaded. The distinction is conventional: *instructions* (`AGENTS.md`) are the project-level summary every tool reads; *rules* are split-out always-on standards organized by topic (e.g., `rules/go-conventions.md`, `rules/security.md`).
+
+You can mount selectively by kind:
+
+```bash
+csaw mount --profile team/backend --kind agents          # only agent definitions
+csaw mount --profile team/backend --kind agents,skills   # agents and skills only
+csaw mount --profile team/backend                        # all kinds
 ```
-Registry path           Project path                     What it is
-────────────────────────────────────────────────────────────────────────────
-AGENTS.md               AGENTS.md                        Project guidance (the standard)
-rules/go.md             .claude/rules/go.md              Always-on coding standards
-                        .cursor/rules/go.md
-agents/reviewer.md      .claude/agents/reviewer.md       Subagent definitions
-                        .cursor/agents/reviewer.md
-skills/foo/SKILL.md     .claude/skills/foo/SKILL.md      On-demand reusable workflows
-                        .agents/skills/foo/SKILL.md
-mcp/claude-code.json    .mcp.json                        Tool/data connectivity
-```
 
-You write files once in your registry. csaw projects them into every tool's native directory.
+You write files once in your registry. csaw projects them into every tool's native directory. Mounted files are hidden from git via `.git/info/exclude`. Use `csaw show <path>` to make one visible, `csaw hide <path>` to hide it.
 
-Mounted files are hidden from git via `.git/info/exclude`. Use `csaw show <path>` to make one visible, `csaw hide <path>` to hide it.
+`csaw inspect` groups mounted files by kind within each source so you can see at a glance what's loaded.
 
 ---
 
@@ -604,6 +628,7 @@ Profiles support glob patterns and inheritance. `extends` pulls in everything fr
 | Flag | Commands | What it does |
 |---|---|---|
 | `--profile name` | mount | Named profile to mount. |
+| `--kind list` | mount | Filter by kind: `agents`, `skills`, `rules`, `mcp`, `instructions` (repeatable). |
 | `--force` | mount | Overwrite conflicts, stash originals. |
 | `--keep` | mount | Add to existing mount instead of replacing. |
 | `--tools list` | mount | Target tools (e.g., `--tools claude,cursor`). |

@@ -11,6 +11,7 @@ import (
 
 	"github.com/NicholasCullenCooper/csaw/internal/drift"
 	"github.com/NicholasCullenCooper/csaw/internal/linkmode"
+	"github.com/NicholasCullenCooper/csaw/internal/mount"
 	"github.com/NicholasCullenCooper/csaw/internal/output"
 	"github.com/NicholasCullenCooper/csaw/internal/pinning"
 	"github.com/NicholasCullenCooper/csaw/internal/profiles"
@@ -136,45 +137,16 @@ func RenderSummary(summary Summary) string {
 		}
 	}
 
-	// Mounted links grouped by source
+	// Mounted links grouped by source, then by kind within each source
 	if len(summary.Mounted) > 0 {
 		b.WriteString("\n")
 		b.WriteString(output.Bold("Mounted files"))
 		b.WriteString("\n")
 
-		// Group by source name
 		groups := groupBySource(summary.Mounted)
 		for _, group := range groups {
 			b.WriteString(fmt.Sprintf("\n  %s\n", output.Accent(group.name)))
-
-			healthy := 0
-			unhealthy := 0
-			for _, status := range group.statuses {
-				if status.Healthy {
-					healthy++
-				} else {
-					unhealthy++
-				}
-			}
-
-			for _, status := range group.statuses {
-				symbol := output.SymbolOK
-				label := ""
-				if !status.Healthy {
-					symbol = output.SymbolWarn
-					label = " " + output.Warn(status.Issue)
-				}
-				b.WriteString(fmt.Sprintf("    %s %s%s\n", symbol, status.RelativePath, label))
-			}
-
-			// Summary line for large groups
-			if len(group.statuses) > 5 {
-				parts := []string{output.Success(fmt.Sprintf("%d healthy", healthy))}
-				if unhealthy > 0 {
-					parts = append(parts, output.Warn(fmt.Sprintf("%d need attention", unhealthy)))
-				}
-				b.WriteString(fmt.Sprintf("    %s\n", output.Faint(strings.Join(parts, ", "))))
-			}
+			writeKindGroups(&b, group.statuses)
 		}
 	}
 
@@ -255,6 +227,47 @@ func RenderUnmountResult(removed, restored int) string {
 type sourceGroup struct {
 	name     string
 	statuses []drift.Status
+}
+
+// kindDisplayOrder is the canonical order kinds appear in the inspect output.
+// Instructions come first because they're always loaded by the AI tool;
+// agents next because they're the spawnable specialists; then skills, rules,
+// MCP, then anything unclassified.
+var kindDisplayOrder = []mount.Kind{
+	mount.KindInstruction,
+	mount.KindAgent,
+	mount.KindSkill,
+	mount.KindRule,
+	mount.KindMCP,
+	mount.KindOther,
+}
+
+func writeKindGroups(b *strings.Builder, statuses []drift.Status) {
+	byKind := make(map[mount.Kind][]drift.Status)
+	for _, status := range statuses {
+		k := mount.KindOfProjectPath(status.RelativePath)
+		byKind[k] = append(byKind[k], status)
+	}
+
+	for _, kind := range kindDisplayOrder {
+		group, ok := byKind[kind]
+		if !ok {
+			continue
+		}
+		b.WriteString(fmt.Sprintf("    %s %s\n",
+			output.Faint(mount.KindLabel(kind)),
+			output.Faint(fmt.Sprintf("(%d)", len(group))),
+		))
+		for _, status := range group {
+			symbol := output.SymbolOK
+			label := ""
+			if !status.Healthy {
+				symbol = output.SymbolWarn
+				label = " " + output.Warn(status.Issue)
+			}
+			b.WriteString(fmt.Sprintf("      %s %s%s\n", symbol, status.RelativePath, label))
+		}
+	}
 }
 
 func groupBySource(statuses []drift.Status) []sourceGroup {

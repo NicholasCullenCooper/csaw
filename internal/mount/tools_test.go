@@ -6,6 +6,85 @@ import (
 	"testing"
 )
 
+func TestKindOfRegistryPaths(t *testing.T) {
+	tests := []struct {
+		path string
+		want Kind
+	}{
+		{"AGENTS.md", KindInstruction},
+		{"CLAUDE.md", KindInstruction},
+		{"agents/code-reviewer.md", KindAgent},
+		{"agents/planner.md", KindAgent},
+		{"skills/code-review/SKILL.md", KindSkill},
+		{"skills/experimental/foo/SKILL.md", KindSkill},
+		{"rules/go-conventions.md", KindRule},
+		{"mcp/claude-code.json", KindMCP},
+		{"unknown/random.txt", KindOther},
+	}
+	for _, tc := range tests {
+		got := KindOf(SourceEntry{RelativePath: tc.path})
+		if got != tc.want {
+			t.Errorf("KindOf(%q) = %s, want %s", tc.path, got, tc.want)
+		}
+	}
+}
+
+func TestKindOfProjectPath(t *testing.T) {
+	tests := []struct {
+		path string
+		want Kind
+	}{
+		{"AGENTS.md", KindInstruction},
+		{"CLAUDE.md", KindInstruction},
+		{".claude/agents/code-reviewer.md", KindAgent},
+		{".cursor/agents/planner.md", KindAgent},
+		{".codex/agents/foo.md", KindAgent},
+		{".claude/skills/code-review/SKILL.md", KindSkill},
+		{".opencode/skills/foo/SKILL.md", KindSkill},
+		{".agents/skills/foo/SKILL.md", KindSkill},
+		{".claude/rules/go.md", KindRule},
+		{".cursor/rules/style.md", KindRule},
+		{".windsurf/rules/x.md", KindRule},
+		{".mcp.json", KindMCP},
+		{".cursor/mcp.json", KindMCP},
+		{".vscode/mcp.json", KindMCP},
+		{"random/path.txt", KindOther},
+	}
+	for _, tc := range tests {
+		got := KindOfProjectPath(tc.path)
+		if got != tc.want {
+			t.Errorf("KindOfProjectPath(%q) = %s, want %s", tc.path, got, tc.want)
+		}
+	}
+}
+
+func TestParseKind(t *testing.T) {
+	tests := []struct {
+		input   string
+		want    Kind
+		wantErr bool
+	}{
+		{"agents", KindAgent, false},
+		{"agent", KindAgent, false},
+		{"AGENTS", KindAgent, false},
+		{"  skills ", KindSkill, false},
+		{"rules", KindRule, false},
+		{"mcp", KindMCP, false},
+		{"instructions", KindInstruction, false},
+		{"bogus", "", true},
+	}
+	for _, tc := range tests {
+		got, err := ParseKind(tc.input)
+		if (err != nil) != tc.wantErr {
+			t.Errorf("ParseKind(%q) error = %v, wantErr %v", tc.input, err, tc.wantErr)
+			continue
+		}
+		if !tc.wantErr && got != tc.want {
+			t.Errorf("ParseKind(%q) = %s, want %s", tc.input, got, tc.want)
+		}
+	}
+}
+
 func TestResolveToolDirsWithConfig(t *testing.T) {
 	dir := t.TempDir()
 

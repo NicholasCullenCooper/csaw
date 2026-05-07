@@ -17,15 +17,17 @@ csaw source add personal ~/my-ai-config --priority 10
 ## Mount
 
 ```bash
-csaw mount                              # interactive profile picker
-csaw mount --profile team/backend       # mount a named profile
-csaw mount agents/go.md                 # mount specific files
-csaw mount --profile team/core --force  # overwrite conflicts
-csaw mount --restore                    # re-mount previous selection
-csaw mount --keep --profile team/extra  # add to existing mount (don't replace)
+csaw mount                                       # interactive profile picker
+csaw mount --profile team/backend                # mount a named profile
+csaw mount agents/go.md                          # mount specific files
+csaw mount --profile team/core --force           # overwrite conflicts
+csaw mount --restore                             # re-mount previous selection
+csaw mount --keep --profile team/extra           # add to existing mount (don't replace)
+csaw mount --profile team/backend --kind agents  # only mount agent definitions
+csaw mount --profile team/full --kind agents,skills,rules  # subset of kinds
 ```
 
-Mounting a profile **replaces** the previous mount by default. Use `--keep` to add on top.
+Mounting a profile **replaces** the previous mount by default. Use `--keep` to add on top. Use `--kind` to restrict by kind (`agents`, `skills`, `rules`, `mcp`, `instructions`).
 
 ## Unmount
 
@@ -79,6 +81,14 @@ csaw unpin team                         # back to default branch
 csaw fork team/agents/base.md --into personal  # copy for personal editing
 ```
 
+## Promote an Experimental Skill
+
+```bash
+csaw promote personal/skills/experimental/debug-strategy
+# moves skills/experimental/debug-strategy/ → skills/debug-strategy/
+csaw push personal -m "promote debug-strategy"
+```
+
 ## Source Priority
 
 When two sources provide the same file, higher priority wins:
@@ -104,17 +114,17 @@ csaw update                             # repair broken links
 
 ## Where Files Go
 
-```
-AGENTS.md       →  project root (project guidance, the standard)
-CLAUDE.md       →  project root (Claude Code)
-rules/*.md      →  .claude/rules/   .cursor/rules/   (always-on standards)
-agents/*.md     →  .claude/agents/  .cursor/agents/  (subagent definitions)
-skills/         →  .claude/skills/  .agents/skills/  (on-demand workflows)
-mcp/            →  .mcp.json  .vscode/mcp.json  .cursor/mcp.json
-commands/       →  project root
-```
+| Kind | Registry path | Projects to |
+|---|---|---|
+| Instructions | `AGENTS.md`, `CLAUDE.md` | Project root |
+| Rules | `rules/*.md` | `.claude/rules/`, `.cursor/rules/`, `.windsurf/rules/` |
+| Agents | `agents/*.md` | `.claude/agents/`, `.cursor/agents/`, `.codex/agents/` |
+| Skills | `skills/*/SKILL.md` | `.claude/skills/`, `.opencode/skills/`, `.codex/skills/`, `.agents/skills/` |
+| MCP | `mcp/*.json` | `.mcp.json`, `.cursor/mcp.json`, `.vscode/mcp.json` |
 
-`.agents/skills/` is always created as a fallback. Other tool directories are used only if they already exist or are configured via `csaw config set tools`.
+`.agents/skills/` is always created as a fallback. Other tool directories are used only if they already exist in the project or are configured via `csaw config set tools claude,cursor`.
+
+Files at unrecognized registry paths are mounted at the same path in the project (no per-tool projection).
 
 ## Profile Format (`csaw.yml`)
 
@@ -156,18 +166,24 @@ my-registry/
 
 ## Key Concepts
 
-**Mount, not install** — Symlinks from a registry. Reversible. Your repo stays clean.
+**Mount, not install** — Symlinks from a source. Reversible. Your repo stays clean.
 
-**Profiles** — Named file selections with glob patterns. Can inherit from each other.
+**Profiles** — Named file selections with glob patterns in a source's `csaw.yml`. Can inherit from each other via `extends:`.
 
-**Sources** — Git repos or local dirs containing agent files. Add as many as you need.
+**Sources** — Git repos or local dirs containing AI config. Personal, team, per-client, community. Add as many as you need.
 
 **Priority** — When sources overlap, higher priority wins. Set with `--priority` on `source add`.
 
-**Pinning** — Lock a source to a branch/tag per project with `csaw pin`. Uses git worktrees.
+**Protected files** — A source can mark files as `protected:` in its `csaw.yml`. Protected files bypass priority (always win) and refuse `csaw fork`. The mechanism behind team and client governance.
 
-**Fork** — Copy a team file into your own source for personal editing with `csaw fork`.
+**Pinning** — Lock a source to a branch/tag per project with `csaw pin`. Uses git worktrees so other projects stay on the default branch.
 
-**Tool directories** — Skills mount into `.claude/skills/`, `.opencode/skills/`, etc. where AI tools discover them natively.
+**Fork** — Copy a file from one source into another for personal editing with `csaw fork`. The original is untouched.
+
+**Promote** — Move a skill from `skills/experimental/` to `skills/` in a source so it mounts by default.
+
+**Kinds** — csaw classifies registry files as one of five kinds: instructions, rules, agents, skills, mcp. Each has its own projection target. Filter with `csaw mount --kind agents,skills`.
+
+**Tool directories** — Each kind projects into the right per-tool directory (`.claude/agents/`, `.cursor/rules/`, etc.) where AI tools discover files natively.
 
 **Git exclude** — Mounted files are hidden from git by default. Use `csaw show`/`hide` to control visibility. Files in already-gitignored directories (like `.claude/`) need no extra exclusion.
