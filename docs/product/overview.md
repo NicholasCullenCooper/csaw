@@ -13,6 +13,8 @@ You have **more than one source of AI configuration truth**:
 
 If you only manage one set of AI files, simpler tools work fine. csaw earns its complexity when you have multiple stakeholders in your AI workspace.
 
+If a context file belongs to one repo and is safe to commit there, keep it in that repo. csaw is for the cases where repo-local files stop being enough: client isolation, private personal context, team-wide policy, reusable agents and skills, cross-tool projection, independent pinning, and local auditability.
+
 ## How it works
 
 You declare one or more **sources** — git repos or local directories containing AI config. csaw symlinks files from sources into your project, hidden from git via `.git/info/exclude`. You can:
@@ -43,6 +45,7 @@ csaw treats AI workspace artifacts as five distinct kinds, each with its own con
 ## Design principles
 
 - **Mount, not install.** Symlinks from a registry, not copies committed to your repo. Reversible, live, clean.
+- **Repo-local first.** Project-owned context belongs in the project. csaw manages context that crosses repo, tool, team, client, privacy, or provenance boundaries.
 - **No hidden defaults.** `csaw inspect` shows the full resolved state — what's mounted, where it came from, which source, whether it's protected, whether it's healthy.
 - **Files, not formats.** csaw manages standard files (AGENTS.md, SKILL.md, plain markdown). Every file in a source is usable without csaw.
 - **Multi-source composition with provenance.** Layer team, client, personal, and community sources. Priority and protection make the policy explicit. Every value annotated with its origin.
