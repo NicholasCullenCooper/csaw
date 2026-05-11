@@ -645,7 +645,9 @@ func newMountCommand() *cobra.Command {
 			}
 
 			toolDirs := mount.ResolveToolDirs(projectRoot, configuredTools)
-			entries = mount.ExpandToolTargets(entries, toolDirs)
+			if !restore {
+				entries = mount.ExpandToolTargets(entries, toolDirs)
+			}
 
 			result, err := mount.Apply(projectRoot, paths, entries, promptConflictResolver{
 				cmd:      cmd,

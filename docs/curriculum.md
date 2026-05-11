@@ -73,16 +73,16 @@ Use csaw when context crosses at least one boundary:
 
 ### Core Objects
 
-| Object | Meaning |
-|---|---|
-| Project | The git repo where AI files are mounted. |
-| Source | A local directory or git repo containing AI workspace files. |
-| Profile | A named selection in `csaw.yml` that says what to mount. |
-| Mount | The linked files placed into the project. |
-| Kind | One of instructions, rules, agents, skills, MCP, or other. |
-| Policy | `.csaw/policy.yml`, checked by `csaw audit`. |
-| Pin | A per-project source ref set with `csaw pin source@ref`. |
-| Protected file | A file a source marks as mandatory and non-overridable. |
+| Object         | Meaning                                                      |
+| -------------- | ------------------------------------------------------------ |
+| Project        | The git repo where AI files are mounted.                     |
+| Source         | A local directory or git repo containing AI workspace files. |
+| Profile        | A named selection in `csaw.yml` that says what to mount.     |
+| Mount          | The linked files placed into the project.                    |
+| Kind           | One of instructions, rules, agents, skills, MCP, or other.   |
+| Policy         | `.csaw/policy.yml`, checked by `csaw audit`.                 |
+| Pin            | A per-project source ref set with `csaw pin source@ref`.     |
+| Protected file | A file a source marks as mandatory and non-overridable.      |
 
 ### Exercise
 
@@ -110,7 +110,8 @@ cd ~/csaw-lab
 csaw init personal-ai --name personal
 ```
 
-Register it if the interactive prompt asks. If not, add it explicitly:
+`csaw init` scaffolds the source. Registering that source is the next explicit
+state change:
 
 ```bash
 csaw source add personal ~/csaw-lab/personal-ai --priority 10
@@ -199,8 +200,9 @@ Add this to `personal-ai/rules/personal.md`:
 Prefer small, testable changes.
 ```
 
-Add it to the default profile and verify the profile still parses by mounting
-in the next module.
+Leave the profile unchanged and verify it still parses by mounting in the next
+module. The starter `default` profile already includes `rules/**`, so this new
+file is selected without editing `csaw.yml`.
 
 ## Module 4: First Mount
 
@@ -253,17 +255,21 @@ original file when unmounting.
 
 csaw classifies AI workspace files by kind:
 
-| Kind | Registry path | Project target |
-|---|---|---|
-| Instructions | `AGENTS.md`, `CLAUDE.md` | Project root |
-| Rules | `rules/*.md` | Tool rule directories |
-| Agents | `agents/*.md` | Tool agent directories |
-| Skills | `skills/*/SKILL.md` | Tool skill directories |
-| MCP | `mcp/*.json` | Tool MCP config paths |
+| Kind         | Registry path            | Project target         |
+| ------------ | ------------------------ | ---------------------- |
+| Instructions | `AGENTS.md`, `CLAUDE.md` | Project root           |
+| Rules        | `rules/*.md`             | Tool rule directories  |
+| Agents       | `agents/*.md`            | Tool agent directories |
+| Skills       | `skills/*/SKILL.md`      | Tool skill directories |
+| MCP          | `mcp/*.json`             | Tool MCP config paths  |
 
 Tool projection means one registry shape can support multiple tools. For
 example, `skills/review/SKILL.md` can mount to `.claude/skills/review/SKILL.md`
 and `.opencode/skills/review/SKILL.md`.
+
+The starter `default` profile includes instructions, rules, agents, and skills.
+It does not include MCP files. Mount MCP by adding `mcp/**` to a profile or by
+using an explicit qualified pattern.
 
 Set preferred tools:
 
@@ -276,6 +282,7 @@ Mount only some kinds:
 ```bash
 csaw mount --profile personal/default --kind agents
 csaw mount --profile personal/default --kind agents,skills
+csaw mount 'personal/mcp/**' --tools claude
 ```
 
 Control git visibility:
@@ -287,7 +294,9 @@ csaw hide AGENTS.md
 
 ### Exercise
 
-Create one file of each kind in `personal-ai`, mount the profile, and predict
+Create one file of each kind in `personal-ai`. Mount the starter profile for
+instructions, rules, agents, and skills. Mount MCP with the explicit
+`'personal/mcp/**'` pattern or add `mcp/**` to `personal-ai/csaw.yml`. Predict
 where each file should appear before running `csaw inspect`.
 
 ## Module 6: Multi-Source Composition
@@ -313,10 +322,14 @@ Mount personal and team context together with qualified source patterns:
 csaw mount 'personal/**' 'team/**'
 ```
 
-A profile can also include qualified source paths, such as `personal/**` and
-`team/**`, if you want a named composition profile. When two sources provide
-different files, both mount. When they provide the same target path, priority
-decides.
+Quote glob patterns so your shell does not expand them before csaw sees them.
+Profiles are source-qualified by owner: `team/default` resolves unqualified
+profile includes such as `rules/**` against the `team` source. A profile can
+also include qualified source paths, such as `personal/**` and `team/**`, if
+you want a named composition profile.
+
+When two sources provide different files, both mount. When they provide the
+same target path, priority decides.
 
 ### Priority
 
@@ -392,6 +405,10 @@ cd ~/csaw-lab/app
 csaw audit --init
 ```
 
+This creates `.csaw/policy.yml` in the project. Treat it as a real project
+policy file: commit it when the policy represents shared team, client, or CI
+requirements.
+
 Edit `.csaw/policy.yml`:
 
 ```yaml
@@ -416,6 +433,12 @@ csaw audit
 csaw audit --strict
 csaw audit --json
 ```
+
+This example policy is intentionally stricter than the current lab state. Use
+the failures to learn what audit checks before you make the policy pass.
+
+`--json` writes the machine-readable report to stdout. If audit fails, the
+human failure summary may still be written to stderr.
 
 ### What Audit Checks
 
@@ -500,14 +523,36 @@ switch to the correct source and verify audit passes.
 
 ## Module 10: Pinning Source Refs
 
+Pinning is for remote sources. Local sources already point at a local working
+tree, so change them with git directly. To practice pinning in the lab, turn
+the team source into a disposable remote and re-register it:
+
+```bash
+cd ~/csaw-lab/app
+csaw unmount
+
+cd ~/csaw-lab/team-ai
+git branch -M main
+git add -A
+git commit -m "seed team source"
+
+cd ~/csaw-lab
+git clone --bare team-ai team-ai.git
+csaw source remove team
+csaw source add team "file://$HOME/csaw-lab/team-ai.git" --priority 0
+```
+
 Pinning lets one project use a source branch or tag without changing other
 projects:
 
 ```bash
-csaw pin team@feature/new-rules
+cd ~/csaw-lab/app
+csaw pin team@main
 csaw mount --profile team/default
 csaw inspect
 ```
+
+In real use, replace `main` with the branch or tag the project should consume.
 
 Unpin:
 
@@ -520,8 +565,7 @@ Policy can require the pin:
 ```yaml
 required_sources:
   - name: team
-    url: git@example.com:org/team-ai.git
-    ref: feature/new-rules
+    ref: main
 ```
 
 The `ref` policy check uses csaw's project pin. It does not infer the current
@@ -537,8 +581,12 @@ the required ref and observe the failure.
 Fork copies a source file into another source for customization:
 
 ```bash
-csaw fork team/rules/go.md --into personal
+csaw fork team/agents/reviewer.md --into personal
 ```
+
+Protected files cannot be forked because the owning source marked them as
+mandatory. Try `csaw fork team/AGENTS.md --into personal` after Module 7 and
+confirm csaw refuses it.
 
 Promote moves an experimental skill into the stable skill tree:
 
@@ -547,13 +595,11 @@ csaw mount --profile personal/default --include-experimental
 csaw promote personal/skills/experimental/debugging
 ```
 
-Protected files cannot be forked because the owning source marked them as
-mandatory.
-
 ### Exercise
 
-Create an experimental skill, mount with `--include-experimental`, promote it,
-and verify it mounts without `--include-experimental`.
+Fork an unprotected team file into `personal-ai`. Then create an experimental
+skill, mount with `--include-experimental`, promote it, and verify it mounts
+without `--include-experimental`.
 
 ## Module 12: Source Git Operations
 
@@ -601,20 +647,23 @@ csaw check
 
 Common issues:
 
-| Detail | Meaning | Typical response |
-|---|---|---|
-| `missing-source` | Source file is gone. | Restore the source file or remount another profile. |
-| `missing-link` | Project path is gone. | Run `csaw update` or remount. |
-| `replaced-link` | Project path is no longer csaw-managed. | Inspect manually; remount if intentional. |
-| `drifted-link` | Link points at the wrong source. | Run `csaw update` or remount. |
-| `protected-content-drift` | Protected file hash changed. | Audit the change; remount if approved. |
-| `protected-hash-unreadable` | Hash verification could not read the file. | Check filesystem permissions and mount state. |
+| Detail                      | Meaning                                    | Typical response                                    |
+| --------------------------- | ------------------------------------------ | --------------------------------------------------- |
+| `missing-source`            | Source file is gone.                       | Restore the source file or remount another profile. |
+| `missing-link`              | Project path is gone.                      | Run `csaw update` or remount.                       |
+| `replaced-link`             | Project path is no longer csaw-managed.    | Inspect manually; remount if intentional.           |
+| `drifted-link`              | Link points at the wrong source.           | Run `csaw update` or remount.                       |
+| `protected-content-drift`   | Protected file hash changed.               | Audit the change; remount if approved.              |
+| `protected-hash-unreadable` | Hash verification could not read the file. | Check filesystem permissions and mount state.       |
 
 Repair what csaw can repair:
 
 ```bash
 csaw update
 ```
+
+`csaw update` repairs missing and drifted links that can be reconstructed from
+mount state.
 
 Unmount and restore originals:
 
@@ -647,6 +696,10 @@ git status --short
 
 Use this sparingly. The default model is mounted local context, not committed
 project context.
+
+If you show a file under a hidden tool directory, the parent directory can
+appear in `git status` until you hide the file again. Project policy files such
+as `.csaw/policy.yml` are independent of mount visibility.
 
 ### Exercise
 
@@ -828,19 +881,19 @@ Read first:
 
 Package map:
 
-| Package | Responsibility |
-|---|---|
-| `cmd/csaw` | CLI wiring and command behavior. |
-| `internal/runtime` | Paths, constants, normalization helpers. |
-| `internal/sources` | Source config, git operations, catalogs. |
-| `internal/profiles` | `csaw.yml` parsing and inheritance. |
-| `internal/mount` | Planning, projection, priority, protected resolution. |
-| `internal/workspace` | Stash, excludes, mount state, hashes. |
-| `internal/drift` | Mounted link and protected content health. |
-| `internal/audit` | Project policy, findings, renderers, exit semantics. |
-| `internal/pinning` | Per-project source refs. |
-| `internal/fork` | Forking files between sources. |
-| `internal/inspect` | Human-readable state summaries. |
+| Package              | Responsibility                                        |
+| -------------------- | ----------------------------------------------------- |
+| `cmd/csaw`           | CLI wiring and command behavior.                      |
+| `internal/runtime`   | Paths, constants, normalization helpers.              |
+| `internal/sources`   | Source config, git operations, catalogs.              |
+| `internal/profiles`  | `csaw.yml` parsing and inheritance.                   |
+| `internal/mount`     | Planning, projection, priority, protected resolution. |
+| `internal/workspace` | Stash, excludes, mount state, hashes.                 |
+| `internal/drift`     | Mounted link and protected content health.            |
+| `internal/audit`     | Project policy, findings, renderers, exit semantics.  |
+| `internal/pinning`   | Per-project source refs.                              |
+| `internal/fork`      | Forking files between sources.                        |
+| `internal/inspect`   | Human-readable state summaries.                       |
 
 Before committing:
 

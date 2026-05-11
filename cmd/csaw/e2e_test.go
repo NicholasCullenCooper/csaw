@@ -303,6 +303,32 @@ func TestE2EMountRestore(t *testing.T) {
 	}
 }
 
+func TestE2EMountRestoreDoesNotReprojectToolTargets(t *testing.T) {
+	env := newE2EEnv(t)
+
+	reg := env.createRegistry("reg", map[string]string{
+		"csaw.yml":                "default:\n  include:\n    - skills/**\n",
+		"skills/testing/SKILL.md": "testing skill",
+	})
+
+	env.run("source", "add", "reg", reg)
+	env.run("config", "set", "tools", "claude,codex")
+	env.run("mount", "--profile", "reg/default", "--kind", "skills")
+	env.run("unmount")
+
+	env.run("mount", "--restore")
+
+	for _, path := range []string{
+		".claude/skills/testing/SKILL.md",
+		".codex/skills/testing/SKILL.md",
+		".agents/skills/testing/SKILL.md",
+	} {
+		if !env.fileExists(path) {
+			t.Fatalf("%s should be remounted after --restore", path)
+		}
+	}
+}
+
 func TestE2EMountKindFilter(t *testing.T) {
 	env := newE2EEnv(t)
 
