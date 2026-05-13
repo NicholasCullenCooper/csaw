@@ -238,6 +238,49 @@ func TestPullCleanSource(t *testing.T) {
 	}
 }
 
+func TestWorktreeCheckoutUsesDetachedRef(t *testing.T) {
+	root := t.TempDir()
+	paths := runtime.BuildPaths(filepath.Join(root, ".csaw"))
+	sourceDir := filepath.Join(paths.Sources, "team")
+	if err := os.MkdirAll(sourceDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	git := &recordingGit{
+		outputs: map[string]string{
+			joinArgs([]string{"rev-parse", "FETCH_HEAD"}): "abc123\n",
+		},
+	}
+	manager := Manager{Paths: paths, Git: git}
+	source := Source{Name: "team", Kind: KindRemote, URL: "git@example.com:org/repo.git"}
+	projectRoot := filepath.Join(root, "project")
+
+	worktreePath, err := manager.WorktreeCheckout(context.Background(), source, "main", projectRoot)
+	if err != nil {
+		t.Fatalf("WorktreeCheckout() error = %v", err)
+	}
+
+	wantWorktree := manager.WorktreePath(source, projectRoot)
+	if worktreePath != wantWorktree {
+		t.Fatalf("worktreePath = %q, want %q", worktreePath, wantWorktree)
+	}
+
+	var sawDetachedAdd bool
+	for _, call := range git.calls {
+		if len(call) >= 6 &&
+			call[1] == "worktree" &&
+			call[2] == "add" &&
+			call[3] == "--detach" &&
+			call[4] == wantWorktree &&
+			call[5] == "abc123" {
+			sawDetachedAdd = true
+		}
+	}
+	if !sawDetachedAdd {
+		t.Fatalf("git calls = %v, want detached worktree add from fetched commit", git.calls)
+	}
+}
+
 func TestPullDivergedSource(t *testing.T) {
 	root := t.TempDir()
 	paths := runtime.BuildPaths(filepath.Join(root, ".csaw"))

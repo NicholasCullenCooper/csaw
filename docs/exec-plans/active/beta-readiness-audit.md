@@ -1,0 +1,297 @@
+# Beta Readiness Audit
+
+## Summary
+
+This plan tracks the beta acceptance workflow passes from
+[`docs/product/beta-acceptance.md`](../../product/beta-acceptance.md).
+
+The beta target is an AI workspace context activation and assurance tool:
+configured sources are inventory, mounted state is active context, and audit
+checks that required context is present while blocked context is absent.
+
+## Success Criteria
+
+- Composition and client-isolation passes show that configured sources do not
+  bleed into a project unless explicitly mounted.
+- Conflict and data-safety passes show that local files are not lost and active
+  context is not cleared by failed mount attempts.
+- Every beta must-have row in the acceptance matrix is verified, fixed, or
+  recorded as blocking the beta tag.
+- Remaining beta-decision items are either promoted to must-have work or
+  explicitly deferred in the roadmap.
+- The final release candidate passes the standard validation suite:
+  `gofmt -l .`, `go test ./...`, `go vet ./...`, and `go build ./...`.
+
+## Workstreams
+
+### Pass 3: Composition And Client Isolation
+
+Status: completed for local-source workflows.
+
+Validated:
+
+- personal, team, client-acme, and client-globex can all be configured at once
+- mounting `client-acme/acme-only` activates only Acme context
+- client-globex files are absent from mounted project files while merely
+  configured
+- audit passes for required Acme context and blocked Globex context
+- mounting client-globex causes audit to fail for missing Acme and active
+  blocked Globex
+- explicit Acme plus personal-skill composition activates personal skills only
+  when named by the profile
+- team protected files beat higher-priority client files on the same projected
+  rule path
+
+Notes:
+
+- `inspect` correctly distinguishes configured sources from mounted files, but
+  it still does not show losing candidates for priority/protected decisions.
+  That remains a beta decision from the acceptance matrix.
+
+### Pass 4: Conflict And Data Safety
+
+Status: completed for local-source workflows after one fix.
+
+Validated:
+
+- default noninteractive conflicts fail before overwriting local files
+- `--skip-conflicts` leaves local files untouched
+- `--force` stashes local files and mounts source files
+- `unmount` restores stashed originals and removes managed git excludes
+- `--keep` adds additional mounted context without removing active context
+- partial unmount restores the stashed original for the selected path
+- `mount --restore` with a conflict now fails before clearing the remaining
+  active context
+- `mount --restore --force` remounts the previous selection when a restored
+  local file conflicts
+- `check` detects a missing mounted link and `update` repairs it
+
+Fix landed during this pass:
+
+- `csaw mount` now preflights noninteractive conflicts before automatic
+  unmount. This prevents a failed mount or restore from clearing the existing
+  active context first.
+
+Follow-up:
+
+- `--skip-conflicts` currently renders a successful mount panel that says
+  `0 file(s) mounted` without showing the skipped count. This is not data loss,
+  but it is beta UX polish.
+
+### Remaining External Checks
+
+Pending after commit/push:
+
+- CI status for the final pushed commit on Linux, macOS, and Windows
+- release workflow artifact verification after the next approved tag
+
+### Pass 1: Fresh User Path
+
+Status: completed for noninteractive local first-run workflow.
+
+Validated:
+
+- `csaw init` creates a registry with `csaw.yml`, `AGENTS.md`, and starter
+  skills
+- `source add` registers the new local registry with priority
+- `use <source>/default` mounts instructions and starter skills
+- `inspect`, `status`, and `check` describe the active mounted state
+- `audit` without policy reports a warning but succeeds in default mode
+- `audit --strict` fails without policy
+- `audit --init` creates project policy
+- `audit --strict` passes once required source and kind policy matches the
+  active context
+- `unmount` removes mounted files
+- `mount --restore` remounts the previous selection
+
+### Pass 2: Existing Project Adoption
+
+Status: completed for local project-owned files.
+
+Validated:
+
+- `init --adopt` adopts project-owned root instructions, tool rules, skills,
+  agents, and MCP config
+- adopted project files preserve project content
+- project files win over starter files created during `init`
+- pre-existing registry files are preserved
+- mounted adopted files point back to the adopted registry content
+- `unmount` restores original project-owned files stashed during force mount
+- `mount --restore --force` remounts adopted context after restore
+
+### Pass 5: Remote Source And Pinning
+
+Status: completed for local bare-remotes.
+
+Validated:
+
+- remote `source add` clones local bare remotes into csaw-managed checkouts
+- `source list` shows remote source priority
+- mounted symlinks update immediately when an already-mounted source file is
+  changed and pulled
+- newly added source files require remounting the same profile to add new
+  symlinks
+- audit required source URL checks pass and fail correctly
+- audit required pin checks fail while unpinned
+- branch pins mount from detached worktrees and satisfy required ref policy
+- unpin remaps actively mounted files from the worktree back to the default
+  checkout
+- tag pins mount and satisfy required ref policy
+- exact SHA pins mount and satisfy required ref policy
+- `fork` can copy a remote source file into another remote source checkout
+- `push` commits and pushes forked source changes to the remote
+- `promote` moves an experimental skill to stable in the source checkout
+- `push` commits and pushes promoted skills to the remote
+
+Docs updated during this pass:
+
+- README and product overview now distinguish edits to already-mounted source
+  files, which update immediately through symlinks, from newly added source
+  files, which require remounting the profile.
+
+Recommended next pass:
+
+- Pass 1 and Pass 2, because the deeper beta paths are now covered and the
+  remaining local workflow checks should confirm the first-run story.
+
+### Pass 6: Tool And Kind Projection
+
+Status: completed for configured tool projection.
+
+Validated:
+
+- `--kind instructions` mounts only root instruction files
+- `--kind rules` projects rules into Claude Code, Cursor, and Windsurf rule
+  directories, without mounting agents, skills, MCP, or instructions
+- `--kind agents` projects agents into Claude Code, Codex, and Cursor agent
+  directories, without mounting unsupported Windsurf agent paths
+- `--kind skills` projects skills into Claude Code, Codex, OpenCode, and the
+  shared `.agents` fallback, without mounting unsupported Cursor skill paths
+- `--kind mcp` projects known MCP configs to `.mcp.json`,
+  `.cursor/mcp.json`, and `.vscode/mcp.json`
+- repeated `--kind` flags compose as expected, such as rules plus agents
+- mounting all kinds together produces the expected instructions, rules,
+  agents, skills, and MCP files
+- `inspect` groups projected files by kind correctly
+- `status` reports active mounted state
+- `check` reports all projected links healthy
+- audit required-kind checks pass for each kind independently
+
+### Pass 7: Error And Malformed Input
+
+Status: completed for noninteractive CLI workflows.
+
+Validated:
+
+- unknown profiles fail with an explicit unknown-profile error
+- invalid `--kind` values fail with the valid kind list
+- explicit mount selections that match no registry files now fail instead of
+  succeeding with a warning
+- malformed `csaw.yml` profile fields fail with the invalid field name
+- bad pin refs fail before recording project pin state
+- missing remote checkouts fail on mount and can be restored with `csaw pull`
+- noninteractive conflicts fail with the `--force` / `--skip-conflicts`
+  recovery path
+- malformed policy fields fail with policy-field context
+- invalid blocked-source glob patterns fail
+- invalid required-kind policy values fail with the valid kind list
+- `audit --init` rejects incompatible `--json` and `--strict` flags
+- `audit --strict --json` emits JSON findings to stdout, exits nonzero, and
+  writes the failure summary to stderr
+
+Fix landed during this pass:
+
+- `csaw mount` now returns a nonzero error when an explicit selection matches
+  no registry files. This prevents typoed source or path names from appearing
+  successful.
+
+### Policy Hardening Follow-Up: Blocked Kinds And Paths
+
+Status: completed.
+
+Validated:
+
+- `.csaw/policy.yml` supports `blocked_kinds`
+- `.csaw/policy.yml` supports `blocked_paths`
+- blocked kind checks emit `kind.blocked.active` and `kind.blocked.clear`
+- blocked path checks emit `path.blocked.active` and `path.blocked.clear`
+- blocked path patterns support exact paths, directory prefixes, and globs
+- invalid blocked path glob patterns fail during policy load
+- `audit --strict --json` reports blocked kind/path findings in the stable JSON
+  report
+- audit passes when the mounted context omits the blocked kind and blocked path
+
+This closes the highest-risk client-isolation gap from the beta acceptance
+matrix: policies can now forbid MCP and personal agent surfaces directly,
+without blocking an entire source.
+
+### Pass 8: Cross-Platform And Release
+
+Status: local validation completed; external CI and release artifacts pending.
+
+Validated locally:
+
+- CI workflow is configured to run on `ubuntu-latest`, `macos-latest`, and
+  `windows-latest`
+- CI workflow runs formatting, tests, vet, and docs validation
+- release workflow triggers on `v*` tags
+- release workflow runs GoReleaser with GitHub release permissions
+- release workflow builds and publishes PyPI wheels after the release job
+- distribution docs describe GitHub Releases, Homebrew, Scoop, and PyPI
+- local validation passed:
+  - `gofmt -l .`
+  - `go test ./...`
+  - `go vet ./...`
+  - `./scripts/check_docs.sh`
+  - `go build ./...`
+  - `git diff --check`
+
+Pending:
+
+- push the final commit and verify CI passes on GitHub
+- after a user-approved tag, verify GitHub Release artifacts, Homebrew, Scoop,
+  and PyPI outputs
+
+## Risks
+
+- Client isolation now covers sources, kinds, and mounted project paths. It is
+  still local assurance, not hard runtime enforcement.
+- Provenance is good enough for mounted winners, but not yet for explaining all
+  losing candidates. This may weaken the composition story for skeptical beta
+  users.
+- `diff` remains weak for healthy symlinked files and should either be improved
+  or documented with a clear caveat before beta.
+- TUI flows have not been covered by these passes; beta-critical workflows must
+  remain available through noninteractive commands.
+
+## Validation
+
+Focused automated validation after the conflict preflight fix:
+
+```bash
+go test ./cmd/csaw
+go test ./internal/mount ./internal/workspace ./internal/drift
+```
+
+Manual beta lab validation completed:
+
+- Pass 1: fresh user path
+- Pass 2: existing project adoption
+- Pass 3: composition and client isolation
+- Pass 4: conflict and data safety
+- Pass 5: remote source and pinning
+- Pass 6: tool and kind projection
+- Pass 7: error and malformed input
+- Policy hardening follow-up: blocked kind and path checks
+- Result: 0 lab failures after fixes
+
+Full local validation completed:
+
+```bash
+gofmt -l .
+go test ./...
+go vet ./...
+./scripts/check_docs.sh
+go build ./...
+git diff --check
+```

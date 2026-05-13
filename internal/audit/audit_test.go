@@ -26,6 +26,10 @@ required_sources:
 blocked_sources:
   - personal
   - other-client-*
+blocked_kinds:
+  - mcp
+blocked_paths:
+  - .claude/agents/**
 required_kinds:
   - instructions
   - agents
@@ -50,6 +54,12 @@ required_kinds:
 	if got, want := policy.BlockedSources[1], "other-client-*"; got != want {
 		t.Fatalf("blocked source = %q, want %q", got, want)
 	}
+	if got, want := policy.BlockedKinds[0], mount.KindMCP; got != want {
+		t.Fatalf("blocked kind = %q, want %q", got, want)
+	}
+	if got, want := policy.BlockedPaths[0], ".claude/agents/**"; got != want {
+		t.Fatalf("blocked path = %q, want %q", got, want)
+	}
 	if got, want := policy.RequiredKinds[1], mount.KindAgent; got != want {
 		t.Fatalf("required kind = %q, want %q", got, want)
 	}
@@ -63,6 +73,10 @@ required_sources:
   - team
 blocked_sources:
   - personal
+blocked_kinds:
+  - mcp
+blocked_paths:
+  - .claude/agents/**
 required_kinds:
   - instructions
 `)
@@ -77,6 +91,8 @@ required_kinds:
 	}
 	assertFinding(t, report, "source.required.present", SeverityOK)
 	assertFinding(t, report, "source.blocked.clear", SeverityOK)
+	assertFinding(t, report, "kind.blocked.clear", SeverityOK)
+	assertFinding(t, report, "path.blocked.clear", SeverityOK)
 	assertFinding(t, report, "kind.required.present", SeverityOK)
 }
 
@@ -162,6 +178,45 @@ required_kinds:
 	assertFinding(t, report, "kind.required.missing", SeverityError)
 }
 
+func TestRunFailsForBlockedKind(t *testing.T) {
+	project := t.TempDir()
+	paths := runtime.BuildPaths(filepath.Join(t.TempDir(), ".csaw"))
+	writePolicy(t, project, `
+blocked_kinds:
+  - mcp
+`)
+	writeMountedFile(t, project, ".mcp.json", "personal", "{}")
+
+	report, err := Run(project, paths)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if !report.Failed(false) {
+		t.Fatalf("report should fail, findings: %+v", report.Findings)
+	}
+	assertFinding(t, report, "kind.blocked.active", SeverityError)
+}
+
+func TestRunFailsForBlockedPath(t *testing.T) {
+	project := t.TempDir()
+	paths := runtime.BuildPaths(filepath.Join(t.TempDir(), ".csaw"))
+	writePolicy(t, project, `
+blocked_paths:
+  - .claude/agents/**
+`)
+	writeMountedFile(t, project, ".claude/agents/reviewer.md", "personal", "agent")
+
+	report, err := Run(project, paths)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if !report.Failed(false) {
+		t.Fatalf("report should fail, findings: %+v", report.Findings)
+	}
+	assertFinding(t, report, "path.blocked.active", SeverityError)
+	assertFindingDetail(t, report, "path.blocked.active", "matched .claude/agents/**")
+}
+
 func TestRunFailsForProtectedContentDrift(t *testing.T) {
 	project := t.TempDir()
 	paths := runtime.BuildPaths(filepath.Join(t.TempDir(), ".csaw"))
@@ -229,6 +284,28 @@ blocked_sources:
 	_, _, _, err := LoadPolicy(project)
 	if err == nil {
 		t.Fatal("LoadPolicy() error = nil, want invalid glob error")
+	}
+}
+
+func TestLoadPolicyRejectsInvalidBlockedPathGlob(t *testing.T) {
+	project := t.TempDir()
+	writePolicy(t, project, `
+blocked_paths:
+  - ".claude/agents/["
+`)
+
+	_, _, _, err := LoadPolicy(project)
+	if err == nil {
+		t.Fatal("LoadPolicy() error = nil, want invalid glob error")
+	}
+}
+
+func TestBlockedPathMatchesDirectoryPrefix(t *testing.T) {
+	if !blockedPathMatches(".claude/agents", ".claude/agents/reviewer.md") {
+		t.Fatal("expected directory prefix blocked path match")
+	}
+	if blockedPathMatches(".claude/agents", ".claude/rules/reviewer.md") {
+		t.Fatal("unexpected blocked path match")
 	}
 }
 

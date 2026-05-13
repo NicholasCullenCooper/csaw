@@ -205,6 +205,94 @@ func TestE2EInitSourceAddMountUnmount(t *testing.T) {
 	}
 }
 
+func TestE2EUseMountsComposedProfile(t *testing.T) {
+	env := newE2EEnv(t)
+
+	team := env.createRegistry("team", map[string]string{
+		"csaw.yml":    "backend:\n  include:\n    - AGENTS.md\n    - rules/go.md\n",
+		"AGENTS.md":   "team instructions",
+		"rules/go.md": "team go rules",
+	})
+	personal := env.createRegistry("personal", map[string]string{
+		"csaw.yml":              "client-extras:\n  include:\n    - skills/debug/SKILL.md\n\nteam-work:\n  extends:\n    - team/backend\n    - client-extras\n",
+		"skills/debug/SKILL.md": "personal debug skill",
+	})
+
+	env.run("source", "add", "team", team, "--priority", "50")
+	env.run("source", "add", "personal", personal, "--priority", "10")
+
+	env.run("use", "personal/team-work")
+
+	if got := env.readFile("AGENTS.md"); got != "team instructions" {
+		t.Fatalf("AGENTS.md = %q, want team instructions", got)
+	}
+	if got := env.readFile(".agents/skills/debug/SKILL.md"); got != "personal debug skill" {
+		t.Fatalf("debug skill = %q, want personal debug skill", got)
+	}
+}
+
+func TestE2EProfileListAndShowResolvedComposition(t *testing.T) {
+	env := newE2EEnv(t)
+
+	team := env.createRegistry("team", map[string]string{
+		"csaw.yml":  "backend:\n  description: Team backend mode\n  include:\n    - AGENTS.md\n",
+		"AGENTS.md": "team instructions",
+	})
+	personal := env.createRegistry("personal", map[string]string{
+		"csaw.yml":              "extras:\n  description: Personal safe helpers\n  include:\n    - skills/debug/SKILL.md\n\nteam-work:\n  description: Team mode with personal helpers\n  extends:\n    - team/backend\n    - extras\n",
+		"skills/debug/SKILL.md": "personal debug skill",
+	})
+
+	env.run("source", "add", "team", team)
+	env.run("source", "add", "personal", personal)
+
+	list := env.run("profile", "list")
+	if !strings.Contains(list, "team/backend") {
+		t.Fatalf("profile list should include team/backend, got: %s", list)
+	}
+	if !strings.Contains(list, "personal/team-work") {
+		t.Fatalf("profile list should include personal/team-work, got: %s", list)
+	}
+	if !strings.Contains(list, "csaw use personal/team-work") {
+		t.Fatalf("profile list should show use hint, got: %s", list)
+	}
+
+	show := env.run("profile", "show", "personal/team-work")
+	for _, want := range []string{
+		"profile: personal/team-work",
+		"description: Team mode with personal helpers",
+		"use: csaw use personal/team-work",
+		"- team/AGENTS.md",
+		"- personal/skills/debug/SKILL.md",
+	} {
+		if !strings.Contains(show, want) {
+			t.Fatalf("profile show missing %q; got: %s", want, show)
+		}
+	}
+}
+
+func TestE2EMountProfileAndPathsSubcommands(t *testing.T) {
+	env := newE2EEnv(t)
+
+	registry := env.createRegistry("reg", map[string]string{
+		"csaw.yml":  "default:\n  include:\n    - AGENTS.md\n",
+		"AGENTS.md": "registry instructions",
+	})
+
+	env.run("source", "add", "reg", registry)
+
+	env.run("mount", "profile", "reg/default")
+	if got := env.readFile("AGENTS.md"); got != "registry instructions" {
+		t.Fatalf("AGENTS.md after mount profile = %q, want registry instructions", got)
+	}
+
+	env.run("unmount")
+	env.run("mount", "paths", "reg/AGENTS.md")
+	if got := env.readFile("AGENTS.md"); got != "registry instructions" {
+		t.Fatalf("AGENTS.md after mount paths = %q, want registry instructions", got)
+	}
+}
+
 func TestE2EMountReplacesExisting(t *testing.T) {
 	env := newE2EEnv(t)
 
@@ -303,6 +391,58 @@ func TestE2EMountRestore(t *testing.T) {
 	}
 }
 
+func TestE2EMountConflictDoesNotClearExistingContext(t *testing.T) {
+	env := newE2EEnv(t)
+
+	active := env.createRegistry("active", map[string]string{
+		"csaw.yml":  "default:\n  include:\n    - AGENTS.md\n",
+		"AGENTS.md": "active context",
+	})
+	next := env.createRegistry("next", map[string]string{
+		"csaw.yml":  "default:\n  include:\n    - CLAUDE.md\n",
+		"CLAUDE.md": "next context",
+	})
+
+	env.run("source", "add", "active", active)
+	env.run("source", "add", "next", next)
+	env.run("mount", "--profile", "active/default")
+
+	if err := os.WriteFile(filepath.Join(env.projectDir, "CLAUDE.md"), []byte("local claude"), 0o644); err != nil {
+		t.Fatalf("WriteFile(CLAUDE.md) error = %v", err)
+	}
+
+	env.runExpectError("mount", "--profile", "next/default")
+
+	if env.readFile("AGENTS.md") != "active context" {
+		t.Fatalf("active context should remain mounted, got: %s", env.readFile("AGENTS.md"))
+	}
+	if env.readFile("CLAUDE.md") != "local claude" {
+		t.Fatalf("conflicting local file should remain untouched, got: %s", env.readFile("CLAUDE.md"))
+	}
+}
+
+func TestE2ERemountForceStashedPathFailsBeforeUnmount(t *testing.T) {
+	env := newE2EEnv(t)
+
+	if err := os.WriteFile(filepath.Join(env.projectDir, "AGENTS.md"), []byte("local content"), 0o644); err != nil {
+		t.Fatalf("WriteFile(AGENTS.md) error = %v", err)
+	}
+
+	reg := env.createRegistry("reg", map[string]string{
+		"csaw.yml":  "default:\n  include:\n    - AGENTS.md\n",
+		"AGENTS.md": "registry content",
+	})
+
+	env.run("source", "add", "reg", reg)
+	env.run("mount", "--profile", "reg/default", "--force")
+
+	env.runExpectError("mount", "--profile", "reg/default")
+
+	if env.readFile("AGENTS.md") != "registry content" {
+		t.Fatalf("mounted context should remain active, got: %s", env.readFile("AGENTS.md"))
+	}
+}
+
 func TestE2EMountRestoreDoesNotReprojectToolTargets(t *testing.T) {
 	env := newE2EEnv(t)
 
@@ -360,6 +500,18 @@ func TestE2EMountKindFilter(t *testing.T) {
 	if env.fileExists(".mcp.json") {
 		t.Fatal("mcp config should not be mounted when filtering to agents")
 	}
+}
+
+func TestE2EMountNoMatchesFails(t *testing.T) {
+	env := newE2EEnv(t)
+
+	reg := env.createRegistry("reg", map[string]string{
+		"csaw.yml":  "default:\n  include:\n    - AGENTS.md\n",
+		"AGENTS.md": "instructions",
+	})
+
+	env.run("source", "add", "reg", reg)
+	env.runExpectError("mount", "missing/AGENTS.md")
 }
 
 func TestE2EAuditStrictPassesWithPolicy(t *testing.T) {
@@ -456,14 +608,66 @@ func TestE2EInitAdopt(t *testing.T) {
 	registryDir := filepath.Join(filepath.Dir(env.projectDir), "adopted-registry")
 	env.run("init", registryDir, "--adopt")
 
-	// Verify skill was adopted (AGENTS.md already exists as starter, so project's is skipped)
+	agentsPath := filepath.Join(registryDir, "AGENTS.md")
+	content, err := os.ReadFile(agentsPath)
+	if err != nil {
+		t.Fatalf("adopted AGENTS.md not found: %v", err)
+	}
+	if string(content) != "project agents" {
+		t.Fatalf("adopted AGENTS.md content = %q, want %q", string(content), "project agents")
+	}
+
+	// Verify skill was adopted.
 	skillPath := filepath.Join(registryDir, "skills", "testing", "SKILL.md")
-	content, err := os.ReadFile(skillPath)
+	content, err = os.ReadFile(skillPath)
 	if err != nil {
 		t.Fatalf("adopted skill not found: %v", err)
 	}
 	if string(content) != "test skill" {
 		t.Fatalf("adopted skill content = %q, want %q", string(content), "test skill")
+	}
+}
+
+func TestE2EPinMainAndUnpinRemapsActiveMounts(t *testing.T) {
+	env := newE2EEnv(t)
+
+	sourceDir := env.createRegistry("team-src", map[string]string{
+		"csaw.yml":  "default:\n  include:\n    - AGENTS.md\n",
+		"AGENTS.md": "team instructions",
+	})
+	runGit(t, sourceDir, "config", "user.email", "audit@example.com")
+	runGit(t, sourceDir, "config", "user.name", "csaw audit")
+	runGit(t, sourceDir, "branch", "-M", "main")
+	runGit(t, sourceDir, "add", "-A")
+	runGit(t, sourceDir, "commit", "-m", "seed team source")
+
+	bareDir := filepath.Join(filepath.Dir(env.projectDir), "team-src.git")
+	runGit(t, filepath.Dir(env.projectDir), "clone", "--bare", sourceDir, bareDir)
+
+	env.run("source", "add", "team", "file://"+filepath.ToSlash(bareDir))
+	env.run("pin", "team@main")
+	env.run("mount", "--profile", "team/default")
+
+	target, err := os.Readlink(filepath.Join(env.projectDir, "AGENTS.md"))
+	if err != nil {
+		t.Fatalf("Readlink(AGENTS.md) error = %v", err)
+	}
+	if !strings.Contains(filepath.ToSlash(target), "/.worktrees/") {
+		t.Fatalf("pinned target = %q, want worktree path", target)
+	}
+
+	env.run("unpin", "team")
+	env.run("check")
+
+	target, err = os.Readlink(filepath.Join(env.projectDir, "AGENTS.md"))
+	if err != nil {
+		t.Fatalf("Readlink(AGENTS.md) after unpin error = %v", err)
+	}
+	if strings.Contains(filepath.ToSlash(target), "/.worktrees/") {
+		t.Fatalf("unpinned target = %q, still points at worktree", target)
+	}
+	if !strings.Contains(filepath.ToSlash(target), "/sources/team/AGENTS.md") {
+		t.Fatalf("unpinned target = %q, want default checkout", target)
 	}
 }
 
@@ -473,5 +677,14 @@ func TestE2EVersionCommand(t *testing.T) {
 	if !strings.Contains(out, "dev") {
 		// In test builds, version is "dev" (the default from root.go)
 		t.Fatalf("version output = %q, expected to contain 'dev'", out)
+	}
+}
+
+func runGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %s failed: %v\n%s", strings.Join(args, " "), err, out)
 	}
 }

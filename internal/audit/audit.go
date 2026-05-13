@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/bmatcuk/doublestar/v4"
 	"gopkg.in/yaml.v3"
 
 	"github.com/NicholasCullenCooper/csaw/internal/drift"
@@ -50,6 +51,17 @@ blocked_sources: []
 #  - other-client-*
 #  - personal-experimental
 
+# Artifact kinds that must not be mounted. Valid values:
+# instructions, rules, agents, skills, mcp.
+blocked_kinds: []
+#  - mcp
+#  - agents
+
+# Mounted project paths that must not be active. Glob patterns are supported.
+blocked_paths: []
+#  - .mcp.json
+#  - .claude/agents/**
+
 # Artifact kinds that must be mounted. Valid values:
 # instructions, rules, agents, skills, mcp.
 required_kinds: []
@@ -74,6 +86,8 @@ type SourceRequirement struct {
 type Policy struct {
 	RequiredSources []SourceRequirement `json:"required_sources,omitempty"`
 	BlockedSources  []string            `json:"blocked_sources,omitempty"`
+	BlockedKinds    []mount.Kind        `json:"blocked_kinds,omitempty"`
+	BlockedPaths    []string            `json:"blocked_paths,omitempty"`
 	RequiredKinds   []mount.Kind        `json:"required_kinds,omitempty"`
 }
 
@@ -167,6 +181,8 @@ func Run(projectRoot string, paths runtime.Paths) (Report, error) {
 		}
 		report.checkRequiredSources(policy.RequiredSources, statuses, sourceIndex, pinState)
 		report.checkBlockedSources(policy.BlockedSources, statuses)
+		report.checkBlockedKinds(policy.BlockedKinds, statuses)
+		report.checkBlockedPaths(policy.BlockedPaths, statuses)
 		report.checkRequiredKinds(policy.RequiredKinds, statuses)
 	}
 
@@ -242,21 +258,65 @@ func parsePolicy(content []byte) (Policy, error) {
 		}
 	}
 
-	if value, ok := raw["required_kinds"]; ok {
-		rawKinds, err := normalizeStringList(value)
+	if value, ok := raw["blocked_kinds"]; ok {
+		policy.BlockedKinds, err = normalizeKindList("blocked_kinds", value)
 		if err != nil {
-			return Policy{}, fmt.Errorf("required_kinds: %w", err)
+			return Policy{}, err
 		}
-		for _, rawKind := range rawKinds {
-			kind, err := mount.ParseKind(rawKind)
-			if err != nil {
-				return Policy{}, err
-			}
-			policy.RequiredKinds = append(policy.RequiredKinds, kind)
+	}
+
+	if value, ok := raw["blocked_paths"]; ok {
+		policy.BlockedPaths, err = normalizePathPatterns(value)
+		if err != nil {
+			return Policy{}, fmt.Errorf("blocked_paths: %w", err)
+		}
+	}
+
+	if value, ok := raw["required_kinds"]; ok {
+		policy.RequiredKinds, err = normalizeKindList("required_kinds", value)
+		if err != nil {
+			return Policy{}, err
 		}
 	}
 
 	return policy, nil
+}
+
+func normalizeKindList(field string, value any) ([]mount.Kind, error) {
+	rawKinds, err := normalizeStringList(value)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", field, err)
+	}
+
+	kinds := make([]mount.Kind, 0, len(rawKinds))
+	for _, rawKind := range rawKinds {
+		kind, err := mount.ParseKind(rawKind)
+		if err != nil {
+			return nil, err
+		}
+		kinds = append(kinds, kind)
+	}
+	return kinds, nil
+}
+
+func normalizePathPatterns(value any) ([]string, error) {
+	patterns, err := normalizeStringList(value)
+	if err != nil {
+		return nil, err
+	}
+
+	normalized := make([]string, 0, len(patterns))
+	for _, pattern := range patterns {
+		pattern = runtime.NormalizeRegistryPath(pattern)
+		if pattern == "" || pattern == "." {
+			return nil, errors.New("path pattern cannot be empty")
+		}
+		if _, err := doublestar.PathMatch(pattern, ""); err != nil {
+			return nil, fmt.Errorf("invalid pattern %q: %w", pattern, err)
+		}
+		normalized = append(normalized, pattern)
+	}
+	return normalized, nil
 }
 
 func normalizeSourceRequirements(value any) ([]SourceRequirement, error) {
@@ -546,6 +606,80 @@ func (r *Report) checkBlockedSources(patterns []string, statuses []drift.Status)
 	}
 }
 
+func (r *Report) checkBlockedKinds(kinds []mount.Kind, statuses []drift.Status) {
+	if len(kinds) == 0 {
+		return
+	}
+
+	blocked := make(map[mount.Kind]bool, len(kinds))
+	for _, kind := range kinds {
+		blocked[kind] = true
+	}
+
+	var active []mount.Kind
+	seen := map[mount.Kind]bool{}
+	for _, status := range statuses {
+		if !status.Healthy {
+			continue
+		}
+		kind := mount.KindOfProjectPath(status.RelativePath)
+		if !blocked[kind] || seen[kind] {
+			continue
+		}
+		seen[kind] = true
+		active = append(active, kind)
+		r.add(Finding{
+			ID:       "kind.blocked.active",
+			Severity: SeverityError,
+			Message:  fmt.Sprintf("blocked kind %q is active", mount.KindLabel(kind)),
+			Kind:     string(kind),
+		})
+	}
+
+	if len(active) == 0 {
+		r.add(Finding{
+			ID:       "kind.blocked.clear",
+			Severity: SeverityOK,
+			Message:  "no blocked kinds are active",
+		})
+	}
+}
+
+func (r *Report) checkBlockedPaths(patterns []string, statuses []drift.Status) {
+	if len(patterns) == 0 {
+		return
+	}
+
+	blocked := 0
+	for _, status := range statuses {
+		if !status.Healthy {
+			continue
+		}
+		for _, pattern := range patterns {
+			if blockedPathMatches(pattern, status.RelativePath) {
+				blocked++
+				r.add(Finding{
+					ID:       "path.blocked.active",
+					Severity: SeverityError,
+					Message:  fmt.Sprintf("blocked path %q is active", status.RelativePath),
+					Source:   status.SourceName,
+					Path:     status.RelativePath,
+					Detail:   "matched " + pattern,
+				})
+				break
+			}
+		}
+	}
+
+	if blocked == 0 {
+		r.add(Finding{
+			ID:       "path.blocked.clear",
+			Severity: SeverityOK,
+			Message:  "no blocked paths are active",
+		})
+	}
+}
+
 func (r *Report) checkRequiredKinds(kinds []mount.Kind, statuses []drift.Status) {
 	if len(kinds) == 0 {
 		return
@@ -607,6 +741,23 @@ func sourceMatches(pattern, source string) bool {
 	}
 	matched, err := path.Match(pattern, source)
 	return err == nil && matched
+}
+
+func blockedPathMatches(pattern string, relPath string) bool {
+	pattern = runtime.NormalizeRegistryPath(pattern)
+	relPath = runtime.NormalizeRegistryPath(relPath)
+	if pattern == relPath {
+		return true
+	}
+	if !hasPathGlob(pattern) && strings.HasPrefix(relPath, pattern+"/") {
+		return true
+	}
+	matched, err := doublestar.PathMatch(pattern, relPath)
+	return err == nil && matched
+}
+
+func hasPathGlob(pattern string) bool {
+	return strings.ContainsAny(pattern, "*?[")
 }
 
 func (r *Report) add(finding Finding) {

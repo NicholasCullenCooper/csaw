@@ -150,6 +150,22 @@ func CleanupStash(store StateStore, projectRoot string) error {
 		return err
 	}
 
+	entries, err := os.ReadDir(StashDir(projectRoot))
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	for _, entry := range entries {
+		switch entry.Name() {
+		case runtime.ManifestName, mountStateFileName:
+			continue
+		default:
+			return nil
+		}
+	}
+
 	return os.RemoveAll(StashDir(projectRoot))
 }
 

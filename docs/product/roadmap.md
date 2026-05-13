@@ -28,6 +28,9 @@ Current `main` after `v0.4.0` also includes:
 - documented audit JSON finding contract
 - required source URL and project pin checks
 - protected-file SHA-256 verification in `check` and `audit`
+- blocked kind and blocked mounted path audit checks
+
+Beta readiness is tracked in [`beta-acceptance.md`](beta-acceptance.md).
 
 ## Idea Map
 
@@ -78,7 +81,7 @@ Goal: make `csaw audit --strict` the reliable answer to “am I in the right AI 
 | Client isolation policy template | The strongest use case is switching between sensitive engagements | `csaw audit --init --template client` creates required/blocked source, kind, and MCP policy examples |
 | Protected-file hash verification | Protected files are currently advisory within csaw | Mount records hashes for protected entries; audit/check detects replacement or content drift |
 | Required pins | Clients may require an exact source ref | Policy can require a source branch/tag/SHA; audit reports mismatch |
-| Blocked path/kind checks | Some projects may forbid MCP or personal agents entirely | Policy supports blocked kinds and blocked project paths |
+| Blocked path/kind checks | Some projects may forbid MCP or personal agents entirely | Done on current `main`: policy supports blocked kinds and blocked mounted project paths |
 | Layered provenance in inspect | Users need to know not just what won, but why | Inspect shows winning source, losing candidates, priority/protection reason, and pin state |
 | Better collision UX | Fail-fast conflicts are correct but rough | Conflicts explain candidate sources, priorities, protection, and suggested fixes |
 
@@ -194,6 +197,6 @@ This is useful only where development environment state intersects AI context. c
 
 The highest-leverage next implementation issue is:
 
-**Add blocked path and blocked kind checks.**
+**Improve layered provenance in `csaw inspect`.**
 
-This lets client and team policies forbid higher-risk local context surfaces, especially MCP files or personal agents, without claiming hard runtime enforcement.
+Blocked kind and blocked path checks now cover the highest-risk client isolation gap. The next composition risk is explainability: users should see not only which source won, but also which candidates lost and whether priority or protection decided the result.

@@ -79,13 +79,20 @@ func TestInitWithAdopt(t *testing.T) {
 		t.Fatalf("InitWithAdopt() error = %v", err)
 	}
 
-	if len(result.AdoptedFiles) != 2 {
-		// AGENTS.md exists from starter (skipped), but skills/testing and agents/go.md should be adopted
-		t.Fatalf("AdoptedFiles = %v, want 2 files", result.AdoptedFiles)
+	if len(result.AdoptedFiles) != 3 {
+		t.Fatalf("AdoptedFiles = %v, want 3 files", result.AdoptedFiles)
+	}
+
+	content, err := os.ReadFile(filepath.Join(registryDir, "AGENTS.md"))
+	if err != nil {
+		t.Fatalf("adopted AGENTS.md not found: %v", err)
+	}
+	if string(content) != "team rules" {
+		t.Fatalf("AGENTS.md content = %q, want %q", string(content), "team rules")
 	}
 
 	// Verify skill was copied
-	content, err := os.ReadFile(filepath.Join(registryDir, "skills", "testing", "SKILL.md"))
+	content, err = os.ReadFile(filepath.Join(registryDir, "skills", "testing", "SKILL.md"))
 	if err != nil {
 		t.Fatalf("adopted skill not found: %v", err)
 	}
@@ -109,6 +116,41 @@ func TestInitWithAdopt(t *testing.T) {
 	}
 	if !strings.Contains(string(profileContent), "skills/**") {
 		t.Fatalf("csaw.yml should include skills/**, got:\n%s", string(profileContent))
+	}
+	if !strings.Contains(string(profileContent), "AGENTS.md") {
+		t.Fatalf("csaw.yml should include AGENTS.md, got:\n%s", string(profileContent))
+	}
+}
+
+func TestInitWithAdoptPreservesPreExistingRegistryFiles(t *testing.T) {
+	project := t.TempDir()
+	if err := os.WriteFile(filepath.Join(project, "AGENTS.md"), []byte("project agents"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	registryDir := filepath.Join(t.TempDir(), "my-registry")
+	if err := os.MkdirAll(registryDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(registryDir, "AGENTS.md"), []byte("existing registry agents"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	g := &recordingGit{}
+	result, err := InitWithAdopt(context.Background(), g, registryDir, "", project)
+	if err != nil {
+		t.Fatalf("InitWithAdopt() error = %v", err)
+	}
+	if len(result.AdoptedFiles) != 0 {
+		t.Fatalf("AdoptedFiles = %v, want none", result.AdoptedFiles)
+	}
+
+	content, err := os.ReadFile(filepath.Join(registryDir, "AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != "existing registry agents" {
+		t.Fatalf("AGENTS.md content = %q, want existing registry agents", string(content))
 	}
 }
 

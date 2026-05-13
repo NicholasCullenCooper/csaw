@@ -17,7 +17,7 @@ type InitResult struct {
 }
 
 var starterProfile = `default:
-  description: Mount everything
+  description: Default instructions, rules, agents, and skills
   include:
     - AGENTS.md
     - rules/**
@@ -139,12 +139,27 @@ type AdoptResult struct {
 // It scans the project for skills, agent instructions, MCP configs, and root
 // instruction files, copies them into the registry, and generates a profile.
 func InitWithAdopt(ctx context.Context, g git.Git, dir string, name string, projectRoot string) (AdoptResult, error) {
-	initResult, err := Init(ctx, g, dir, name)
+	absDir, err := filepath.Abs(dir)
 	if err != nil {
 		return AdoptResult{}, err
 	}
 
 	adoptable := mount.ScanAdoptableFiles(projectRoot)
+	preExisting := make(map[string]bool, len(adoptable))
+	for _, file := range adoptable {
+		destPath := filepath.Join(absDir, filepath.FromSlash(file.RegistryPath))
+		if _, err := os.Stat(destPath); err == nil {
+			preExisting[file.RegistryPath] = true
+		} else if err != nil && !os.IsNotExist(err) {
+			return AdoptResult{}, err
+		}
+	}
+
+	initResult, err := Init(ctx, g, dir, name)
+	if err != nil {
+		return AdoptResult{}, err
+	}
+
 	if len(adoptable) == 0 {
 		return AdoptResult{InitResult: initResult}, nil
 	}
@@ -153,8 +168,9 @@ func InitWithAdopt(ctx context.Context, g git.Git, dir string, name string, proj
 	for _, file := range adoptable {
 		destPath := filepath.Join(initResult.Path, filepath.FromSlash(file.RegistryPath))
 
-		// Don't overwrite existing files (e.g., starter AGENTS.md)
-		if _, err := os.Stat(destPath); err == nil {
+		// Preserve files that existed before init. Starter files created by Init
+		// are overwritten by project-owned context during adoption.
+		if preExisting[file.RegistryPath] {
 			continue
 		}
 

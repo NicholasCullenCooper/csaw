@@ -82,28 +82,26 @@ func (m Manager) Push(ctx context.Context, name string, message string) error {
 // It returns the worktree path which should be used as the source root.
 func (m Manager) WorktreeCheckout(ctx context.Context, source Source, ref string, projectRoot string) (string, error) {
 	mainCheckout := source.CheckoutPath(m.Paths)
+	worktreePath := m.WorktreePath(source, projectRoot)
 
-	// Compute a stable short ID from the project root
-	sum := sha256.Sum256([]byte(projectRoot))
-	projectID := hex.EncodeToString(sum[:])[:12]
-
-	worktreePath := filepath.Join(mainCheckout, ".worktrees", projectID)
-
-	// Fetch the ref first
-	if _, err := m.Git.Run(ctx, mainCheckout, "fetch", "origin", ref); err != nil {
-		// Non-fatal — ref might be a local branch
-		_ = err
+	checkoutRef := ref
+	if _, err := m.Git.Run(ctx, mainCheckout, "fetch", "origin", ref); err == nil {
+		if resolved, err := m.Git.Run(ctx, mainCheckout, "rev-parse", "FETCH_HEAD"); err == nil {
+			if resolved = strings.TrimSpace(resolved); resolved != "" {
+				checkoutRef = resolved
+			}
+		}
 	}
 
 	if _, err := os.Stat(worktreePath); os.IsNotExist(err) {
 		if err := os.MkdirAll(filepath.Dir(worktreePath), 0o755); err != nil {
 			return "", err
 		}
-		if _, err := m.Git.Run(ctx, mainCheckout, "worktree", "add", worktreePath, ref); err != nil {
+		if _, err := m.Git.Run(ctx, mainCheckout, "worktree", "add", "--detach", worktreePath, checkoutRef); err != nil {
 			return "", fmt.Errorf("failed to create worktree for %s@%s: %w", source.Name, ref, err)
 		}
 	} else {
-		if _, err := m.Git.Run(ctx, worktreePath, "checkout", ref); err != nil {
+		if _, err := m.Git.Run(ctx, worktreePath, "checkout", "--detach", checkoutRef); err != nil {
 			return "", fmt.Errorf("failed to checkout %s in worktree: %w", ref, err)
 		}
 	}
@@ -111,12 +109,17 @@ func (m Manager) WorktreeCheckout(ctx context.Context, source Source, ref string
 	return worktreePath, nil
 }
 
-// WorktreeRemove cleans up a worktree for a previously pinned source.
-func (m Manager) WorktreeRemove(ctx context.Context, source Source, projectRoot string) error {
+func (m Manager) WorktreePath(source Source, projectRoot string) string {
 	mainCheckout := source.CheckoutPath(m.Paths)
 	sum := sha256.Sum256([]byte(projectRoot))
 	projectID := hex.EncodeToString(sum[:])[:12]
-	worktreePath := filepath.Join(mainCheckout, ".worktrees", projectID)
+	return filepath.Join(mainCheckout, ".worktrees", projectID)
+}
+
+// WorktreeRemove cleans up a worktree for a previously pinned source.
+func (m Manager) WorktreeRemove(ctx context.Context, source Source, projectRoot string) error {
+	mainCheckout := source.CheckoutPath(m.Paths)
+	worktreePath := m.WorktreePath(source, projectRoot)
 
 	if _, err := os.Stat(worktreePath); os.IsNotExist(err) {
 		return nil

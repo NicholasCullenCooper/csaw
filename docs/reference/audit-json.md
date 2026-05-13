@@ -77,6 +77,10 @@ Optional fields are omitted when empty.
 | `source.required.ref_mismatch` | `error` | A required source project pin does not match policy. |
 | `source.blocked.clear` | `ok` | No blocked sources are active. |
 | `source.blocked.active` | `error` | A blocked source is active. |
+| `kind.blocked.clear` | `ok` | No blocked artifact kinds are active. |
+| `kind.blocked.active` | `error` | A blocked artifact kind is active. |
+| `path.blocked.clear` | `ok` | No blocked mounted paths are active. |
+| `path.blocked.active` | `error` | A blocked mounted path is active. |
 | `kind.required.present` | `ok` | A required artifact kind is active and healthy. |
 | `kind.required.missing` | `error` | A required artifact kind is not active and healthy. |
 
@@ -112,6 +116,23 @@ required_sources:
 blocked_sources:
   - personal-experimental
   - other-client-*
+```
+
+`blocked_kinds` uses the same kind names as `required_kinds`:
+
+```yaml
+blocked_kinds:
+  - mcp
+  - agents
+```
+
+`blocked_paths` supports exact project-relative paths, directory prefixes, and
+glob patterns:
+
+```yaml
+blocked_paths:
+  - .mcp.json
+  - .claude/agents/**
 ```
 
 `required_kinds` supports:

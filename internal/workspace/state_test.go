@@ -41,6 +41,25 @@ func TestStashAndRestore(t *testing.T) {
 	}
 }
 
+func TestCleanupStashPreservesOtherStateFiles(t *testing.T) {
+	project := t.TempDir()
+	stashDir := StashDir(project)
+	if err := os.MkdirAll(stashDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(stashDir, "pins.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := CleanupStash(FileStateStore{}, project); err != nil {
+		t.Fatalf("CleanupStash() error = %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(stashDir, "pins.json")); err != nil {
+		t.Fatalf("pins.json should be preserved, got %v", err)
+	}
+}
+
 func TestAddExclusion(t *testing.T) {
 	project := t.TempDir()
 	gitInfo := filepath.Join(project, ".git", "info")

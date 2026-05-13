@@ -14,9 +14,9 @@ Type "csaw source add team git@github.com:your-org/ai-config.git"
 Enter
 Sleep 2000ms
 
-# Mount a profile
+# Activate a profile
 Enter
-Type "csaw mount --profile team/backend"
+Type "csaw use team/backend"
 Enter
 Sleep 2500ms
 

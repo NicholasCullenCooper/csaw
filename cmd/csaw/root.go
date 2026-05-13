@@ -43,6 +43,8 @@ func newRootCommand() *cobra.Command {
 	cmd.AddCommand(newInitCommand())
 	cmd.AddCommand(newConfigCommand())
 	cmd.AddCommand(newSourceCommand())
+	cmd.AddCommand(newProfileCommand())
+	cmd.AddCommand(newUseCommand())
 	cmd.AddCommand(newMountCommand())
 	cmd.AddCommand(newUnmountCommand())
 	cmd.AddCommand(newInspectCommand())
@@ -373,7 +375,7 @@ func newSourceCommand() *cobra.Command {
 
 				selected := wizResult.Values["profile"]
 				if selected != "" && selected != "skip" {
-					fmt.Fprintf(cmd.OutOrStdout(), "\n  %s\n", tui.HintLine("Run:", "csaw mount --profile "+selected))
+					fmt.Fprintf(cmd.OutOrStdout(), "\n  %s\n", tui.HintLine("Run:", "csaw use "+selected))
 				}
 			}
 
@@ -424,11 +426,15 @@ func newSourceCommand() *cobra.Command {
 			items := append([]sources.Source(nil), cfg.Sources...)
 			sort.Slice(items, func(i, j int) bool { return items[i].Name < items[j].Name })
 			for _, source := range items {
+				meta := string(source.Kind)
+				if source.Priority != 0 {
+					meta += fmt.Sprintf(", priority %d", source.Priority)
+				}
 				fmt.Fprintf(
 					cmd.OutOrStdout(),
 					"  %s %s %s %s\n",
 					output.Accent(source.Name),
-					output.Faint("("+string(source.Kind)+")"),
+					output.Faint("("+meta+")"),
 					output.Faint("→"),
 					source.CheckoutPath(manager.Paths),
 				)
@@ -498,219 +504,435 @@ func newSourceCommand() *cobra.Command {
 	return rootCmd
 }
 
-func newMountCommand() *cobra.Command {
-	var excludes []string
-	var profile string
-	var includeIgnored bool
-	var forceAll bool
-	var skipConflicts bool
-	var restore bool
-	var keep bool
-	var toolsFlag []string
-	var kindsFlag []string
-
-	cmd := &cobra.Command{
-		Use:   "mount [patterns...]",
-		Short: "Mount registry files into the current project",
+func newProfileCommand() *cobra.Command {
+	rootCmd := &cobra.Command{
+		Use:     "profile",
+		Aliases: []string{"profiles"},
+		Short:   "List and inspect csaw profiles",
+		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			projectRoot, err := runtime.FindRepoRoot(".")
-			if err != nil {
-				return err
-			}
+			return runProfileList(cmd)
+		},
+	}
 
+	rootCmd.AddCommand(&cobra.Command{
+		Use:   "list",
+		Short: "List available profiles",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runProfileList(cmd)
+		},
+	})
+
+	rootCmd.AddCommand(&cobra.Command{
+		Use:   "show <profile>",
+		Short: "Show the resolved profile recipe",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
 			paths, err := runtime.ResolvePaths()
 			if err != nil {
 				return err
 			}
-
 			manager, err := newSourcesManager()
 			if err != nil {
 				return err
 			}
-
-			// If no profile, no patterns, and not restoring — show interactive picker
-			if profile == "" && len(args) == 0 && !restore {
-				// Check if any sources are configured
-				cfg, err := manager.Load()
-				if err != nil {
-					return err
-				}
-				if len(cfg.Sources) == 0 {
-					if !isInteractive() {
-						return errors.New("no sources configured; run: csaw source add <name> <url>")
-					}
-					fmt.Println(tui.ResultPanel("welcome to csaw", []string{
-						output.Faint("No sources configured yet. Get started:"),
-					}, []string{
-						tui.HintLine("Create a registry:", "csaw init ~/my-ai-config"),
-						tui.HintLine("Add a team source:", "csaw source add team <git-url>"),
-					}))
-					return nil
-				}
-
-				picked, err := pickProfile(manager, paths)
-				if err != nil {
-					return err
-				}
-				if picked == "" {
-					return nil // user cancelled
-				}
-				profile = picked
-			}
-
-			var kinds []mount.Kind
-			for _, raw := range kindsFlag {
-				kind, err := mount.ParseKind(raw)
-				if err != nil {
-					return err
-				}
-				kinds = append(kinds, kind)
-			}
-
-			selection := mount.Selection{
-				IncludePatterns: append([]string(nil), args...),
-				ExcludePatterns: append([]string(nil), excludes...),
-				Profile:         profile,
-				IncludeIgnored:  includeIgnored,
-				Kinds:           kinds,
-			}
-
-			var entries []mount.SourceEntry
-			if restore {
-				entries, err = entriesFromRestoreState(paths, projectRoot)
-				if err != nil {
-					return err
-				}
-				if len(entries) == 0 {
-					return errors.New("no previous mount state found to restore")
-				}
-			} else {
-				entries, err = collectMountEntries(manager, paths, selection)
-				if err != nil {
-					return err
-				}
-				if len(entries) == 0 {
-					output.Warnf("no registry files matched the requested mount selection")
-					return nil
-				}
-			}
-
-			// Auto-unmount previous mount unless --keep is set
-			if !keep {
-				currentState, err := workspace.ReadMountState(projectRoot)
-				if err != nil {
-					return err
-				}
-				if len(currentState.Entries) > 0 {
-					if _, err := mount.Unmount(projectRoot, mount.Selection{}); err != nil {
-						return err
-					}
-				}
-			}
-
-			// Resolve tool directories: CLI flag > config > auto-detect
-			configuredTools := toolsFlag
-			if len(configuredTools) == 0 {
-				cfg, _ := manager.Load()
-				configuredTools = cfg.Tools
-			}
-
-			// If no tools configured and interactive, ask
-			if len(configuredTools) == 0 && isInteractive() {
-				detected := mount.ResolveToolDirs(projectRoot, nil)
-				hasRealTools := false
-				for _, d := range detected {
-					if d.Dir != ".agents" {
-						hasRealTools = true
-						break
-					}
-				}
-				if !hasRealTools {
-					items := make([]tui.MultiSelectItem, 0, len(mount.ToolRegistry))
-					for _, name := range mount.AllToolNames() {
-						items = append(items, tui.MultiSelectItem{
-							Key:   name,
-							Label: toolDisplayName(name),
-						})
-					}
-					msResult, err := tui.RunMultiSelect("Which AI tools do you use?", items)
-					if err == nil && !msResult.Aborted && len(msResult.Selected) > 0 {
-						configuredTools = msResult.Selected
-						// Save to config for future mounts
-						cfg, _ := manager.Load()
-						cfg.Tools = configuredTools
-						_ = manager.Save(cfg)
-					}
-				}
-			}
-
-			toolDirs := mount.ResolveToolDirs(projectRoot, configuredTools)
-			if !restore {
-				entries = mount.ExpandToolTargets(entries, toolDirs)
-			}
-
-			result, err := mount.Apply(projectRoot, paths, entries, promptConflictResolver{
-				cmd:      cmd,
-				forceAll: forceAll,
-				skipAll:  skipConflicts,
-			})
+			resolver, err := profileResolver(manager, paths)
 			if err != nil {
 				return err
 			}
 
-			if result.Linked == 0 && result.AlreadyLinked > 0 {
-				output.Infof("all requested files were already mounted")
-				return nil
+			profile, err := resolver.Resolve(args[0])
+			if err != nil {
+				return err
 			}
 
-			// Collect mounted file paths for the panel
-			var mountedFiles []string
-			var sourceNames []string
-			seenSources := make(map[string]bool)
-			for _, entry := range entries {
-				mountedFiles = append(mountedFiles, entry.RelativePath)
-				if !seenSources[entry.SourceName] {
-					seenSources[entry.SourceName] = true
-					sourceNames = append(sourceNames, entry.SourceName)
-				}
-			}
-
-			// Limit displayed files
-			displayFiles := mountedFiles
-			if len(displayFiles) > 10 {
-				displayFiles = append(displayFiles[:9], fmt.Sprintf("... and %d more", len(mountedFiles)-9))
-			}
-
-			stats := fmt.Sprintf("%d files mounted", result.Linked)
-			if result.Stashed > 0 {
-				stats += fmt.Sprintf(" · %d stashed", result.Stashed)
-			}
-			if len(toolDirs) > 0 {
-				stats += fmt.Sprintf(" · %d tool dirs", len(toolDirs))
-			}
-
-			hints := []string{
-				tui.HintLine("Inspect:", "csaw inspect"),
-				tui.HintLine("Unmount:", "csaw unmount"),
-			}
-
-			fmt.Println(tui.MountPanel(displayFiles, sourceNames, stats, hints))
+			fmt.Fprint(cmd.OutOrStdout(), renderProfileDetails(profile))
 			return nil
+		},
+	})
+
+	return rootCmd
+}
+
+func runProfileList(cmd *cobra.Command) error {
+	paths, err := runtime.ResolvePaths()
+	if err != nil {
+		return err
+	}
+	manager, err := newSourcesManager()
+	if err != nil {
+		return err
+	}
+	resolver, err := profileResolver(manager, paths)
+	if err != nil {
+		return err
+	}
+	allProfiles, err := resolver.All()
+	if err != nil {
+		return err
+	}
+
+	if len(allProfiles) == 0 {
+		fmt.Fprintln(cmd.OutOrStdout(), "no profiles found")
+		fmt.Fprintln(cmd.OutOrStdout(), "add a source: csaw source add <name> <url-or-path>")
+		return nil
+	}
+
+	fmt.Fprint(cmd.OutOrStdout(), renderProfileList(allProfiles))
+	return nil
+}
+
+func profileResolver(manager sources.Manager, paths runtime.Paths) (*profiles.CatalogResolver, error) {
+	catalog, err := manager.ExistingCatalog()
+	if err != nil {
+		return nil, err
+	}
+	return profiles.NewCatalogResolver(paths, catalog)
+}
+
+func renderProfileList(allProfiles map[string]profiles.Profile) string {
+	var b strings.Builder
+	b.WriteString("profiles\n\n")
+	for _, name := range profiles.SortedNames(allProfiles) {
+		profile := allProfiles[name]
+		fmt.Fprintf(&b, "  %s", profile.Name)
+		if profile.Description != "" {
+			fmt.Fprintf(&b, "  %s", profile.Description)
+		}
+		fmt.Fprintf(&b, "\n      %s\n", profileStats(profile))
+		fmt.Fprintf(&b, "      use: csaw use %s\n", profile.Name)
+	}
+	return b.String()
+}
+
+func renderProfileDetails(profile profiles.Profile) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "profile: %s\n", profile.Name)
+	if profile.Description != "" {
+		fmt.Fprintf(&b, "description: %s\n", profile.Description)
+	}
+	fmt.Fprintf(&b, "use: csaw use %s\n", profile.Name)
+	fmt.Fprintf(&b, "include_ignored: %t\n", profile.IncludeIgnored)
+	writeProfilePatterns(&b, "include", profile.Include)
+	writeProfilePatterns(&b, "exclude", profile.Exclude)
+	return b.String()
+}
+
+func writeProfilePatterns(b *strings.Builder, label string, patterns []string) {
+	if len(patterns) == 0 {
+		return
+	}
+	fmt.Fprintf(b, "%s:\n", label)
+	for _, pattern := range patterns {
+		fmt.Fprintf(b, "  - %s\n", pattern)
+	}
+}
+
+func profileStats(profile profiles.Profile) string {
+	parts := []string{countLabel(len(profile.Include), "include")}
+	if len(profile.Exclude) > 0 {
+		parts = append(parts, countLabel(len(profile.Exclude), "exclude"))
+	}
+	if profile.IncludeIgnored {
+		parts = append(parts, "includes ignored files")
+	}
+	return strings.Join(parts, " · ")
+}
+
+func countLabel(count int, singular string) string {
+	label := singular
+	if count != 1 {
+		label += "s"
+	}
+	return fmt.Sprintf("%d %s", count, label)
+}
+
+type mountRunOptions struct {
+	excludes       []string
+	profile        string
+	includeIgnored bool
+	forceAll       bool
+	skipConflicts  bool
+	restore        bool
+	keep           bool
+	toolsFlag      []string
+	kindsFlag      []string
+	allowPicker    bool
+}
+
+func newUseCommand() *cobra.Command {
+	options := mountRunOptions{}
+
+	cmd := &cobra.Command{
+		Use:   "use <profile>",
+		Short: "Activate a named csaw profile",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			options.profile = args[0]
+			return runMountCommand(cmd, nil, options)
 		},
 	}
 
-	cmd.Flags().StringVar(&profile, "profile", "", "named profile to use for mount selection")
-	cmd.Flags().StringArrayVar(&excludes, "exclude", nil, "exclude matching file or glob")
-	cmd.Flags().BoolVar(&includeIgnored, "include-ignored", false, "include files hidden by .csawignore")
-	cmd.Flags().BoolVar(&includeIgnored, "include-experimental", false, "include experimental skills (alias for --include-ignored)")
-	cmd.Flags().BoolVar(&forceAll, "force", false, "overwrite conflicts and stash originals")
-	cmd.Flags().BoolVar(&skipConflicts, "skip-conflicts", false, "skip files that conflict with existing paths")
-	cmd.Flags().BoolVar(&restore, "restore", false, "restore the previous mount selection")
-	cmd.Flags().BoolVar(&keep, "keep", false, "keep existing mounts instead of replacing them")
-	cmd.Flags().StringSliceVar(&toolsFlag, "tools", nil, "target tools (e.g., claude,cursor)")
-	cmd.Flags().StringSliceVar(&kindsFlag, "kind", nil, "filter by kind: agents, skills, rules, mcp, instructions (repeatable)")
+	addMountFlags(cmd, &options, false, false)
+	return cmd
+}
+
+func newMountCommand() *cobra.Command {
+	options := mountRunOptions{allowPicker: true}
+
+	cmd := &cobra.Command{
+		Use:   "mount [--profile name | patterns...]",
+		Short: "Mount registry files into the current project",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runMountCommand(cmd, args, options)
+		},
+	}
+
+	addMountFlags(cmd, &options, true, true)
+	cmd.AddCommand(newMountProfileCommand())
+	cmd.AddCommand(newMountPathsCommand())
 
 	return cmd
+}
+
+func newMountProfileCommand() *cobra.Command {
+	options := mountRunOptions{}
+
+	cmd := &cobra.Command{
+		Use:   "profile <name>",
+		Short: "Mount a named profile",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			options.profile = args[0]
+			return runMountCommand(cmd, nil, options)
+		},
+	}
+
+	addMountFlags(cmd, &options, false, false)
+	return cmd
+}
+
+func newMountPathsCommand() *cobra.Command {
+	options := mountRunOptions{}
+
+	cmd := &cobra.Command{
+		Use:     "paths <pattern...>",
+		Aliases: []string{"path"},
+		Short:   "Mount registry paths or glob patterns",
+		Args:    cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runMountCommand(cmd, args, options)
+		},
+	}
+
+	addMountFlags(cmd, &options, false, false)
+	return cmd
+}
+
+func addMountFlags(cmd *cobra.Command, options *mountRunOptions, includeProfile bool, includeRestore bool) {
+	if includeProfile {
+		cmd.Flags().StringVar(&options.profile, "profile", "", "named profile to use for mount selection")
+	}
+	cmd.Flags().StringArrayVar(&options.excludes, "exclude", nil, "exclude matching file or glob")
+	cmd.Flags().BoolVar(&options.includeIgnored, "include-ignored", false, "include files hidden by .csawignore")
+	cmd.Flags().BoolVar(&options.includeIgnored, "include-experimental", false, "include experimental skills (alias for --include-ignored)")
+	cmd.Flags().BoolVar(&options.forceAll, "force", false, "overwrite conflicts and stash originals")
+	cmd.Flags().BoolVar(&options.skipConflicts, "skip-conflicts", false, "skip files that conflict with existing paths")
+	if includeRestore {
+		cmd.Flags().BoolVar(&options.restore, "restore", false, "restore the previous mount selection")
+	}
+	cmd.Flags().BoolVar(&options.keep, "keep", false, "keep existing mounts instead of replacing them")
+	cmd.Flags().StringSliceVar(&options.toolsFlag, "tools", nil, "target tools (e.g., claude,cursor)")
+	cmd.Flags().StringSliceVar(&options.kindsFlag, "kind", nil, "filter by kind: agents, skills, rules, mcp, instructions (repeatable)")
+}
+
+func runMountCommand(cmd *cobra.Command, args []string, options mountRunOptions) error {
+	projectRoot, err := runtime.FindRepoRoot(".")
+	if err != nil {
+		return err
+	}
+
+	paths, err := runtime.ResolvePaths()
+	if err != nil {
+		return err
+	}
+
+	manager, err := newSourcesManager()
+	if err != nil {
+		return err
+	}
+
+	profile := options.profile
+	if options.allowPicker && profile == "" && len(args) == 0 && !options.restore {
+		cfg, err := manager.Load()
+		if err != nil {
+			return err
+		}
+		if len(cfg.Sources) == 0 {
+			if !isInteractive() {
+				return errors.New("no sources configured; run: csaw source add <name> <url>")
+			}
+			fmt.Println(tui.ResultPanel("welcome to csaw", []string{
+				output.Faint("No sources configured yet. Get started:"),
+			}, []string{
+				tui.HintLine("Create a registry:", "csaw init ~/my-ai-config"),
+				tui.HintLine("Add a team source:", "csaw source add team <git-url>"),
+			}))
+			return nil
+		}
+
+		picked, err := pickProfile(manager, paths)
+		if err != nil {
+			return err
+		}
+		if picked == "" {
+			return nil
+		}
+		profile = picked
+	}
+
+	var kinds []mount.Kind
+	for _, raw := range options.kindsFlag {
+		kind, err := mount.ParseKind(raw)
+		if err != nil {
+			return err
+		}
+		kinds = append(kinds, kind)
+	}
+
+	selection := mount.Selection{
+		IncludePatterns: append([]string(nil), args...),
+		ExcludePatterns: append([]string(nil), options.excludes...),
+		Profile:         profile,
+		IncludeIgnored:  options.includeIgnored,
+		Kinds:           kinds,
+	}
+
+	var entries []mount.SourceEntry
+	if options.restore {
+		entries, err = entriesFromRestoreState(paths, projectRoot)
+		if err != nil {
+			return err
+		}
+		if len(entries) == 0 {
+			return errors.New("no previous mount state found to restore")
+		}
+	} else {
+		entries, err = collectMountEntries(manager, paths, selection)
+		if err != nil {
+			return err
+		}
+		if len(entries) == 0 {
+			return errors.New("no registry files matched the requested mount selection; check the source, profile, path, or kind filter")
+		}
+	}
+
+	// Auto-unmount previous mount unless --keep is set. Preflight first so
+	// noninteractive conflicts cannot clear the active context before failing.
+	if !options.keep {
+		currentState, err := workspace.ReadMountState(projectRoot)
+		if err != nil {
+			return err
+		}
+		if err := preflightAutoUnmountConflicts(projectRoot, entries, currentState, options.forceAll, options.skipConflicts); err != nil {
+			return err
+		}
+		if len(currentState.Entries) > 0 {
+			if _, err := mount.Unmount(projectRoot, mount.Selection{}); err != nil {
+				return err
+			}
+		}
+	}
+
+	configuredTools := options.toolsFlag
+	if len(configuredTools) == 0 {
+		cfg, _ := manager.Load()
+		configuredTools = cfg.Tools
+	}
+
+	if len(configuredTools) == 0 && isInteractive() {
+		detected := mount.ResolveToolDirs(projectRoot, nil)
+		hasRealTools := false
+		for _, d := range detected {
+			if d.Dir != ".agents" {
+				hasRealTools = true
+				break
+			}
+		}
+		if !hasRealTools {
+			items := make([]tui.MultiSelectItem, 0, len(mount.ToolRegistry))
+			for _, name := range mount.AllToolNames() {
+				items = append(items, tui.MultiSelectItem{
+					Key:   name,
+					Label: toolDisplayName(name),
+				})
+			}
+			msResult, err := tui.RunMultiSelect("Which AI tools do you use?", items)
+			if err == nil && !msResult.Aborted && len(msResult.Selected) > 0 {
+				configuredTools = msResult.Selected
+				cfg, _ := manager.Load()
+				cfg.Tools = configuredTools
+				_ = manager.Save(cfg)
+			}
+		}
+	}
+
+	toolDirs := mount.ResolveToolDirs(projectRoot, configuredTools)
+	if !options.restore {
+		entries = mount.ExpandToolTargets(entries, toolDirs)
+	}
+
+	result, err := mount.Apply(projectRoot, paths, entries, promptConflictResolver{
+		cmd:      cmd,
+		forceAll: options.forceAll,
+		skipAll:  options.skipConflicts,
+	})
+	if err != nil {
+		return err
+	}
+
+	if result.Linked == 0 && result.AlreadyLinked > 0 {
+		output.Infof("all requested files were already mounted")
+		return nil
+	}
+
+	displayState, err := workspace.ReadMountState(projectRoot)
+	if err != nil {
+		return err
+	}
+
+	var mountedFiles []string
+	var sourceNames []string
+	seenSources := make(map[string]bool)
+	for _, entry := range displayState.Entries {
+		mountedFiles = append(mountedFiles, entry.RelativePath)
+		if !seenSources[entry.SourceName] {
+			seenSources[entry.SourceName] = true
+			sourceNames = append(sourceNames, entry.SourceName)
+		}
+	}
+
+	displayFiles := mountedFiles
+	if len(displayFiles) > 10 {
+		displayFiles = append(displayFiles[:9], fmt.Sprintf("... and %d more", len(mountedFiles)-9))
+	}
+
+	stats := fmt.Sprintf("%d file(s) mounted", result.Linked)
+	if result.Stashed > 0 {
+		stats += fmt.Sprintf(" · %d stashed", result.Stashed)
+	}
+	if toolDirCount := mountedToolDirCount(mountedFiles); toolDirCount > 0 {
+		stats += fmt.Sprintf(" · %d tool dirs", toolDirCount)
+	}
+
+	hints := []string{
+		tui.HintLine("Inspect:", "csaw inspect"),
+		tui.HintLine("Unmount:", "csaw unmount"),
+	}
+
+	fmt.Println(tui.MountPanel(displayFiles, sourceNames, stats, hints))
+	return nil
 }
 
 func newUnmountCommand() *cobra.Command {
@@ -964,7 +1186,7 @@ func newUpdateCommand() *cobra.Command {
 			}
 
 			if result.Linked > 0 {
-				output.Successf("repaired %d drifted link(s)", result.Linked)
+				output.Successf("repaired %d mounted link(s)", result.Linked)
 			}
 			if unresolved > 0 {
 				output.Warnf("%d link(s) remain unresolved", unresolved)
@@ -1295,6 +1517,11 @@ func newUnpinCommand() *cobra.Command {
 				return nil
 			}
 
+			remapped, err := remapPinnedMountsToDefault(projectRoot, manager.Paths, source, manager.WorktreePath(source, projectRoot))
+			if err != nil {
+				return err
+			}
+
 			if err := manager.WorktreeRemove(context.Background(), source, projectRoot); err != nil {
 				output.Warnf("could not remove worktree: %v", err)
 			}
@@ -1305,9 +1532,105 @@ func newUnpinCommand() *cobra.Command {
 			}
 
 			output.Successf("unpinned %s", sourceName)
+			if remapped > 0 {
+				output.Infof("updated %d mounted file(s) to the default checkout", remapped)
+			}
 			return nil
 		},
 	}
+}
+
+func remapPinnedMountsToDefault(projectRoot string, paths runtime.Paths, source sources.Source, worktreePath string) (int, error) {
+	state, err := workspace.ReadMountState(projectRoot)
+	if err != nil {
+		return 0, err
+	}
+	if len(state.Entries) == 0 {
+		return 0, nil
+	}
+
+	lm := linkmode.Detect()
+	defaultRoot := source.CheckoutPath(paths)
+	updated := 0
+
+	for index := range state.Entries {
+		entry := &state.Entries[index]
+		if entry.SourceName != source.Name || !runtime.PathStartsWith(entry.SourcePath, worktreePath) {
+			continue
+		}
+
+		sourceRel, err := filepath.Rel(worktreePath, entry.SourcePath)
+		if err != nil {
+			return updated, err
+		}
+		newSourcePath := filepath.Join(defaultRoot, sourceRel)
+		if _, err := os.Stat(newSourcePath); err != nil {
+			return updated, fmt.Errorf("cannot update %s after unpin: %w", entry.RelativePath, err)
+		}
+
+		targetPath := filepath.Join(projectRoot, filepath.FromSlash(entry.RelativePath))
+		if _, err := os.Lstat(targetPath); err == nil {
+			if !linkmode.IsLink(lm, targetPath, entry.SourcePath) {
+				return updated, fmt.Errorf("cannot update %s after unpin: target is no longer the expected csaw link", entry.RelativePath)
+			}
+			if err := os.Remove(targetPath); err != nil {
+				return updated, err
+			}
+		} else if !os.IsNotExist(err) {
+			return updated, err
+		}
+
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
+			return updated, err
+		}
+		if err := linkmode.Create(lm, newSourcePath, targetPath); err != nil {
+			return updated, err
+		}
+
+		entry.SourcePath = newSourcePath
+		if entry.Protected {
+			hash, err := workspace.FileSHA256(newSourcePath)
+			if err != nil {
+				return updated, err
+			}
+			entry.SourceSHA256 = hash
+		}
+		updated++
+	}
+
+	if updated == 0 {
+		return 0, nil
+	}
+
+	sort.Slice(state.Entries, func(i, j int) bool {
+		return state.Entries[i].RelativePath < state.Entries[j].RelativePath
+	})
+	if err := workspace.WriteMountState(projectRoot, state); err != nil {
+		return updated, err
+	}
+	if err := workspace.WriteRestoreState(paths, projectRoot, state); err != nil {
+		return updated, err
+	}
+	return updated, nil
+}
+
+func mountedToolDirCount(files []string) int {
+	known := map[string]bool{
+		mount.StandardFallback.Dir: true,
+	}
+	for _, tool := range mount.ToolRegistry {
+		known[tool.Dir] = true
+	}
+
+	seen := map[string]bool{}
+	for _, file := range files {
+		dir, _, ok := strings.Cut(filepath.ToSlash(file), "/")
+		if !ok || !known[dir] {
+			continue
+		}
+		seen[dir] = true
+	}
+	return len(seen)
 }
 
 func newForkCommand() *cobra.Command {

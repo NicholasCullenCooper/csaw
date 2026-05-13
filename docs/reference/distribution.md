@@ -104,10 +104,10 @@ scoop install csaw
 
 # Any platform (recommended)
 uv tool install csaw
-csaw mount --profile backend
+csaw use team/backend
 
 # Node ecosystem (Phase 2)
-npx csaw mount --profile backend
+npx csaw use team/backend
 
 # Verify
 csaw version

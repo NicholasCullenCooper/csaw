@@ -7,10 +7,13 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/NicholasCullenCooper/csaw/internal/linkmode"
 	"github.com/NicholasCullenCooper/csaw/internal/mount"
 	"github.com/NicholasCullenCooper/csaw/internal/output"
 	"github.com/NicholasCullenCooper/csaw/internal/pinning"
@@ -70,6 +73,62 @@ func (r promptConflictResolver) Resolve(conflict mount.Conflict) (mount.Conflict
 			fmt.Fprintln(r.cmd.OutOrStdout(), "answer with overwrite, skip, or diff")
 		}
 	}
+}
+
+func preflightAutoUnmountConflicts(projectRoot string, entries []mount.SourceEntry, currentState workspace.MountState, forceAll bool, skipAll bool) error {
+	if forceAll || skipAll || isInteractive() {
+		return nil
+	}
+
+	store := workspace.FileStateStore{}
+	manifest, err := store.ReadManifest(projectRoot)
+	if err != nil {
+		return err
+	}
+
+	mounted := make(map[string]workspace.MountedStateEntry, len(currentState.Entries))
+	for _, entry := range currentState.Entries {
+		mounted[runtime.NormalizeRegistryPath(entry.RelativePath)] = entry
+	}
+
+	lm := linkmode.Detect()
+	conflicts := map[string]bool{}
+	for _, entry := range entries {
+		relPath := runtime.NormalizeRegistryPath(entry.RelativePath)
+		if mountedEntry, ok := mounted[relPath]; ok {
+			targetPath := filepath.Join(projectRoot, filepath.FromSlash(relPath))
+			if _, err := os.Lstat(targetPath); err == nil {
+				if !linkmode.IsLink(lm, targetPath, mountedEntry.SourcePath) {
+					conflicts[relPath] = true
+					continue
+				}
+			} else if !os.IsNotExist(err) {
+				return err
+			}
+			if _, restoresOriginal := manifest[relPath]; restoresOriginal {
+				conflicts[relPath] = true
+			}
+			continue
+		}
+
+		targetPath := filepath.Join(projectRoot, filepath.FromSlash(relPath))
+		if _, err := os.Lstat(targetPath); err == nil {
+			conflicts[relPath] = true
+		} else if !os.IsNotExist(err) {
+			return err
+		}
+	}
+
+	if len(conflicts) == 0 {
+		return nil
+	}
+
+	paths := make([]string, 0, len(conflicts))
+	for path := range conflicts {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	return fmt.Errorf("conflict requires interaction for %s; rerun with --force or --skip-conflicts", strings.Join(paths, ", "))
 }
 
 func collectMountEntries(manager sources.Manager, paths runtime.Paths, selection mount.Selection) ([]mount.SourceEntry, error) {
