@@ -12,7 +12,8 @@ drift detection, release flow, or recommended workflows.
 After completing this curriculum, you should be able to:
 
 - Explain when csaw is useful and when repo-local context is better.
-- Design personal, team, client, and community AI workspace sources.
+- Design company, department, team, personal, client, and community AI workspace sources.
+- Adopt existing repo-local AI files into a reusable source.
 - Use profiles, priorities, protected files, pins, fork, promote, and restore.
 - Predict where instructions, rules, agents, skills, and MCP files mount.
 - Audit active context for required sources, blocked sources, required kinds,
@@ -42,12 +43,14 @@ Create a disposable workspace:
 mkdir -p ~/csaw-lab
 cd ~/csaw-lab
 git init app
-mkdir personal-ai team-ai client-acme-ai client-globex-ai
 ```
 
-Use `~/csaw-lab/app` as the project and the other directories as local csaw
-sources. Local sources are enough to learn the behavior; later modules cover
-remote git sources.
+Use `~/csaw-lab/app` as the project. Source directories (`personal-ai`,
+`company-ai`, `department-ai`, `team-ai`, `client-acme-ai`, `client-globex-ai`)
+are created by `csaw init` in their respective modules. Local sources are enough
+to learn the behavior; later modules cover remote git sources.
+
+> **Note:** Modules 1-5 work with a single personal source to teach the mechanics. Module 6 introduces the canonical 4-tier stack (`company` → `department` → `team` → `personal`) and creates the additional source directories. Module 9 covers horizontal client isolation.
 
 ## Module 1: Product Model
 
@@ -65,7 +68,7 @@ it in that repo.
 Use csaw when context crosses at least one boundary:
 
 - Multiple repos need the same AI workspace files.
-- A team or client owns required context.
+- A company, department, team, or client owns required context.
 - Personal context should layer on top without being committed.
 - Different projects need different source refs.
 - Multiple AI tools need the same logical files projected to different paths.
@@ -89,7 +92,7 @@ Use csaw when context crosses at least one boundary:
 Answer these before continuing:
 
 - Which AI files in your real work belong in a single repo?
-- Which ones cross repo, team, client, privacy, or tool boundaries?
+- Which ones cross repo, company, department, team, client, privacy, or tool boundaries?
 - Which ones would be risky if the wrong client context were active?
 
 ## Module 2: Install And First Source
@@ -123,6 +126,10 @@ Inspect configured sources:
 csaw source list
 csaw config list
 ```
+
+### Two Roles
+
+You just played both roles at once: you **maintained** the personal source (created it, will edit its files) and you'll **consume** it from projects (`csaw use`, `csaw pull`). Most users only consume sources someone else maintains — your team source, your company source. For csaw to work in your org, you need exactly one maintainer per shared source; everyone else can be a passive consumer.
 
 ### Exercise
 
@@ -210,7 +217,9 @@ Mount the personal profile into the project:
 
 ```bash
 cd ~/csaw-lab/app
-csaw mount --profile personal/default
+csaw profile list
+csaw profile show personal/default
+csaw use personal/default
 ```
 
 Inspect the result:
@@ -251,6 +260,26 @@ Before unmounting, create a local file at a path csaw wants to mount, then
 mount with `--force` in a disposable repo. Confirm csaw stashes and restores the
 original file when unmounting.
 
+### Existing Project Adoption
+
+If a repo already has AI files that should become reusable source-owned
+context, adopt them into a registry:
+
+```bash
+cd ~/csaw-lab/app-with-existing-ai-files
+csaw init --adopt ~/csaw-lab/adopted-ai --name adopted
+csaw source add adopted ~/csaw-lab/adopted-ai --priority 20
+```
+
+Adoption copies recognized AI files into the registry and reverses tool
+projection. For example, `.claude/skills/testing/SKILL.md` becomes
+`skills/testing/SKILL.md`, `.claude/rules/go.md` becomes `rules/go.md`, and
+`.vscode/mcp.json` becomes `mcp/vscode.json`.
+
+Adoption does not delete the originals from the project. Before mounting the
+adopted source back into the same repo, intentionally remove the originals,
+mount with `--force`, or mount with `--skip-conflicts`.
+
 ## Module 5: Artifact Kinds And Projection
 
 csaw classifies AI workspace files by kind:
@@ -280,9 +309,9 @@ csaw config set tools claude,cursor,codex
 Mount only some kinds:
 
 ```bash
-csaw mount --profile personal/default --kind agents
-csaw mount --profile personal/default --kind agents,skills
-csaw mount 'personal/mcp/**' --tools claude
+csaw use personal/default --kind agents
+csaw use personal/default --kind agents,skills
+csaw mount paths 'personal/mcp/**' --tools claude
 ```
 
 Control git visibility:
@@ -296,58 +325,120 @@ csaw hide AGENTS.md
 
 Create one file of each kind in `personal-ai`. Mount the starter profile for
 instructions, rules, agents, and skills. Mount MCP with the explicit
-`'personal/mcp/**'` pattern or add `mcp/**` to `personal-ai/csaw.yml`. Predict
-where each file should appear before running `csaw inspect`.
+`csaw mount paths 'personal/mcp/**'` command or add `mcp/**` to
+`personal-ai/csaw.yml`. Predict where each file should appear before running
+`csaw inspect`.
 
 ## Module 6: Multi-Source Composition
 
-Create a team source:
+Configured sources are inventory, not active context. A source becomes active only when a mount selection includes files from it. `csaw inspect` and `csaw audit` report the active mounted context, not every registered source.
+
+### The Canonical Stack
+
+The typical real-world csaw setup is four nested layers, each owned by someone different:
+
+| Layer      | Priority         | Typical owner                     |
+| ---------- | ---------------- | --------------------------------- |
+| company    | 100, protected   | Platform / engineering ops        |
+| department | 80, protected    | Department head or staff engineer |
+| team       | 50               | Your team                         |
+| personal   | 10               | You                               |
+
+Higher tiers outrank lower ones on conflict; protected files in higher tiers cannot be overridden at all (Module 7). You already have `personal-ai` from Module 2 — set up the other three:
 
 ```bash
 cd ~/csaw-lab
+csaw init company-ai --name company
+csaw init department-ai --name department
 csaw init team-ai --name team
-csaw source add team ~/csaw-lab/team-ai --priority 0
+csaw source add company ~/csaw-lab/company-ai --priority 100
+csaw source add department ~/csaw-lab/department-ai --priority 80
+csaw source add team ~/csaw-lab/team-ai --priority 50
 ```
 
-Mount a team profile:
+### Activating One Source
+
+Mounting one source's profile mounts only that source:
 
 ```bash
 cd ~/csaw-lab/app
-csaw mount --profile team/default
+csaw profile list
+csaw use team/default
 ```
 
-Mount personal and team context together with qualified source patterns:
+### Composing the Whole Stack
 
-```bash
-csaw mount 'personal/**' 'team/**'
+To mount all four layers in one work mode, define a composed profile in your personal source's `csaw.yml`:
+
+```yaml
+work:
+  description: Company + department + team + personal helpers
+  extends:
+    - company/default
+    - department/default
+    - team/default
+  include:
+    - skills/**
+    - agents/**
 ```
 
-Quote glob patterns so your shell does not expand them before csaw sees them.
-Profiles are source-qualified by owner: `team/default` resolves unqualified
-profile includes such as `rules/**` against the `team` source. A profile can
-also include qualified source paths, such as `personal/**` and `team/**`, if
-you want a named composition profile.
-
-When two sources provide different files, both mount. When they provide the
-same target path, priority decides.
-
-### Priority
-
-Higher priority wins on normal conflicts:
+Activate it:
 
 ```bash
+csaw use personal/work
+```
+
+Profile names are source-qualified by owner: `team/default` resolves against the `team` source. Because `work` lives in `personal`, `skills/**` resolves to `personal/skills/**`. The day-to-day string is `personal/work` — self-documenting.
+
+For one-off debugging, `csaw mount paths 'company/**' 'team/**' 'personal/**'` still works. Quote glob patterns so your shell does not expand them. Treat raw patterns as an escape hatch, not the normal workflow.
+
+When two sources provide different files, both mount. When they provide the same target path, priority decides.
+
+### Horizontal Sources
+
+The four-tier canonical is one **vertical** hierarchy — each layer nests inside the one above it. Sources can also be **horizontal** — opted into by responsibility rather than position: a `client` source for consultants, a `staff-eng` source for cross-team cost-awareness, a `community` source for shared open-source skills.
+
+Horizontal composition uses the same pattern. For client work:
+
+```yaml
+client-extras:
+  description: Personal helpers safe for client projects
+  include:
+    - skills/code-review/**
+    - agents/planner.md
+
+acme-work:
+  description: Acme client context with personal helpers
+  extends:
+    - client-acme/default
+    - client-extras
+```
+
+Then:
+
+```bash
+csaw use personal/acme-work
+```
+
+Module 9 covers client isolation in detail.
+
+### Priority Mechanics
+
+Higher priority wins on conflicts:
+
+```bash
+csaw source add company ~/csaw-lab/company-ai --priority 100
+csaw source add team ~/csaw-lab/team-ai --priority 50
 csaw source add personal ~/csaw-lab/personal-ai --priority 10
-csaw source add team ~/csaw-lab/team-ai --priority 0
 ```
 
-If two sources have equal priority for the same target, csaw refuses the mount
-until you make the decision explicit.
+If two sources have equal priority for the same target, csaw refuses the mount until you make the decision explicit.
 
 ### Exercise
 
-Put `AGENTS.md` in both `personal-ai` and `team-ai`. Change priorities and
-observe which one mounts. Then set equal priorities and confirm csaw refuses the
-ambiguous mount.
+1. Put a different `AGENTS.md` in each of `company-ai`, `team-ai`, and `personal-ai`. Mount `personal/work` and confirm company's wins (highest priority).
+2. Set `personal` priority to 200. Re-mount. Confirm personal now wins.
+3. Set personal and company to equal priority. Re-mount. Confirm csaw refuses the ambiguous mount.
 
 ## Module 7: Protected Files
 
@@ -371,7 +462,7 @@ Protected behavior:
 Run:
 
 ```bash
-csaw mount --profile team/default
+csaw use team/default
 csaw inspect
 csaw check
 ```
@@ -406,25 +497,27 @@ csaw audit --init
 ```
 
 This creates `.csaw/policy.yml` in the project. Treat it as a real project
-policy file: commit it when the policy represents shared team, client, or CI
-requirements.
+policy file: commit it when the policy represents shared company, team, client,
+or CI requirements.
 
-Edit `.csaw/policy.yml`:
+Edit `.csaw/policy.yml`. The canonical case is "this repo must mount the company and team sources, and not personal-experimental":
 
 ```yaml
 required_sources:
-  - team
-  - name: client-acme
-    url: git@example.com:org/client-acme-ai.git
-    ref: approved
+  - company
+  - name: team
+    url: git@example.com:org/team-ai.git
+    ref: main
 blocked_sources:
-  - other-client-*
   - personal-experimental
+blocked_kinds:
+  - mcp
 required_kinds:
   - instructions
   - rules
-  - mcp
 ```
+
+Module 9 shows the stricter consultant variant with `blocked_paths` and multiple client sources.
 
 Run:
 
@@ -449,6 +542,8 @@ human failure summary may still be written to stderr.
 - Required source configured URL.
 - Required source project pin.
 - Blocked source names and glob patterns.
+- Blocked mounted kinds.
+- Blocked mounted project paths.
 - Required mounted kinds.
 
 `--strict` fails on warnings as well as errors. A missing policy is a warning in
@@ -476,7 +571,13 @@ Then fix each failure.
 
 ## Module 9: Client Isolation Workbench
 
-This is the strongest practical csaw workflow.
+Client isolation is the canonical **horizontal** csaw scenario — sources opted into by responsibility (here, "which client am I working for") rather than by vertical org position. The same compose-and-activate pattern from earlier modules applies; what makes it distinct is using project policy to prove the right client is mounted and the wrong ones aren't.
+
+The key distinction is configured versus active. It is fine to have both Acme
+and Globex registered globally. They should not both be active in the same
+project unless a mount selection explicitly includes both. Project policy is
+the local proof that the correct client source is active and the wrong client
+source is absent.
 
 Create two client sources:
 
@@ -495,6 +596,10 @@ required_sources:
 blocked_sources:
   - client-globex
   - other-client-*
+blocked_kinds:
+  - mcp
+blocked_paths:
+  - .claude/agents/**
 required_kinds:
   - instructions
 ```
@@ -512,7 +617,7 @@ Day in the life:
 ```bash
 cd ~/work/client-acme-app
 csaw pull client-acme
-csaw mount --profile client-acme/default
+csaw use client-acme/default
 csaw audit --strict
 ```
 
@@ -548,17 +653,22 @@ projects:
 ```bash
 cd ~/csaw-lab/app
 csaw pin team@main
-csaw mount --profile team/default
+csaw use team/default
 csaw inspect
 ```
 
 In real use, replace `main` with the branch or tag the project should consume.
+csaw uses a project-specific detached worktree for the pinned ref.
 
 Unpin:
 
 ```bash
 csaw unpin team
+csaw check
 ```
+
+Unpin removes the project pin and updates active mounts for that source back to
+the default checkout.
 
 Policy can require the pin:
 
@@ -591,14 +701,14 @@ confirm csaw refuses it.
 Promote moves an experimental skill into the stable skill tree:
 
 ```bash
-csaw mount --profile personal/default --include-experimental
+csaw use personal/default --include-experimental
 csaw promote personal/skills/experimental/debugging
 ```
 
 ### Exercise
 
 Fork an unprotected team file into `personal-ai`. Then create an experimental
-skill, mount with `--include-experimental`, promote it, and verify it mounts
+skill, activate with `--include-experimental`, promote it, and verify it mounts
 without `--include-experimental`.
 
 ## Module 12: Source Git Operations
@@ -671,7 +781,9 @@ Unmount and restore originals:
 csaw unmount
 ```
 
-Use `csaw diff <path>` to compare a mounted file with its source.
+Use `csaw diff <path>` to compare a replaced mounted file with its source.
+For a healthy symlink, the project path and source path are the same content,
+so there may be no meaningful content diff.
 
 ### Exercise
 
@@ -707,10 +819,43 @@ Show and hide a mounted file. Inspect `.git/info/exclude` before and after.
 
 ## Module 15: Designing Sources
 
+The canonical csaw setup is a **vertical** 4-tier stack — `company` → `department` → `team` → `personal`. **Horizontal** sources (`client`, `community`, role-based) layer in by responsibility rather than position. Each source type has a different shape, owner, and protection profile.
+
+### Company Source
+
+Organization-wide engineering standards every repo should reflect. Maintained by platform / engineering ops. Priority 100. Most contents protected.
+
+Recommended contents:
+
+- `AGENTS.md` with company-wide conventions.
+- Protected security and compliance rules.
+- Required cross-tool standards.
+
+### Department Source
+
+Cross-team conventions inside a department (backend, frontend, data, etc.). Maintained by department head or staff engineer. Priority 80. Mandatory items protected.
+
+Recommended contents:
+
+- Department-specific `AGENTS.md` additions.
+- Protected workflow skills like a PR-workflow procedure.
+- Department-wide review rules.
+
+### Team Source
+
+Shared engineering standards across team-owned repos. Maintained by team lead. Priority 50.
+
+Recommended contents:
+
+- `AGENTS.md` with team conventions.
+- Review rules.
+- Testing standards.
+- Common agents and skills.
+- Protected security or compliance rules where the team has authority to mandate.
+
 ### Personal Source
 
-Use for preferences and reusable skills that should not be committed into every
-repo.
+Your own preferences and reusable skills that should not be committed into any repo. Maintained by you. Priority 10.
 
 Recommended contents:
 
@@ -719,21 +864,9 @@ Recommended contents:
 - Optional agents.
 - Experimental work under `skills/experimental/`.
 
-### Team Source
+### Client Source (horizontal)
 
-Use for shared engineering standards.
-
-Recommended contents:
-
-- `AGENTS.md` with team conventions.
-- Review rules.
-- Testing standards.
-- Common agents and skills.
-- Protected security or compliance rules.
-
-### Client Source
-
-Use for engagement-specific constraints.
+Engagement-specific constraints when consulting. Maintained by client OR by you per-engagement. Priority varies; pair with project policy that blocks other clients.
 
 Recommended contents:
 
@@ -742,21 +875,19 @@ Recommended contents:
 - Protected policy and security rules.
 - Project onboarding skills.
 
-### Community Source
+### Community Source (horizontal)
 
-Use cautiously for reusable public workflows.
+Reusable public workflows. Use cautiously. Lower priority than company, department, team, or client sources.
 
 Recommended contents:
 
 - Generic skills and agents.
 - No secrets.
 - No client-specific policy.
-- Lower priority than team or client sources.
 
 ### Exercise
 
-Sketch four source trees: personal, team, client, community. Mark which files
-should be protected and which should remain optional.
+Sketch source trees for the canonical vertical stack (company, department, team, personal) plus horizontal sources you'd realistically use (client, community, role-based). Mark which files should be protected, who maintains each source, and which priority they get.
 
 ## Module 16: CI And Automation
 
@@ -799,7 +930,7 @@ csaw source add personal ~/csaw-lab/personal-ai
 Use:
 
 ```bash
-csaw mount --profile source/profile
+csaw use source/profile
 ```
 
 or run interactively in a terminal.

@@ -8,6 +8,7 @@ uv tool install csaw
 
 # Add a team source (auto-clones)
 csaw source add team git@github.com:org/ai-config.git
+csaw profile list
 
 # Or create your own registry
 csaw init ~/my-ai-config
@@ -18,16 +19,20 @@ csaw source add personal ~/my-ai-config --priority 10
 
 ```bash
 csaw mount                                       # interactive profile picker
-csaw mount --profile team/backend                # mount a named profile
-csaw mount agents/go.md                          # mount specific files
-csaw mount --profile team/core --force           # overwrite conflicts
+csaw use team/backend                            # activate a named profile
+csaw mount profile team/backend                  # same operation, mechanical form
+csaw mount paths agents/go.md                    # advanced: mount specific files
+csaw use team/core --force                       # overwrite conflicts
 csaw mount --restore                             # re-mount previous selection
-csaw mount --keep --profile team/extra           # add to existing mount (don't replace)
-csaw mount --profile team/backend --kind agents  # only mount agent definitions
-csaw mount --profile team/full --kind agents,skills,rules  # subset of kinds
+csaw use team/extra --keep                       # add to existing mount (don't replace)
+csaw use team/backend --kind agents              # only mount agent definitions
+csaw use team/full --kind agents,skills,rules    # subset of kinds
 ```
 
-Mounting a profile **replaces** the previous mount by default. Use `--keep` to add on top. Use `--kind` to restrict by kind (`agents`, `skills`, `rules`, `mcp`, `instructions`).
+Activating a profile **replaces** the previous mount by default. Use `--keep`
+to add on top. Use `--kind` to restrict by kind (`agents`, `skills`, `rules`,
+`mcp`, `instructions`). `csaw mount paths ...` is the raw path/glob escape hatch
+for one-off selection; normal workflows should live in named profiles.
 
 ## Unmount
 
@@ -39,6 +44,8 @@ csaw unmount agents/go.md               # unmount specific files
 ## Inspect
 
 ```bash
+csaw profile list                       # list available work modes
+csaw profile show team/backend          # show resolved includes/excludes
 csaw inspect                            # full state overview
 csaw inspect --source team              # browse a source
 csaw audit --init                       # create .csaw/policy.yml
@@ -75,7 +82,7 @@ csaw push                               # auto-detect dirty source and push
 ```bash
 csaw pin team@feature/new-rules         # pin this project to a branch
 csaw pull team                          # pulls that branch
-csaw mount --profile team/backend       # mounts from the branch
+csaw use team/backend                   # mounts from the branch
 csaw unpin team                         # back to default branch
 ```
 
@@ -174,13 +181,13 @@ my-registry/
 
 **Profiles** — Named file selections with glob patterns in a source's `csaw.yml`. Can inherit from each other via `extends:`.
 
-**Sources** — Git repos or local dirs containing AI config. Personal, team, per-client, community. Add as many as you need.
+**Sources** — Git repos or local dirs containing AI config. Canonical vertical stack: company, department, team, personal. Horizontal additions: client (consultants), community, role-based (e.g. staff-eng). Add as many as you need. One **maintainer** per shared source; everyone else is a passive **consumer** running `csaw use` and `csaw pull`.
 
 **Priority** — When sources overlap, higher priority wins. Set with `--priority` on `source add`.
 
-**Protected files** — A source can mark files as `protected:` in its `csaw.yml`. Protected files bypass priority (always win) and refuse `csaw fork`. The mechanism behind team and client governance.
+**Protected files** — A source can mark files as `protected:` in its `csaw.yml`. Protected files bypass priority (always win) and refuse `csaw fork`. The mechanism behind layered governance (company, department, team, or client mandates).
 
-**Project policy** — A project can declare `.csaw/policy.yml` with `required_sources`, `blocked_sources`, and `required_kinds`. Use `csaw audit --init` to create a starter policy. `required_sources` can require a source name, configured URL, and project pin. `csaw audit` checks the active mounted context against that policy. `--strict` fails on warnings, including a missing policy.
+**Project policy** — A project can declare `.csaw/policy.yml` with `required_sources`, `blocked_sources`, `required_kinds`, `blocked_kinds`, and `blocked_paths`. Use `csaw audit --init` to create a starter policy. `required_sources` can require a source name, configured URL, and project pin. `csaw audit` checks the active mounted context against that policy. `--strict` fails on warnings, including a missing policy.
 
 **Pinning** — Lock a source to a branch/tag per project with `csaw pin`. Uses git worktrees so other projects stay on the default branch.
 
@@ -188,7 +195,7 @@ my-registry/
 
 **Promote** — Move a skill from `skills/experimental/` to `skills/` in a source so it mounts by default.
 
-**Kinds** — csaw classifies registry files as one of five kinds: instructions, rules, agents, skills, mcp. Each has its own projection target. Filter with `csaw mount --kind agents,skills`.
+**Kinds** — csaw classifies registry files as one of five kinds: instructions, rules, agents, skills, mcp. Each has its own projection target. Filter with `csaw use team/backend --kind agents,skills`.
 
 **Tool directories** — Each kind projects into the right per-tool directory (`.claude/agents/`, `.cursor/rules/`, etc.) where AI tools discover files natively.
 
