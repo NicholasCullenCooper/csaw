@@ -129,7 +129,7 @@ csaw update                             # repair broken links
 |---|---|---|
 | Instructions | `AGENTS.md`, `CLAUDE.md` | Project root |
 | Rules | `rules/*.md` | `.claude/rules/`, `.cursor/rules/`, `.windsurf/rules/` |
-| Agents | `agents/*.md` | `.claude/agents/`, `.cursor/agents/`, `.codex/agents/` |
+| Agents | `agents/*.md` | `.claude/agents/`, `.opencode/agents/`, `.gemini/agents/` |
 | Skills | `skills/*/SKILL.md` | `.claude/skills/`, `.opencode/skills/`, `.codex/skills/`, `.agents/skills/` |
 | MCP | `mcp/*.json` | `.mcp.json`, `.cursor/mcp.json`, `.vscode/mcp.json` |
 

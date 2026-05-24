@@ -153,12 +153,20 @@ type ToolDir struct {
 }
 
 // ToolRegistry maps short tool names to their directory conventions.
+//
+// Per-tool support matrix is derived from docs/reference/tool-projection.json:
+//   - codex has no `.codex/agents/` (uses TOML inline tables in config.toml)
+//   - cursor has no `.cursor/agents/` (Background Agents are runtime, not files)
+//   - opencode reads `.opencode/agents/*.md` (markdown)
+//   - gemini reads `.gemini/agents/*.md` (markdown); skills are TOML commands and
+//     MCP is nested in settings.json — neither fits file-to-file symlinking
 var ToolRegistry = map[string]ToolDir{
 	"claude":   {Dir: ".claude", SkillsSubdir: "skills", RulesSubdir: "rules", AgentsSubdir: "agents"},
-	"opencode": {Dir: ".opencode", SkillsSubdir: "skills"},
-	"codex":    {Dir: ".codex", SkillsSubdir: "skills", AgentsSubdir: "agents"},
-	"cursor":   {Dir: ".cursor", RulesSubdir: "rules", AgentsSubdir: "agents"},
+	"opencode": {Dir: ".opencode", SkillsSubdir: "skills", AgentsSubdir: "agents"},
+	"codex":    {Dir: ".codex", SkillsSubdir: "skills"},
+	"cursor":   {Dir: ".cursor", RulesSubdir: "rules"},
 	"windsurf": {Dir: ".windsurf", RulesSubdir: "rules"},
+	"gemini":   {Dir: ".gemini", AgentsSubdir: "agents"},
 }
 
 // KnownToolDirs returns all known tool directories.

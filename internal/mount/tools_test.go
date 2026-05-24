@@ -37,8 +37,12 @@ func TestKindOfProjectPath(t *testing.T) {
 		{"AGENTS.md", KindInstruction},
 		{"CLAUDE.md", KindInstruction},
 		{".claude/agents/code-reviewer.md", KindAgent},
-		{".cursor/agents/planner.md", KindAgent},
-		{".codex/agents/foo.md", KindAgent},
+		{".opencode/agents/reviewer.md", KindAgent},
+		{".gemini/agents/researcher.md", KindAgent},
+		// .cursor/agents/ and .codex/agents/ are NOT recognized — Cursor's agents
+		// are runtime entities, Codex's agents are TOML inline tables.
+		{".cursor/agents/planner.md", KindOther},
+		{".codex/agents/foo.md", KindOther},
 		{".claude/skills/code-review/SKILL.md", KindSkill},
 		{".opencode/skills/foo/SKILL.md", KindSkill},
 		{".agents/skills/foo/SKILL.md", KindSkill},

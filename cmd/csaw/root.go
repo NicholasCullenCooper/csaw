@@ -1825,6 +1825,7 @@ var toolDisplayNames = map[string]string{
 	"opencode": "OpenCode",
 	"codex":    "Codex",
 	"windsurf": "Windsurf",
+	"gemini":   "Gemini CLI",
 }
 
 func toolDisplayName(key string) string {

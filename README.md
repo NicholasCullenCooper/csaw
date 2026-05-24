@@ -11,7 +11,7 @@
     <a href="https://pypi.org/project/csaw/"><img src="https://img.shields.io/pypi/v/csaw" alt="PyPI"></a>
   </p>
   <p align="center">
-    Works with: Claude Code · Codex · Cursor · Copilot · Windsurf · OpenCode · Gemini CLI
+    Works with: Claude Code · Cursor · Codex · OpenCode · Windsurf · Gemini CLI
   </p>
 </p>
 
@@ -234,7 +234,7 @@ my-project/
       commit-message/SKILL.md            ← symlink
 ```
 
-Open Claude Code (or Cursor, Codex, Copilot) — it finds the files automatically. Run `git status` — nothing shows up. The files are hidden via `.git/info/exclude`.
+Open Claude Code (or Cursor, Codex, OpenCode, Gemini CLI) — it finds the files automatically. Run `git status` — nothing shows up. The files are hidden via `.git/info/exclude`.
 
 ---
 
@@ -715,7 +715,7 @@ csaw treats AI workspace artifacts as five distinct kinds, each with its own con
 |---|---|---|---|
 | **Instructions** | `AGENTS.md`, `CLAUDE.md` | Project root | Every turn — always in context |
 | **Rules** | `rules/*.md` | `.claude/rules/`, `.cursor/rules/`, etc. | Every turn — always-on coding standards |
-| **Agents** | `agents/*.md` | `.claude/agents/`, `.cursor/agents/`, etc. | When invoked — specialized subagent personas |
+| **Agents** | `agents/*.md` | `.claude/agents/`, `.opencode/agents/`, `.gemini/agents/` | When invoked — specialized subagent personas |
 | **Skills** | `skills/*/SKILL.md` | `.claude/skills/`, `.opencode/skills/`, etc. | When relevant — on-demand procedural workflows |
 | **MCP** | `mcp/*.json` | `.mcp.json`, `.cursor/mcp.json`, `.vscode/mcp.json` | Session start — tool/data connectivity |
 
@@ -750,6 +750,7 @@ If csaw can't auto-detect any tool directories in your project on first mount, i
 │  ○ OpenCode                              │
 │  ○ Codex                                 │
 │  ○ Windsurf                              │
+│  ○ Gemini CLI                            │
 │                                          │
 │  space toggle · enter confirm            │
 ╰──────────────────────────────────────────╯
@@ -760,6 +761,8 @@ This is saved to `~/.csaw/config.yml` and applies to all projects. You can also 
 ```bash
 csaw config set tools claude,cursor
 ```
+
+> **Not yet supported by direct projection:** VS Code Copilot (`.github/copilot-instructions.md`, `.github/chatmodes/`, `.github/agents/`) and GitHub Copilot CLI (`~/.copilot/`). csaw still serves both via the universal `AGENTS.md` convention at project root, which both tools read. Full first-class support for Copilot's `.github/` projection requires structural changes tracked in [docs/reference/tool-projection.json](docs/reference/tool-projection.json) under `csaw_projection_audit.deferred`.
 
 ---
 

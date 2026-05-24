@@ -1,0 +1,588 @@
+{
+  "$schema_version": 1,
+  "updated_at": "2026-05-24",
+  "scope_notes": "Canonical projection map for tools csaw supports. Each tool declares, per kind (instructions/rules/agents/skills/mcp), the exact filesystem paths the tool reads from at project and user scope. csaw can use this data to drive ToolRegistry, generate code, validate docs, and (eventually) automate updates by diffing against tool changelogs.",
+  "confidence_legend": {
+    "verified": "Read directly from current official tool docs.",
+    "documented": "Read from official docs but with caveats or partial info.",
+    "inferred": "Inferred from related docs, community sources, or repo conventions.",
+    "unsupported": "Tool does not have a documented file-based concept for this kind."
+  },
+  "path_conventions": {
+    "home": "~/ prefix means user home directory.",
+    "separators": "Always forward slashes, even on Windows.",
+    "trailing_slash": "A trailing / indicates a directory that contains matching files.",
+    "globs": "* matches a filename segment; ** matches any number of segments."
+  },
+  "tools": {
+    "claude": {
+      "display_name": "Claude Code",
+      "docs_homepage": "https://code.claude.com/docs/",
+      "scope_notes": "Anthropic's Claude Code CLI. Agents, skills, and instructions are all file-based with clean project/user split.",
+      "kinds": {
+        "instructions": {
+          "project_paths": ["AGENTS.md", "CLAUDE.md", "CLAUDE.local.md"],
+          "user_paths": ["~/.claude/CLAUDE.md"],
+          "file_pattern": "single file",
+          "format": "markdown",
+          "frontmatter": {"required": [], "optional": []},
+          "notes": "Walked up from cwd to repo root. CLAUDE.local.md is for gitignored personal additions.",
+          "confidence": "verified",
+          "sources": ["https://code.claude.com/docs/en/memory"]
+        },
+        "rules": {
+          "project_paths": [],
+          "user_paths": [],
+          "file_pattern": "",
+          "format": "",
+          "frontmatter": {"required": [], "optional": []},
+          "notes": "Claude Code does not have a separate rules concept distinct from instructions (CLAUDE.md/AGENTS.md). Path-specific guidance lives inline using CLAUDE.md's path-specific rules syntax.",
+          "confidence": "unsupported",
+          "sources": ["https://code.claude.com/docs/en/memory"]
+        },
+        "agents": {
+          "project_paths": [".claude/agents/"],
+          "user_paths": ["~/.claude/agents/"],
+          "file_pattern": "*.md (recursive subdirs allowed)",
+          "format": "markdown",
+          "frontmatter": {"required": ["name", "description"], "optional": ["tools", "model", "permissionMode", "mcpServers", "hooks", "color", "skills"]},
+          "notes": "Scanned recursively. Identity comes from the `name` frontmatter field, not the file path. Same-name collisions in same scope: one wins silently. Precedence: enterprise > user > project > plugin.",
+          "confidence": "verified",
+          "sources": ["https://code.claude.com/docs/en/sub-agents"]
+        },
+        "skills": {
+          "project_paths": [".claude/skills/<name>/SKILL.md"],
+          "user_paths": ["~/.claude/skills/<name>/SKILL.md"],
+          "file_pattern": "folder containing SKILL.md",
+          "format": "markdown",
+          "frontmatter": {"required": ["description"], "optional": ["name", "when_to_use", "disable-model-invocation", "user-invocable", "allowed-tools", "model", "effort", "context", "agent", "hooks", "paths", "shell"]},
+          "notes": "Folder-per-skill, SKILL.md is the entrypoint. Other files in the folder are supporting assets. .claude/commands/*.md still works as a legacy form (skill takes precedence on name collision). Auto-discovered from parents up to repo root AND from nested .claude/skills/ in subdirectories when files in those dirs are touched.",
+          "confidence": "verified",
+          "sources": ["https://code.claude.com/docs/en/skills"]
+        },
+        "mcp": {
+          "project_paths": [".mcp.json"],
+          "user_paths": ["~/.claude.json"],
+          "file_pattern": "single JSON file",
+          "format": "json",
+          "schema_top_level_key": "mcpServers",
+          "transports": ["stdio", "http", "sse", "ws", "streamable-http"],
+          "frontmatter": {"required": [], "optional": []},
+          "notes": ".mcp.json is designed to be committed (project scope). ~/.claude.json is a multi-purpose Claude Code config file (not MCP-only) that stores user-scope and local-scope MCP servers per-project. Local scope (default for `claude mcp add`) writes to ~/.claude.json under the project's path key. Inline env var expansion supported via ${VAR} with default fallbacks like ${VAR:-.}",
+          "confidence": "verified",
+          "sources": ["https://code.claude.com/docs/en/mcp"]
+        }
+      }
+    },
+    "codex": {
+      "display_name": "OpenAI Codex CLI",
+      "docs_homepage": "https://developers.openai.com/codex/",
+      "scope_notes": "TOML-driven. Codex uses inline tables in config.toml for nearly all customization (MCP, agents/roles, hooks). Very few separate per-kind directories.",
+      "kinds": {
+        "instructions": {
+          "project_paths": ["AGENTS.md"],
+          "user_paths": ["~/.codex/AGENTS.md", "~/.codex/AGENTS.override.md"],
+          "file_pattern": "single file (walked up from cwd to project root)",
+          "format": "markdown",
+          "frontmatter": {"required": [], "optional": []},
+          "notes": "Codex walks from project root to cwd loading every AGENTS.md it finds. Limits via project_doc_max_bytes and project_doc_fallback_filenames in config.toml. ~/.codex/AGENTS.override.md takes precedence over ~/.codex/AGENTS.md at the home level.",
+          "confidence": "verified",
+          "sources": ["https://developers.openai.com/codex/guides/agents-md", "https://developers.openai.com/codex/config-advanced"]
+        },
+        "rules": {
+          "project_paths": [],
+          "user_paths": [],
+          "file_pattern": "",
+          "format": "",
+          "frontmatter": {"required": [], "optional": []},
+          "notes": "No separate rules concept. Use AGENTS.md or inline TOML in config.toml.",
+          "confidence": "unsupported",
+          "sources": ["https://developers.openai.com/codex/config-advanced"]
+        },
+        "agents": {
+          "project_paths": [".codex/config.toml"],
+          "user_paths": ["~/.codex/config.toml"],
+          "file_pattern": "[agents.<name>] inline tables in config.toml",
+          "format": "toml",
+          "frontmatter": {"required": [], "optional": []},
+          "notes": "Codex agents/roles are inline TOML tables, NOT a per-file markdown directory like Claude. config_file in [agents.<name>] can point to a per-role TOML layer (relative paths resolve from the declaring file). There is NO .codex/agents/ directory pattern.",
+          "confidence": "verified",
+          "sources": ["https://developers.openai.com/codex/config-advanced", "https://github.com/openai/codex/blob/main/docs/config.md"]
+        },
+        "skills": {
+          "project_paths": [],
+          "user_paths": [],
+          "file_pattern": "",
+          "format": "",
+          "frontmatter": {"required": [], "optional": []},
+          "notes": "No skills concept.",
+          "confidence": "unsupported",
+          "sources": ["https://developers.openai.com/codex/config-reference"]
+        },
+        "mcp": {
+          "project_paths": [".codex/config.toml"],
+          "user_paths": ["~/.codex/config.toml"],
+          "file_pattern": "[mcp_servers.<id>] inline tables in config.toml",
+          "format": "toml",
+          "schema_top_level_key": "mcp_servers",
+          "transports": ["stdio", "http"],
+          "frontmatter": {"required": [], "optional": []},
+          "notes": "MCP servers are ONLY configured inside config.toml — there is no separate .json or .toml MCP file. csaw's standard file-to-file projection cannot represent this without a templating step. Closest file (most-nested .codex/config.toml) wins on conflict.",
+          "confidence": "verified",
+          "sources": ["https://developers.openai.com/codex/config-advanced"]
+        }
+      }
+    },
+    "cursor": {
+      "display_name": "Cursor",
+      "docs_homepage": "https://cursor.com/docs/",
+      "scope_notes": "Cursor is IDE-focused. Rules and MCP have clean project paths; agents are runtime entities not files; user-scope rules live in app settings, not the filesystem.",
+      "kinds": {
+        "instructions": {
+          "project_paths": ["AGENTS.md"],
+          "user_paths": [],
+          "file_pattern": "single file (nested AGENTS.md in subdirectories also supported, more specific wins)",
+          "format": "markdown",
+          "frontmatter": {"required": [], "optional": []},
+          "notes": "Cursor supports AGENTS.md as an alternative to .cursor/rules for straightforward use cases. No user-scope filesystem path for instructions.",
+          "confidence": "verified",
+          "sources": ["https://cursor.com/docs/rules"]
+        },
+        "rules": {
+          "project_paths": [".cursor/rules/"],
+          "user_paths": [],
+          "file_pattern": "*.md or *.mdc",
+          "format": "markdown (mdc adds frontmatter for description and globs)",
+          "frontmatter": {"required": [], "optional": ["alwaysApply", "description", "globs"]},
+          "notes": "User-scope rules ('User Rules') exist but are stored INSIDE the Cursor app's settings (Settings > Rules > User Rules), NOT in a filesystem path like ~/.cursor/rules/. csaw cannot project user-scope rules.",
+          "confidence": "verified",
+          "sources": ["https://cursor.com/docs/rules", "https://forum.cursor.com/t/where-are-the-global-rules-saved-in-my-filesystem/76645"]
+        },
+        "agents": {
+          "project_paths": [],
+          "user_paths": [],
+          "file_pattern": "",
+          "format": "",
+          "frontmatter": {"required": [], "optional": []},
+          "notes": "Cursor's 'Background Agents' are runtime entities (cloud sessions), NOT file-based agent definitions. There is no .cursor/agents/ directory pattern. .cursor/modes.json exists for committable chat-mode presets but is one JSON file, not a directory of agents.",
+          "confidence": "verified",
+          "sources": ["https://cursor.com/docs/agent/overview", "https://forum.cursor.com/t/per-project-custom-modes/142118"]
+        },
+        "skills": {
+          "project_paths": [".cursor/commands/"],
+          "user_paths": ["~/.cursor/commands/"],
+          "file_pattern": "*.md",
+          "format": "markdown",
+          "frontmatter": {"required": [], "optional": []},
+          "notes": "Cursor 'commands' are the closest analog to Claude Code skills — slash-invoked markdown files. File path becomes the slash command name. Not a folder-per-skill structure like Claude's SKILL.md folders.",
+          "confidence": "verified",
+          "sources": ["https://cursor.com/docs/rules"]
+        },
+        "mcp": {
+          "project_paths": [".cursor/mcp.json"],
+          "user_paths": ["~/.cursor/mcp.json"],
+          "file_pattern": "single JSON file",
+          "format": "json",
+          "schema_top_level_key": "mcpServers",
+          "transports": ["stdio", "sse", "streamable-http"],
+          "frontmatter": {"required": [], "optional": []},
+          "notes": "Both scopes use the same schema and file format.",
+          "confidence": "verified",
+          "sources": ["https://cursor.com/docs/context/mcp"]
+        }
+      }
+    },
+    "opencode": {
+      "display_name": "OpenCode",
+      "docs_homepage": "https://opencode.ai/docs/",
+      "scope_notes": "Open-source CLI with explicit cross-compatibility — reads from .claude/ and .agents/ as fallbacks. Skills/agents are file-based; MCP is nested in opencode.json.",
+      "kinds": {
+        "instructions": {
+          "project_paths": ["AGENTS.md"],
+          "user_paths": ["~/.config/opencode/AGENTS.md"],
+          "file_pattern": "single file",
+          "format": "markdown",
+          "frontmatter": {"required": [], "optional": []},
+          "notes": "Project AGENTS.md at repo root. User-scope at XDG config dir.",
+          "confidence": "verified",
+          "sources": ["https://opencode.ai/docs/rules/"]
+        },
+        "rules": {
+          "project_paths": [],
+          "user_paths": [],
+          "file_pattern": "",
+          "format": "",
+          "frontmatter": {"required": [], "optional": []},
+          "notes": "OpenCode unifies rules under AGENTS.md (instructions). No separate rules directory.",
+          "confidence": "verified",
+          "sources": ["https://opencode.ai/docs/rules/"]
+        },
+        "agents": {
+          "project_paths": [".opencode/agents/"],
+          "user_paths": ["~/.config/opencode/agents/"],
+          "file_pattern": "*.md",
+          "format": "markdown",
+          "frontmatter": {"required": ["description"], "optional": ["mode", "permission", "model", "temperature"]},
+          "notes": "Markdown filename becomes the agent name. mode can be 'subagent' or 'primary'.",
+          "confidence": "verified",
+          "sources": ["https://opencode.ai/docs/agents/"]
+        },
+        "skills": {
+          "project_paths": [".opencode/skills/<name>/SKILL.md", ".claude/skills/<name>/SKILL.md", ".agents/skills/<name>/SKILL.md"],
+          "user_paths": ["~/.config/opencode/skills/<name>/SKILL.md", "~/.claude/skills/<name>/SKILL.md", "~/.agents/skills/<name>/SKILL.md"],
+          "file_pattern": "folder containing SKILL.md",
+          "format": "markdown",
+          "frontmatter": {"required": ["name", "description"], "optional": ["version", "compatibility", "license", "metadata"]},
+          "notes": "OpenCode reads from MULTIPLE paths for skills cross-compatibility, including Claude Code (.claude/skills/) and agent-standard (.agents/skills/) paths. Walks up from cwd to git worktree. csaw's existing projection to .claude/skills/ and .agents/skills/ already serves OpenCode users.",
+          "confidence": "verified",
+          "sources": ["https://opencode.ai/docs/skills/"]
+        },
+        "mcp": {
+          "project_paths": ["opencode.json", "opencode.jsonc"],
+          "user_paths": ["~/.config/opencode/opencode.json"],
+          "file_pattern": "single file with `mcp` key",
+          "format": "json (or jsonc)",
+          "schema_top_level_key": "mcp",
+          "transports": ["stdio (local subprocess)", "http (remote)"],
+          "frontmatter": {"required": [], "optional": []},
+          "notes": "MCP is nested under the `mcp` key in opencode.json — there is no separate MCP-only file. csaw's standard file-to-file projection cannot represent this without templating. ~/.local/share/opencode/mcp-auth.json stores OAuth tokens (data, not config).",
+          "confidence": "verified",
+          "sources": ["https://opencode.ai/docs/mcp-servers/"]
+        }
+      }
+    },
+    "windsurf": {
+      "display_name": "Windsurf (Codeium)",
+      "docs_homepage": "https://docs.windsurf.com/",
+      "scope_notes": "Windsurf's Cascade has workflows (skill-like) but no file-based agents concept. MCP is user-global only — no project-level path documented.",
+      "kinds": {
+        "instructions": {
+          "project_paths": [".windsurf/rules/"],
+          "user_paths": ["~/.codeium/windsurf/memories/global_rules.md"],
+          "file_pattern": "rule files under .windsurf/rules/; single global_rules.md at user scope",
+          "format": "markdown",
+          "frontmatter": {"required": [], "optional": []},
+          "notes": "Global rules edited via Cascade UI ('Manage memories' > 'Edit global rules') but stored at the filesystem path shown. Character limits enforced: 6000/file, 12000 total combined active rules.",
+          "confidence": "documented",
+          "sources": ["https://windsurf.com/university/general-education/intro-rules-memories"]
+        },
+        "rules": {
+          "project_paths": [".windsurf/rules/"],
+          "user_paths": ["~/.codeium/windsurf/memories/global_rules.md"],
+          "file_pattern": "markdown files",
+          "format": "markdown",
+          "frontmatter": {"required": [], "optional": []},
+          "notes": "Same as instructions for Windsurf — the tool doesn't strongly distinguish.",
+          "confidence": "documented",
+          "sources": ["https://windsurf.com/university/general-education/intro-rules-memories"]
+        },
+        "agents": {
+          "project_paths": [],
+          "user_paths": [],
+          "file_pattern": "",
+          "format": "",
+          "frontmatter": {"required": [], "optional": []},
+          "notes": "No file-based agents concept. Cascade itself is the agent; sub-personas not file-defined.",
+          "confidence": "unsupported",
+          "sources": []
+        },
+        "skills": {
+          "project_paths": [".windsurf/workflows/"],
+          "user_paths": ["~/.codeium/windsurf/global_workflows/"],
+          "file_pattern": "*.md",
+          "format": "markdown",
+          "frontmatter": {"required": [], "optional": []},
+          "notes": "Windsurf 'workflows' are the closest analog to skills — invoked by name, contain steps. Discovered from cwd up to git root. Character limit 12000 per workflow.",
+          "confidence": "verified",
+          "sources": ["https://docs.windsurf.com/windsurf/cascade/workflows"]
+        },
+        "mcp": {
+          "project_paths": [],
+          "user_paths": ["~/.codeium/windsurf/mcp_config.json"],
+          "file_pattern": "single JSON file",
+          "format": "json",
+          "schema_top_level_key": "mcpServers",
+          "transports": ["stdio", "http", "sse"],
+          "frontmatter": {"required": [], "optional": []},
+          "notes": "User-scope ONLY. No project-level MCP path documented. csaw cannot project Windsurf MCP into a repo.",
+          "confidence": "verified",
+          "sources": ["https://docs.windsurf.com/windsurf/cascade/mcp"]
+        }
+      }
+    },
+    "vscode-copilot": {
+      "display_name": "GitHub Copilot in VS Code (extension)",
+      "docs_homepage": "https://code.visualstudio.com/docs/copilot/",
+      "scope_notes": "VS Code Copilot reads .github/ files for repo-scope customization. User-scope agents are stored at `~/.copilot/agents/`, SHARED with GitHub Copilot CLI — the two surfaces are converging on a unified user-scope config directory. Many customization kinds (prompts, agents, MCP) have a fixed file-suffix requirement.",
+      "kinds": {
+        "instructions": {
+          "project_paths": [".github/copilot-instructions.md", "AGENTS.md", "CLAUDE.md", ".claude/CLAUDE.md", "CLAUDE.local.md"],
+          "user_paths": [],
+          "file_pattern": "single files at workspace root (AGENTS.md/CLAUDE.md can also nest, experimental)",
+          "format": "markdown (optional YAML frontmatter)",
+          "frontmatter": {"required": [], "optional": ["paths"]},
+          "notes": ".github/copilot-instructions.md is the canonical Copilot path. AGENTS.md and CLAUDE.md are also read (multi-tool compatibility). No documented user-scope filesystem path for instructions (lives in VS Code profile settings).",
+          "confidence": "verified",
+          "sources": ["https://code.visualstudio.com/docs/copilot/customization/custom-instructions"]
+        },
+        "rules": {
+          "project_paths": [".github/instructions/"],
+          "user_paths": [],
+          "file_pattern": "*.instructions.md (suffix mandatory)",
+          "format": "markdown with YAML frontmatter",
+          "frontmatter": {"required": ["applyTo"], "optional": ["name", "description"]},
+          "notes": "Path-specific rules — Copilot's equivalent of csaw's 'rules' kind. applyTo frontmatter is a glob pattern. Files searched recursively under .github/instructions/. The .instructions.md suffix is required for recognition.",
+          "confidence": "verified",
+          "sources": ["https://code.visualstudio.com/docs/copilot/customization/custom-instructions"]
+        },
+        "agents": {
+          "project_paths": [".github/agents/", ".claude/agents/"],
+          "user_paths": ["~/.copilot/agents/"],
+          "file_pattern": "*.agent.md (suffix mandatory)",
+          "format": "markdown with optional YAML frontmatter",
+          "frontmatter": {"required": [], "optional": ["name", "description", "tools", "model"]},
+          "notes": "VS Code Copilot custom agents. The `.agent.md` suffix is MANDATORY for recognition. ALSO reads from `.claude/agents/` for Claude-compatible format (cross-tool). User-scope at `~/.copilot/agents/` is SHARED with GitHub Copilot CLI — VS Code Copilot and Copilot CLI are converging on a unified user-scope config surface. The old `.chatmode.md` files are deprecated and should be renamed to `.agent.md`.",
+          "confidence": "verified",
+          "sources": ["https://code.visualstudio.com/docs/copilot/customization/custom-agents", "https://code.visualstudio.com/docs/copilot/customization/custom-chat-modes"]
+        },
+        "skills": {
+          "project_paths": [".github/prompts/"],
+          "user_paths": [],
+          "file_pattern": "*.prompt.md (suffix mandatory)",
+          "format": "markdown with optional YAML frontmatter",
+          "frontmatter": {"required": [], "optional": ["description", "name", "argument-hint", "agent", "model", "tools"]},
+          "notes": "VS Code Copilot 'prompt files' are reusable prompt templates invoked via `#prompt:` in chat. Closest analog to Claude skills but single-file, not folder-per-skill. The `.prompt.md` suffix is MANDATORY. Locations are configurable via `chat.promptFilesLocations` setting. No documented user-scope filesystem path (user prompts live in VS Code profile data). NOTE: '.chatmode.md' files in `.github/chatmodes/` have been DEPRECATED in favor of custom agents (.agent.md) — chat modes are no longer a separate concept.",
+          "confidence": "verified",
+          "sources": ["https://code.visualstudio.com/docs/copilot/customization/prompt-files", "https://code.visualstudio.com/docs/copilot/customization/custom-chat-modes"]
+        },
+        "mcp": {
+          "project_paths": [".vscode/mcp.json"],
+          "user_paths": [],
+          "file_pattern": "single JSON file (user-scope via UI command, no fixed filesystem path documented)",
+          "format": "json",
+          "schema_top_level_key": "servers",
+          "transports": ["stdio", "http"],
+          "frontmatter": {"required": [], "optional": []},
+          "notes": ".vscode/mcp.json is VS Code's NATIVE MCP client config (independent of Copilot but consumed by Copilot Chat Agent Mode). Top-level key is `servers`, NOT `mcpServers` like Claude/Cursor. User-scope MCP is accessed via the `MCP: Open User Configuration` command — the file lives in the VS Code profile folder but the docs don't expose a fixed path. macOS/Linux stdio servers support sandboxing via `sandboxEnabled: true`.",
+          "confidence": "verified",
+          "sources": ["https://code.visualstudio.com/docs/copilot/customization/mcp-servers"]
+        }
+      }
+    },
+    "copilot-cli": {
+      "display_name": "GitHub Copilot CLI",
+      "docs_homepage": "https://docs.github.com/en/copilot/reference/copilot-cli-reference/",
+      "scope_notes": "Distinct from `gh copilot` shell helper. Shares the `~/.copilot/` user-scope directory with the VS Code Copilot extension (notably `~/.copilot/agents/`) — the two are converging on a unified Copilot config surface. **There is no native repo-level general config or MCP config**; the only documented repo-level file is `.github/lsp.json` for LSP servers. Earlier claims about `.github/copilot/settings.json` for general config were based on a community workaround, not official docs.",
+      "kinds": {
+        "instructions": {
+          "project_paths": [".github/copilot-instructions.md", "AGENTS.md"],
+          "user_paths": ["~/.copilot/copilot-instructions.md"],
+          "file_pattern": "single file",
+          "format": "markdown",
+          "frontmatter": {"required": [], "optional": []},
+          "notes": "User-scope copilot-instructions.md applies to all sessions across all projects.",
+          "confidence": "verified",
+          "sources": ["https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-config-dir-reference"]
+        },
+        "rules": {
+          "project_paths": [],
+          "user_paths": ["~/.copilot/instructions/"],
+          "file_pattern": "*.instructions.md (suffix mandatory)",
+          "format": "markdown with YAML frontmatter",
+          "frontmatter": {"required": ["applyTo"], "optional": ["name", "description"]},
+          "notes": "User-scope path-specific instructions. No documented repo-level path for Copilot CLI's general configuration (though VS Code Copilot reads .github/instructions/).",
+          "confidence": "verified",
+          "sources": ["https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-config-dir-reference"]
+        },
+        "agents": {
+          "project_paths": [],
+          "user_paths": ["~/.copilot/agents/"],
+          "file_pattern": "*.agent.md (suffix mandatory)",
+          "format": "markdown with YAML frontmatter",
+          "frontmatter": {"required": [], "optional": ["name", "description", "tools", "model"]},
+          "notes": "User-scope agent definitions. This SAME directory (`~/.copilot/agents/`) is also read by VS Code Copilot — the two surfaces share user-scope agents storage. No native repo-level agents path for Copilot CLI itself.",
+          "confidence": "verified",
+          "sources": ["https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-config-dir-reference", "https://code.visualstudio.com/docs/copilot/customization/custom-agents"]
+        },
+        "skills": {
+          "project_paths": [],
+          "user_paths": ["~/.copilot/skills/<name>/SKILL.md"],
+          "file_pattern": "folder containing SKILL.md",
+          "format": "markdown",
+          "frontmatter": {"required": ["description"], "optional": []},
+          "notes": "User-scope skills only (folder-per-skill, Claude-compatible format).",
+          "confidence": "documented",
+          "sources": ["https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-config-dir-reference"]
+        },
+        "mcp": {
+          "project_paths": [],
+          "user_paths": ["~/.copilot/mcp-config.json"],
+          "file_pattern": "single JSON file (user-scope only)",
+          "format": "json",
+          "schema_top_level_key": "mcpServers (inferred; not explicitly documented in fetched pages)",
+          "transports": ["stdio", "http"],
+          "frontmatter": {"required": [], "optional": []},
+          "notes": "User-scope MCP only — Copilot CLI has NO native repo-level MCP config path. The DEV-community workaround using `.github/copilot/settings.json` or `.copilot/mcp-config.json` is not officially supported (relies on XDG_CONFIG_HOME override or similar tricks). For repo-level MCP, users would need to share `~/.copilot/mcp-config.json` content via documentation rather than a committed file.",
+          "confidence": "verified",
+          "sources": ["https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-config-dir-reference", "https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/configure-copilot-cli"]
+        }
+      }
+    },
+    "gemini": {
+      "display_name": "Gemini CLI",
+      "docs_homepage": "https://geminicli.com/docs/",
+      "scope_notes": "Google's Gemini CLI. Settings/MCP in a single JSON file per scope. Subagents and slash commands are file-based.",
+      "kinds": {
+        "instructions": {
+          "project_paths": ["GEMINI.md", "AGENTS.md"],
+          "user_paths": ["~/.gemini/GEMINI.md"],
+          "file_pattern": "single file at project root",
+          "format": "markdown",
+          "frontmatter": {"required": [], "optional": []},
+          "notes": "GEMINI.md is canonical; AGENTS.md is also read (multi-tool compatibility).",
+          "confidence": "inferred",
+          "sources": ["https://github.com/google-gemini/gemini-cli/blob/main/docs/cli/configuration.md"]
+        },
+        "rules": {
+          "project_paths": [],
+          "user_paths": [],
+          "file_pattern": "",
+          "format": "",
+          "frontmatter": {"required": [], "optional": []},
+          "notes": "No separate rules concept. Use GEMINI.md or settings.json contextFileName.",
+          "confidence": "unsupported",
+          "sources": []
+        },
+        "agents": {
+          "project_paths": [".gemini/agents/"],
+          "user_paths": ["~/.gemini/agents/"],
+          "file_pattern": "*.md",
+          "format": "markdown with YAML frontmatter",
+          "frontmatter": {"required": ["name", "description"], "optional": ["tools", "model"]},
+          "notes": "Gemini CLI subagents (GA in 2026). Built-in subagents: generalist, cli_help, codebase_investigator. Tools wildcard supported (e.g., mcp_* for all MCP tools).",
+          "confidence": "verified",
+          "sources": ["https://geminicli.com/docs/core/subagents/", "https://github.com/google-gemini/gemini-cli/blob/main/docs/core/subagents.md"]
+        },
+        "skills": {
+          "project_paths": [".gemini/commands/"],
+          "user_paths": ["~/.gemini/commands/"],
+          "file_pattern": "*.toml (recursive subdirs become namespaced commands with `:`)",
+          "format": "toml",
+          "frontmatter": {"required": ["prompt"], "optional": ["description"]},
+          "notes": "Gemini 'custom commands' are the closest analog to Claude skills — slash-invoked. TOML format, NOT markdown like Claude. Subdirectories become namespaced (e.g., commands/git/commit.toml → /git:commit).",
+          "confidence": "verified",
+          "sources": ["https://geminicli.com/docs/cli/custom-commands/"]
+        },
+        "mcp": {
+          "project_paths": [".gemini/settings.json"],
+          "user_paths": ["~/.gemini/settings.json"],
+          "file_pattern": "single JSON file with mcpServers key",
+          "format": "json",
+          "schema_top_level_key": "mcpServers",
+          "transports": ["stdio", "sse"],
+          "frontmatter": {"required": [], "optional": []},
+          "notes": "MCP is nested under the top-level mcpServers object in settings.json — there is no separate MCP-only file. csaw's standard file-to-file projection cannot represent this without templating. ~/.gemini/mcp-oauth-tokens.json and ~/.gemini/mcp-server-enablement.json are state files, not config.",
+          "confidence": "verified",
+          "sources": ["https://geminicli.com/docs/tools/mcp-server/", "https://github.com/google-gemini/gemini-cli/blob/main/docs/tools/mcp-server.md"]
+        }
+      }
+    }
+  },
+  "cross_tool_patterns": {
+    "agents_md_universal": {
+      "description": "AGENTS.md at the project root is read by: Claude Code (sort of — as memory), Codex CLI, Cursor, OpenCode, VS Code Copilot, Copilot CLI, Gemini CLI. This is becoming the de facto cross-tool instructions standard.",
+      "csaw_impact": "csaw's existing instructions kind (mounting AGENTS.md to project root) is correctly multi-tool by virtue of this convention."
+    },
+    "claude_compatible_skill_paths": {
+      "description": "OpenCode (and likely future tools) intentionally read from .claude/skills/ and ~/.claude/skills/ for cross-compatibility. The .agents/skills/ path is a multi-tool fallback already used by csaw.",
+      "csaw_impact": "csaw's existing skill projection to tool-specific paths PLUS the .agents/ fallback already serves OpenCode and any future Claude-compatible tool. No code change needed for cross-tool skills."
+    },
+    "mcp_schema_divergence": {
+      "description": "MCP top-level key differs across tools: `mcpServers` (Claude, Cursor, Windsurf, Copilot CLI, Gemini), `servers` (VS Code's native MCP), `mcp` (OpenCode nested in opencode.json), `mcp_servers` (Codex TOML).",
+      "csaw_impact": "csaw cannot reliably symlink one MCP file across tools — schemas differ. Per-tool registry files (mcp/claude-code.json, mcp/cursor.json) projected to per-tool paths is the right model. Tools that nest MCP inside multi-purpose config files (OpenCode, Gemini, Codex) cannot be served by file-to-file symlinking — they'd need a generator/templater."
+    },
+    "no_user_scope_filesystem": {
+      "description": "Cursor user rules and VS Code Copilot user instructions live INSIDE app settings, not the filesystem.",
+      "csaw_impact": "csaw is fundamentally a filesystem projection tool — it can only manage things that live as files. User-scope for these two tools is out of scope."
+    },
+    "github_copilot_convergence": {
+      "description": "VS Code Copilot extension and GitHub Copilot CLI share a user-scope config directory at `~/.copilot/`. Most notably they share `~/.copilot/agents/` for custom agents — an agent defined there is visible in BOTH surfaces. They are converging into a unified Copilot config surface.",
+      "csaw_impact": "When csaw eventually supports the Copilot tooling, it should likely target a SINGLE `copilot` tool entry (not separate vscode-copilot and copilot-cli), with project projection to `.github/` and user projection to `~/.copilot/`. Treating them as two separate tools today is technically accurate but will look wrong as the surfaces continue to merge."
+    },
+    "chatmodes_merged_into_agents": {
+      "description": "VS Code Copilot's old `.chatmode.md` files have been deprecated and merged into custom agents (`.agent.md`). Docs explicitly recommend renaming chatmodes to agents for continued compatibility.",
+      "csaw_impact": "csaw should not plan separate projection for chatmodes — when VS Code Copilot is eventually supported, agents projection covers both."
+    }
+  },
+  "csaw_projection_audit": {
+    "description": "Comparison between csaw's ToolRegistry/KnownMCPTargets and the verified truth above. Status reflects decisions and code state as of this file's updated_at date.",
+    "resolved": [
+      {
+        "tool": "codex",
+        "kind": "agents",
+        "resolution": "Dropped AgentsSubdir from codex in ToolRegistry. Codex agents are TOML inline tables in config.toml and cannot be projected as files. Documented above."
+      },
+      {
+        "tool": "cursor",
+        "kind": "agents",
+        "resolution": "Dropped AgentsSubdir from cursor in ToolRegistry. Cursor agents are runtime Background Agents, not file-based."
+      },
+      {
+        "tool": "opencode",
+        "kind": "agents",
+        "resolution": "Added AgentsSubdir: \"agents\" to opencode in ToolRegistry. .opencode/agents/*.md is now projected."
+      },
+      {
+        "tool": "gemini",
+        "kind": "agents",
+        "resolution": "Added gemini to ToolRegistry with Dir: \".gemini\", AgentsSubdir: \"agents\". .gemini/agents/*.md is now projected."
+      }
+    ],
+    "out_of_scope_with_current_model": [
+      {
+        "tool": "codex",
+        "kind": "mcp",
+        "reason": "MCP lives inline in config.toml under [mcp_servers.*] tables. Not file-projectable with csaw's symlink model. Would require a templater/generator."
+      },
+      {
+        "tool": "opencode",
+        "kind": "mcp",
+        "reason": "MCP nested under `mcp` key in opencode.json. Same problem as Codex — nested-in-multi-purpose-file isn't symlinkable."
+      },
+      {
+        "tool": "gemini",
+        "kind": "mcp",
+        "reason": "MCP nested under `mcpServers` in .gemini/settings.json. Same nested-in-settings problem."
+      },
+      {
+        "tool": "gemini",
+        "kind": "skills",
+        "reason": ".gemini/commands/*.toml are TOML slash commands, not markdown SKILL.md. Different concept; csaw's skill projection is markdown-folder-based."
+      },
+      {
+        "tool": "windsurf",
+        "kind": "mcp",
+        "reason": "User-global only at ~/.codeium/windsurf/mcp_config.json. No project-level path documented. csaw is project-scoped by design — user-global is intentionally out of scope."
+      },
+      {
+        "tool": "windsurf",
+        "kind": "skills",
+        "reason": "Windsurf has workflows (.windsurf/workflows/*.md) which are skill-like but the directory name is intentionally different. Adding requires deciding whether csaw maps the SKILL.md folder pattern onto Windsurf's workflow file pattern (different structure)."
+      }
+    ],
+    "deferred": [
+      {
+        "tool": "vscode-copilot",
+        "kind": "all",
+        "decision_date": "2026-05-24",
+        "reason": "Three structural mismatches with csaw's current ToolDir model: (1) Copilot requires file SUFFIXES per kind (.agent.md, .instructions.md, .prompt.md) — csaw's projection passes basenames through unchanged; (2) `.github/copilot-instructions.md` is a single file at .github/ root, not under a subdir — doesn't fit the Dir+Subdir model; (3) `.github/` is git-tracked by convention so users want files COMMITTED — csaw's default `.git/info/exclude` hiding is the wrong default. Resolution: defer as a focused epic that designs file-suffix support, single-file instruction targets, and per-tool git-visibility together. csaw STILL serves VS Code Copilot via the universal AGENTS.md convention. NOTE: the future epic should likely create a single `copilot` tool entry rather than separate vscode-copilot / copilot-cli entries, because the two surfaces share `~/.copilot/agents/` for user-scope agents and are converging (see `cross_tool_patterns.github_copilot_convergence`)."
+      },
+      {
+        "tool": "copilot-cli",
+        "kind": "all",
+        "decision_date": "2026-05-24",
+        "reason": "Mostly user-scope (~/.copilot/) which is out of csaw's project-scoped model. No native repo-level config of any kind (only .github/lsp.json for LSP). Limited csaw value relative to refactor cost. Should be folded into the unified `copilot` tool entry when VS Code Copilot is added — see `cross_tool_patterns.github_copilot_convergence`."
+      }
+    ]
+  }
+}
