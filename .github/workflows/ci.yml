@@ -40,3 +40,13 @@ jobs:
       - name: Validate docs
         shell: bash
         run: ./scripts/check_docs.sh
+
+      - name: Verify generated docs are up to date
+        shell: bash
+        run: |
+          go generate ./internal/mount/...
+          if ! git diff --quiet -- docs/reference/tool-projection.md; then
+            echo "::error::docs/reference/tool-projection.md is out of date. Run: go generate ./internal/mount/..."
+            git diff -- docs/reference/tool-projection.md
+            exit 1
+          fi

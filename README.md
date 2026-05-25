@@ -254,15 +254,19 @@ The full scenario-based walkthrough lives in [docs/walkthrough.md](docs/walkthro
 
 ## The Kinds
 
-csaw treats AI workspace artifacts as five distinct kinds, each with its own conventions and projection target:
+csaw treats AI workspace artifacts as seven distinct kinds, each with its own conventions and projection target:
 
 | Kind | Registry path | Projects to | When loaded |
 |---|---|---|---|
-| **Instructions** | `AGENTS.md`, `CLAUDE.md` | Project root | Every turn — always in context |
+| **Instructions** | `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.goosehints` | Project root | Every turn — always in context |
 | **Rules** | `rules/*.md` | `.claude/rules/`, `.cursor/rules/`, `.amazonq/rules/`, `.kiro/steering/`, `.codebuddy/rules/`, `.windsurf/rules/` | Every turn — always-on coding standards |
 | **Agents** | `agents/*.md` | `.claude/agents/`, `.opencode/agents/`, `.kiro/agents/`, `.codebuddy/agents/`, `.openhands/microagents/` | When invoked — specialized subagent personas |
 | **Skills** | `skills/*/SKILL.md` | `.claude/skills/`, `.opencode/skills/`, `.agents/skills/` (Antigravity + fallback), `.codex/skills/` | When relevant — on-demand procedural workflows |
 | **MCP** | `mcp/*.json` | `.mcp.json`, `.cursor/mcp.json`, `.vscode/mcp.json` | Session start — tool/data connectivity |
+| **Hooks** | `hooks/*` | `.claude/hooks/`, `.kiro/hooks/` | Tool lifecycle events |
+| **Ignore** | `ignore/*` | `.cursorignore`, `.cody/ignore`, `.aiderignore`, `.tongyiignore` | Always — context exclusion |
+
+> csaw does **not** project `settings` (they contain API keys/credentials) or `memory` (session-state, user-private). See [`docs/planning/projection-roadmap.md`](docs/planning/projection-roadmap.md).
 
 **Agents vs skills.** Both are spawnable, both are markdown with frontmatter. The distinction: an *agent* defines a persona (a subagent with its own tools, scope, and prompt — Claude's `.claude/agents/code-reviewer.md`); a *skill* defines a procedure (a step-by-step workflow loaded only when relevant). Use agents when you want a specialist to take over for a focused task; use skills when you want guidance the main agent can pull in mid-task.
 

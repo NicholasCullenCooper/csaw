@@ -127,11 +127,13 @@ csaw update                             # repair broken links
 
 | Kind | Registry path | Projects to |
 |---|---|---|
-| Instructions | `AGENTS.md`, `CLAUDE.md` | Project root |
+| Instructions | `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.goosehints` | Project root |
 | Rules | `rules/*.md` | `.claude/rules/`, `.cursor/rules/`, `.amazonq/rules/`, `.kiro/steering/`, `.codebuddy/rules/`, `.windsurf/rules/` |
 | Agents | `agents/*.md` | `.claude/agents/`, `.opencode/agents/`, `.kiro/agents/`, `.codebuddy/agents/`, `.openhands/microagents/` |
 | Skills | `skills/*/SKILL.md` | `.claude/skills/`, `.opencode/skills/`, `.codex/skills/`, `.agents/skills/` |
 | MCP | `mcp/*.json` | `.mcp.json`, `.cursor/mcp.json`, `.vscode/mcp.json` |
+| Hooks | `hooks/*` | `.claude/hooks/`, `.kiro/hooks/` |
+| Ignore | `ignore/*` | `.cursorignore`, `.cody/ignore`, `.aiderignore`, `.tongyiignore` |
 
 `.agents/skills/` is always created as a fallback. Other tool directories are used only if they already exist in the project or are configured via `csaw config set tools claude,cursor`.
 
@@ -195,7 +197,7 @@ my-registry/
 
 **Promote** — Move a skill from `skills/experimental/` to `skills/` in a source so it mounts by default.
 
-**Kinds** — csaw classifies registry files as one of five kinds: instructions, rules, agents, skills, mcp. Each has its own projection target. Filter with `csaw use team/backend --kind agents,skills`.
+**Kinds** — csaw classifies registry files as one of seven kinds: instructions, rules, agents, skills, mcp, hooks, ignore. Each has its own projection target. Filter with `csaw use team/backend --kind agents,skills`. csaw does **not** project settings (credentials) or memory (session state); see `docs/planning/projection-roadmap.md`.
 
 **Tool directories** — Each kind projects into the right per-tool directory (`.claude/agents/`, `.cursor/rules/`, etc.) where AI tools discover files natively.
 

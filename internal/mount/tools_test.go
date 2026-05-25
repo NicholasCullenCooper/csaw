@@ -13,12 +13,19 @@ func TestKindOfRegistryPaths(t *testing.T) {
 	}{
 		{"AGENTS.md", KindInstruction},
 		{"CLAUDE.md", KindInstruction},
+		{"GEMINI.md", KindInstruction},
+		{"QWEN.md", KindInstruction},
+		{".goosehints", KindInstruction},
 		{"agents/code-reviewer.md", KindAgent},
 		{"agents/planner.md", KindAgent},
 		{"skills/code-review/SKILL.md", KindSkill},
 		{"skills/experimental/foo/SKILL.md", KindSkill},
 		{"rules/go-conventions.md", KindRule},
 		{"mcp/claude-code.json", KindMCP},
+		{"hooks/pre-commit.sh", KindHook},
+		{"hooks/on-save.json", KindHook},
+		{"ignore/cursor", KindIgnore},
+		{"ignore/cody", KindIgnore},
 		{"unknown/random.txt", KindOther},
 	}
 	for _, tc := range tests {
@@ -58,6 +65,14 @@ func TestKindOfProjectPath(t *testing.T) {
 		{".mcp.json", KindMCP},
 		{".cursor/mcp.json", KindMCP},
 		{".vscode/mcp.json", KindMCP},
+		{".claude/hooks/pre-commit.sh", KindHook},
+		{".kiro/hooks/on-save.json", KindHook},
+		{".cursorignore", KindIgnore},
+		{".cody/ignore", KindIgnore},
+		{".aiderignore", KindIgnore},
+		{".tongyiignore", KindIgnore},
+		{"GEMINI.md", KindInstruction},
+		{".goosehints", KindInstruction},
 		{"random/path.txt", KindOther},
 	}
 	for _, tc := range tests {
@@ -274,6 +289,56 @@ func TestScanAdoptableFilesEmpty(t *testing.T) {
 	files := ScanAdoptableFiles(dir)
 	if len(files) != 0 {
 		t.Fatalf("expected 0 adoptable files, got %d", len(files))
+	}
+}
+
+func TestExpandIgnoreTargetsProjectsToToolPaths(t *testing.T) {
+	entries := []SourceEntry{
+		{SourceName: "reg", RelativePath: "ignore/cursor", FullPath: "/r/ignore/cursor"},
+		{SourceName: "reg", RelativePath: "ignore/cody", FullPath: "/r/ignore/cody"},
+		{SourceName: "reg", RelativePath: "ignore/aider", FullPath: "/r/ignore/aider"},
+		{SourceName: "reg", RelativePath: "ignore/lingma", FullPath: "/r/ignore/lingma"},
+		{SourceName: "reg", RelativePath: "ignore/unknown-tool", FullPath: "/r/ignore/unknown-tool"},
+	}
+
+	expanded := expandIgnoreTargets(entries)
+	paths := make(map[string]bool)
+	for _, e := range expanded {
+		paths[e.RelativePath] = true
+	}
+
+	for _, path := range []string{".cursorignore", ".cody/ignore", ".aiderignore", ".tongyiignore"} {
+		if !paths[path] {
+			t.Errorf("expected ignore projection %q not found", path)
+		}
+	}
+	// Unknown ignore filename should pass through at original path
+	if !paths["ignore/unknown-tool"] {
+		t.Error("unknown ignore file should pass through at original path")
+	}
+}
+
+func TestExpandToolTargetsProjectsHooks(t *testing.T) {
+	toolDirs := []ToolDir{
+		{Dir: ".claude", HooksSubdir: "hooks"},
+		{Dir: ".kiro", HooksSubdir: "hooks"},
+	}
+	entries := []SourceEntry{
+		{SourceName: "reg", RelativePath: "hooks/pre-commit.sh", FullPath: "/r/hooks/pre-commit.sh"},
+	}
+	expanded := ExpandToolTargets(entries, toolDirs)
+	paths := make(map[string]bool)
+	for _, e := range expanded {
+		paths[e.RelativePath] = true
+	}
+	for _, path := range []string{".claude/hooks/pre-commit.sh", ".kiro/hooks/pre-commit.sh"} {
+		if !paths[path] {
+			t.Errorf("expected hook projection %q not found", path)
+		}
+	}
+	// Hook entries should NOT remain at original registry path when projected
+	if paths["hooks/pre-commit.sh"] {
+		t.Error("hook entry should not remain at original path when tools have HooksSubdir")
 	}
 }
 

@@ -1,7 +1,7 @@
 {
-  "$schema_version": 6,
+  "$schema_version": 7,
   "updated_at": "2026-05-24",
-  "scope_notes": "Projection map for AI coding tools csaw projects config into. Drives ToolRegistry, README claims, and audit decisions. Tool entries list project + user filesystem paths per kind; the audit section tracks which tools csaw currently projects to vs. recommended additions.",
+  "scope_notes": "Per-tool projection map: filesystem paths each AI coding tool reads, by kind, at project and user scope. Source of truth for csaw's ToolRegistry (tools with csaw_in_code: true). Planning/roadmap content (recommended additions, deferred tools, deprecation timelines) lives in docs/planning/projection-roadmap.md.",
   "confidence_legend": {
     "verified": "Read directly from official tool docs.",
     "documented": "Official docs mention but with caveats.",
@@ -14,75 +14,16 @@
     "trailing_slash": "A trailing / indicates a directory.",
     "globs": "* matches a filename segment; ** matches any number of segments; <name> is a placeholder."
   },
-  "csaw_relevance_legend": {
-    "in-code": "Currently in csaw's ToolRegistry.",
-    "served-by-proxy": "csaw already serves this tool by projecting files the tool reads from another tool's paths (e.g., Hermes reads .cursor/rules/, csaw projects .cursor/rules/). No direct entry needed.",
-    "recommended-add": "Clean file-based projection that fits csaw's current model.",
-    "consider": "File-based projection with structural mismatches (suffixes, single-file targets, git-visibility).",
-    "watch": "Emerging or limited filesystem story.",
-    "out-of-scope": "Doesn't fit csaw's file-projection model.",
-    "deprecated": "Tool being sunset; kept for history."
-  },
   "kinds_definitions": {
-    "instructions": "Always-on project guidance. AGENTS.md, CLAUDE.md, GEMINI.md, .hermes.md.",
-    "rules": "Always-on coding/style rules.",
-    "agents": "Subagent / persona / mode definitions.",
-    "skills": "On-demand procedural workflows (SKILL.md folders, slash commands, prompts, recipes).",
-    "mcp": "MCP server configs. Per-tool schema varies widely.",
-    "hooks": "Lifecycle scripts triggered by tool events.",
-    "memory": "Persistent context across sessions.",
-    "ignore": "Context exclusion patterns (.cody/ignore, .cursorignore, .tongyiignore).",
-    "settings": "General tool config that may contain multiple kinds."
-  },
-  "universal_paths": {
-    "description": "Paths read by MULTIPLE tools. Projecting these gives csaw cross-tool leverage.",
-    "paths": {
-      "AGENTS.md": {
-        "description": "De facto cross-tool instructions standard (AAIF / Linux Foundation). 60K+ repos.",
-        "read_by": ["claude (fallback)", "codex", "cursor", "opencode", "windsurf", "vscode-copilot", "copilot-cli", "antigravity", "kiro", "trae", "cline", "roo-code", "continue", "augment", "codebuddy", "qwen", "kilo-code", "amp", "zed", "openhands", "goose", "pi", "hermes", "claw-code", "devin", "openclaw", "plandex", "amazon-q", "factory", "lingma"],
-        "csaw_status": "Already projected. Maximum reach."
-      },
-      "CLAUDE.md": {
-        "description": "Claude Code's instructions. Multi-tool fallback for Claude-compatibility.",
-        "read_by": ["claude", "vscode-copilot", "kilo-code", "amp", "claw-code", "hermes", "augment", "pi"],
-        "csaw_status": "Already projected."
-      },
-      ".claude/skills/<name>/SKILL.md": {
-        "description": "agentskills.io open standard. 1000+ skills.",
-        "read_by": ["claude", "opencode", "kilo-code", "claw-code", "vscode-copilot (fallback)", "hermes (agentskills.io)"],
-        "csaw_status": "Already projected."
-      },
-      ".claude/agents/": {
-        "description": "Claude Code's agent definitions. Cross-read by VS Code Copilot.",
-        "read_by": ["claude", "vscode-copilot (fallback)", "claw-code"],
-        "csaw_status": "Already projected."
-      },
-      ".agents/skills/<name>/SKILL.md": {
-        "description": "Antigravity's primary skill path. csaw's StandardFallback.",
-        "read_by": ["antigravity", "opencode (fallback)", "kilo-code (fallback)", "hermes (external_dirs)"],
-        "csaw_status": "Already StandardFallback. Serves Antigravity automatically."
-      },
-      ".cursor/rules/*.mdc": {
-        "description": "Cursor's modern rules.",
-        "read_by": ["cursor", "hermes"],
-        "csaw_status": "Already projected via cursor tool."
-      },
-      ".cursorrules": {
-        "description": "Cursor's legacy single-file rules. Hermes also reads.",
-        "read_by": ["cursor", "hermes"],
-        "csaw_status": "Not currently projected."
-      },
-      "~/.copilot/agents/": {
-        "description": "User-scope Copilot agents — SHARED by VS Code Copilot AND Copilot CLI.",
-        "read_by": ["vscode-copilot", "copilot-cli"],
-        "csaw_status": "Convergence point. Treat as one tool when Copilot epic happens."
-      },
-      "AGENT.md": {
-        "description": "Singular form of AGENTS.md.",
-        "read_by": ["amp", "kilo-code"],
-        "csaw_status": "Not currently projected."
-      }
-    }
+    "instructions": "Always-on project guidance. AGENTS.md, CLAUDE.md, GEMINI.md, .hermes.md, .goosehints. [csaw projects: YES]",
+    "rules": "Always-on coding/style rules. [csaw projects: YES]",
+    "agents": "Subagent / persona / mode definitions. [csaw projects: YES]",
+    "skills": "On-demand procedural workflows (SKILL.md folders, slash commands, prompts, recipes). [csaw projects: YES]",
+    "mcp": "MCP server configs. Per-tool schema varies widely. [csaw projects: YES (via per-tool registry files)]",
+    "hooks": "Lifecycle scripts triggered by tool events. [csaw projects: YES \u2014 planned v0.6.0]",
+    "ignore": "Context exclusion patterns (.cody/ignore, .cursorignore, .tongyiignore). [csaw projects: YES \u2014 planned v0.6.0]",
+    "memory": "Persistent context across sessions. [csaw projects: NEVER for now \u2014 most memory is session state or user-private. Revisit if a portable memory standard emerges.]",
+    "settings": "General tool config that may contain multiple kinds. [csaw projects: NEVER \u2014 settings files contain API keys and personal credentials; mounting them to a team source would leak secrets. Documented as reference only.]"
   },
   "tools": {
     "claude": {
@@ -90,18 +31,152 @@
       "docs_homepage": "https://code.claude.com/docs/",
       "category": "native-cli",
       "status": "active",
-      "csaw_relevance": "in-code",
+      "csaw_in_code": true,
       "scope_notes": "Anthropic's official CLI. Originator of .claude/agents/ and SKILL.md folder patterns (now agentskills.io open standard).",
       "kinds": {
-        "instructions": {"project_paths": ["AGENTS.md", "CLAUDE.md", "CLAUDE.local.md"], "user_paths": ["~/.claude/CLAUDE.md"], "format": "markdown", "notes": "CLAUDE.local.md is gitignored personal additions.", "confidence": "verified", "sources": ["https://code.claude.com/docs/en/memory"]},
-        "rules": {"confidence": "unsupported", "notes": "No separate rules concept. Path-specific rules live in CLAUDE.md."},
-        "agents": {"project_paths": [".claude/agents/"], "user_paths": ["~/.claude/agents/"], "format": "markdown", "file_pattern": "*.md (recursive)", "frontmatter_required": ["name", "description"], "frontmatter_optional": ["tools", "model", "permissionMode", "mcpServers", "hooks", "color", "skills", "isolation"], "notes": "Identity from `name` not path. Precedence: enterprise > user > project > plugin.", "confidence": "verified", "sources": ["https://code.claude.com/docs/en/sub-agents"]},
-        "skills": {"project_paths": [".claude/skills/<name>/SKILL.md"], "user_paths": ["~/.claude/skills/<name>/SKILL.md"], "format": "markdown", "file_pattern": "folder containing SKILL.md", "frontmatter_required": ["description"], "notes": "Folder-per-skill. agentskills.io open standard.", "confidence": "verified", "sources": ["https://code.claude.com/docs/en/skills"]},
-        "mcp": {"project_paths": [".mcp.json"], "user_paths": ["~/.claude.json", "~/.claude/settings.json"], "format": "json", "schema_top_level_key": "mcpServers", "transports": ["stdio", "http", "sse", "ws", "streamable-http"], "auth_types": ["oauth (auto)", "headers", "env vars via --env flag"], "scope_hierarchy": "local → project → user (same-name resolution)", "env_var_substitution": ["${VAR}", "${VAR:-default}", "${CLAUDE_PROJECT_DIR}"], "notes": "OAuth via /mcp command. MCP_TIMEOUT env var.", "confidence": "verified", "sources": ["https://code.claude.com/docs/en/mcp"]},
-        "hooks": {"project_paths": [".claude/hooks/"], "user_paths": ["~/.claude/hooks/"], "format": "shell scripts", "notes": "Per-skill hooks via SKILL.md frontmatter; per-agent via agent frontmatter; settings-level in settings.json.", "confidence": "documented"},
-        "memory": {"project_paths": [".claude/agent-memory/<name>/", ".claude/agent-memory-local/<name>/"], "user_paths": ["~/.claude/agent-memory/<name>/"], "format": "markdown/json", "notes": "Per-subagent persistent memory. -local variant is gitignored.", "confidence": "verified"},
-        "ignore": {"project_paths": [".gitignore"], "notes": "Respects .gitignore. No Claude-specific ignore file.", "confidence": "inferred"},
-        "settings": {"project_paths": [".claude/settings.json", ".claude/settings.local.json"], "user_paths": ["~/.claude/settings.json"], "format": "json", "notes": "settings.local.json is gitignored personal overrides.", "confidence": "verified"}
+        "instructions": {
+          "project_paths": [
+            "AGENTS.md",
+            "CLAUDE.md",
+            "CLAUDE.local.md"
+          ],
+          "user_paths": [
+            "~/.claude/CLAUDE.md"
+          ],
+          "format": "markdown",
+          "notes": "CLAUDE.local.md is gitignored personal additions.",
+          "confidence": "verified",
+          "sources": [
+            "https://code.claude.com/docs/en/memory"
+          ]
+        },
+        "rules": {
+          "confidence": "unsupported",
+          "notes": "No separate rules concept. Path-specific rules live in CLAUDE.md."
+        },
+        "agents": {
+          "project_paths": [
+            ".claude/agents/"
+          ],
+          "user_paths": [
+            "~/.claude/agents/"
+          ],
+          "format": "markdown",
+          "file_pattern": "*.md (recursive)",
+          "frontmatter_required": [
+            "name",
+            "description"
+          ],
+          "frontmatter_optional": [
+            "tools",
+            "model",
+            "permissionMode",
+            "mcpServers",
+            "hooks",
+            "color",
+            "skills",
+            "isolation"
+          ],
+          "notes": "Identity from `name` not path. Precedence: enterprise > user > project > plugin.",
+          "confidence": "verified",
+          "sources": [
+            "https://code.claude.com/docs/en/sub-agents"
+          ]
+        },
+        "skills": {
+          "project_paths": [
+            ".claude/skills/<name>/SKILL.md"
+          ],
+          "user_paths": [
+            "~/.claude/skills/<name>/SKILL.md"
+          ],
+          "format": "markdown",
+          "file_pattern": "folder containing SKILL.md",
+          "frontmatter_required": [
+            "description"
+          ],
+          "notes": "Folder-per-skill. agentskills.io open standard.",
+          "confidence": "verified",
+          "sources": [
+            "https://code.claude.com/docs/en/skills"
+          ]
+        },
+        "mcp": {
+          "project_paths": [
+            ".mcp.json"
+          ],
+          "user_paths": [
+            "~/.claude.json",
+            "~/.claude/settings.json"
+          ],
+          "format": "json",
+          "schema_top_level_key": "mcpServers",
+          "transports": [
+            "stdio",
+            "http",
+            "sse",
+            "ws",
+            "streamable-http"
+          ],
+          "auth_types": [
+            "oauth (auto)",
+            "headers",
+            "env vars via --env flag"
+          ],
+          "scope_hierarchy": "local \u2192 project \u2192 user (same-name resolution)",
+          "env_var_substitution": [
+            "${VAR}",
+            "${VAR:-default}",
+            "${CLAUDE_PROJECT_DIR}"
+          ],
+          "notes": "OAuth via /mcp command. MCP_TIMEOUT env var.",
+          "confidence": "verified",
+          "sources": [
+            "https://code.claude.com/docs/en/mcp"
+          ]
+        },
+        "hooks": {
+          "project_paths": [
+            ".claude/hooks/"
+          ],
+          "user_paths": [
+            "~/.claude/hooks/"
+          ],
+          "format": "shell scripts",
+          "notes": "Per-skill hooks via SKILL.md frontmatter; per-agent via agent frontmatter; settings-level in settings.json.",
+          "confidence": "documented"
+        },
+        "memory": {
+          "project_paths": [
+            ".claude/agent-memory/<name>/",
+            ".claude/agent-memory-local/<name>/"
+          ],
+          "user_paths": [
+            "~/.claude/agent-memory/<name>/"
+          ],
+          "format": "markdown/json",
+          "notes": "Per-subagent persistent memory. -local variant is gitignored.",
+          "confidence": "verified"
+        },
+        "ignore": {
+          "project_paths": [
+            ".gitignore"
+          ],
+          "notes": "Respects .gitignore. No Claude-specific ignore file.",
+          "confidence": "inferred"
+        },
+        "settings": {
+          "project_paths": [
+            ".claude/settings.json",
+            ".claude/settings.local.json"
+          ],
+          "user_paths": [
+            "~/.claude/settings.json"
+          ],
+          "format": "json",
+          "notes": "settings.local.json is gitignored personal overrides.",
+          "confidence": "verified"
+        }
       }
     },
     "codex": {
@@ -109,18 +184,117 @@
       "docs_homepage": "https://developers.openai.com/codex/",
       "category": "native-cli",
       "status": "active",
-      "csaw_relevance": "in-code",
+      "csaw_in_code": true,
       "scope_notes": "TOML-driven. Almost no per-kind directories.",
       "kinds": {
-        "instructions": {"project_paths": ["AGENTS.md"], "user_paths": ["~/.codex/AGENTS.md", "~/.codex/AGENTS.override.md"], "format": "markdown", "notes": "AGENTS.override.md wins at home level.", "confidence": "verified", "sources": ["https://developers.openai.com/codex/guides/agents-md"]},
-        "rules": {"confidence": "unsupported"},
-        "agents": {"project_paths": [".codex/config.toml"], "user_paths": ["~/.codex/config.toml"], "format": "toml", "file_pattern": "[agents.<name>] inline tables", "notes": "TOML tables, NOT per-file markdown.", "confidence": "verified", "sources": ["https://developers.openai.com/codex/config-advanced"]},
-        "skills": {"confidence": "unsupported"},
-        "mcp": {"project_paths": [".codex/config.toml"], "user_paths": ["~/.codex/config.toml"], "format": "toml", "schema_top_level_key": "mcp_servers", "transports": ["stdio", "http"], "auth_types": ["bearer_token_env_var", "env_http_headers", "static http_headers", "env_vars"], "additional_fields": ["command", "args", "cwd", "url", "enabled", "required", "enabled_tools", "disabled_tools", "startup_timeout_sec", "tool_timeout_sec", "scopes", "oauth_resource"], "per_tool_config": "[mcp_servers.X.tools.specific_tool] with approval_mode", "notes": "MCP ONLY in config.toml. Closest .codex/config.toml wins.", "confidence": "verified", "sources": ["https://developers.openai.com/codex/config-reference"]},
-        "hooks": {"project_paths": [".codex/hooks.json"], "user_paths": ["~/.codex/hooks.json"], "format": "json", "notes": "Also via [hooks] table in config.toml.", "confidence": "documented"},
-        "memory": {"confidence": "unsupported"},
-        "ignore": {"project_paths": [".gitignore"], "confidence": "inferred", "notes": "Respects .gitignore. project_doc_max_bytes/project_doc_fallback_filenames in config.toml control AGENTS.md discovery."},
-        "settings": {"project_paths": [".codex/config.toml"], "user_paths": ["~/.codex/config.toml"], "format": "toml", "notes": "Single config.toml holds agents, MCP, hooks.", "confidence": "verified"}
+        "instructions": {
+          "project_paths": [
+            "AGENTS.md"
+          ],
+          "user_paths": [
+            "~/.codex/AGENTS.md",
+            "~/.codex/AGENTS.override.md"
+          ],
+          "format": "markdown",
+          "notes": "AGENTS.override.md wins at home level.",
+          "confidence": "verified",
+          "sources": [
+            "https://developers.openai.com/codex/guides/agents-md"
+          ]
+        },
+        "rules": {
+          "confidence": "unsupported"
+        },
+        "agents": {
+          "project_paths": [
+            ".codex/config.toml"
+          ],
+          "user_paths": [
+            "~/.codex/config.toml"
+          ],
+          "format": "toml",
+          "file_pattern": "[agents.<name>] inline tables",
+          "notes": "TOML tables, NOT per-file markdown.",
+          "confidence": "verified",
+          "sources": [
+            "https://developers.openai.com/codex/config-advanced"
+          ]
+        },
+        "skills": {
+          "confidence": "unsupported"
+        },
+        "mcp": {
+          "project_paths": [
+            ".codex/config.toml"
+          ],
+          "user_paths": [
+            "~/.codex/config.toml"
+          ],
+          "format": "toml",
+          "schema_top_level_key": "mcp_servers",
+          "transports": [
+            "stdio",
+            "http"
+          ],
+          "auth_types": [
+            "bearer_token_env_var",
+            "env_http_headers",
+            "static http_headers",
+            "env_vars"
+          ],
+          "additional_fields": [
+            "command",
+            "args",
+            "cwd",
+            "url",
+            "enabled",
+            "required",
+            "enabled_tools",
+            "disabled_tools",
+            "startup_timeout_sec",
+            "tool_timeout_sec",
+            "scopes",
+            "oauth_resource"
+          ],
+          "per_tool_config": "[mcp_servers.X.tools.specific_tool] with approval_mode",
+          "notes": "MCP ONLY in config.toml. Closest .codex/config.toml wins.",
+          "confidence": "verified",
+          "sources": [
+            "https://developers.openai.com/codex/config-reference"
+          ]
+        },
+        "hooks": {
+          "project_paths": [
+            ".codex/hooks.json"
+          ],
+          "user_paths": [
+            "~/.codex/hooks.json"
+          ],
+          "format": "json",
+          "notes": "Also via [hooks] table in config.toml.",
+          "confidence": "documented"
+        },
+        "memory": {
+          "confidence": "unsupported"
+        },
+        "ignore": {
+          "project_paths": [
+            ".gitignore"
+          ],
+          "confidence": "inferred",
+          "notes": "Respects .gitignore. project_doc_max_bytes/project_doc_fallback_filenames in config.toml control AGENTS.md discovery."
+        },
+        "settings": {
+          "project_paths": [
+            ".codex/config.toml"
+          ],
+          "user_paths": [
+            "~/.codex/config.toml"
+          ],
+          "format": "toml",
+          "notes": "Single config.toml holds agents, MCP, hooks.",
+          "confidence": "verified"
+        }
       }
     },
     "cursor": {
@@ -128,18 +302,117 @@
       "docs_homepage": "https://cursor.com/docs/",
       "category": "ide-or-cli",
       "status": "active",
-      "csaw_relevance": "in-code",
+      "csaw_in_code": true,
       "scope_notes": "Cursor CLI (Jan 2026) shares config with desktop.",
       "kinds": {
-        "instructions": {"project_paths": ["AGENTS.md"], "format": "markdown", "confidence": "verified", "sources": ["https://cursor.com/docs/rules"]},
-        "rules": {"project_paths": [".cursor/rules/", ".cursorrules"], "format": "markdown / mdc", "file_pattern": "*.md or *.mdc OR single .cursorrules", "frontmatter_optional": ["alwaysApply", "description", "globs"], "notes": "User rules in app settings (not filesystem). .cursorrules legacy but still read; Hermes also reads.", "confidence": "verified"},
-        "agents": {"project_paths": [".cursor/modes.json"], "format": "json", "notes": "Cursor 'Background Agents' are runtime cloud sessions.", "confidence": "verified"},
-        "skills": {"project_paths": [".cursor/commands/"], "user_paths": ["~/.cursor/commands/"], "format": "markdown", "file_pattern": "*.md", "notes": "Filename = slash command name.", "confidence": "verified"},
-        "mcp": {"project_paths": [".cursor/mcp.json"], "user_paths": ["~/.cursor/mcp.json"], "format": "json", "schema_top_level_key": "mcpServers", "transports": ["stdio", "sse", "streamable-http"], "auth_types": ["env vars", "headers", "OAuth static client credentials in `auth` object"], "env_var_substitution": ["${env:NAME}", "${userHome}", "${workspaceFolder}", "${workspaceFolderBasename}", "${pathSeparator}"], "additional_fields": ["type", "command", "args", "env", "envFile", "url", "headers", "auth.CLIENT_ID", "auth.CLIENT_SECRET", "auth.scopes"], "notes": "Trae also reads ~/.cursor/mcp.json as user-global fallback.", "confidence": "verified", "sources": ["https://cursor.com/docs/context/mcp"]},
-        "hooks": {"confidence": "unsupported", "notes": "Configured in IDE settings, not file-based."},
-        "memory": {"confidence": "unsupported"},
-        "ignore": {"project_paths": [".cursorignore"], "format": "gitignore-style", "notes": "Excludes files from Cursor's indexing.", "confidence": "documented"},
-        "settings": {"confidence": "documented", "notes": "Settings in Cursor app (not filesystem)."}
+        "instructions": {
+          "project_paths": [
+            "AGENTS.md"
+          ],
+          "format": "markdown",
+          "confidence": "verified",
+          "sources": [
+            "https://cursor.com/docs/rules"
+          ]
+        },
+        "rules": {
+          "project_paths": [
+            ".cursor/rules/",
+            ".cursorrules"
+          ],
+          "format": "markdown / mdc",
+          "file_pattern": "*.md or *.mdc OR single .cursorrules",
+          "frontmatter_optional": [
+            "alwaysApply",
+            "description",
+            "globs"
+          ],
+          "notes": "User rules in app settings (not filesystem). .cursorrules legacy but still read; Hermes also reads.",
+          "confidence": "verified"
+        },
+        "agents": {
+          "project_paths": [
+            ".cursor/modes.json"
+          ],
+          "format": "json",
+          "notes": "Cursor 'Background Agents' are runtime cloud sessions.",
+          "confidence": "verified"
+        },
+        "skills": {
+          "project_paths": [
+            ".cursor/commands/"
+          ],
+          "user_paths": [
+            "~/.cursor/commands/"
+          ],
+          "format": "markdown",
+          "file_pattern": "*.md",
+          "notes": "Filename = slash command name.",
+          "confidence": "verified"
+        },
+        "mcp": {
+          "project_paths": [
+            ".cursor/mcp.json"
+          ],
+          "user_paths": [
+            "~/.cursor/mcp.json"
+          ],
+          "format": "json",
+          "schema_top_level_key": "mcpServers",
+          "transports": [
+            "stdio",
+            "sse",
+            "streamable-http"
+          ],
+          "auth_types": [
+            "env vars",
+            "headers",
+            "OAuth static client credentials in `auth` object"
+          ],
+          "env_var_substitution": [
+            "${env:NAME}",
+            "${userHome}",
+            "${workspaceFolder}",
+            "${workspaceFolderBasename}",
+            "${pathSeparator}"
+          ],
+          "additional_fields": [
+            "type",
+            "command",
+            "args",
+            "env",
+            "envFile",
+            "url",
+            "headers",
+            "auth.CLIENT_ID",
+            "auth.CLIENT_SECRET",
+            "auth.scopes"
+          ],
+          "notes": "Trae also reads ~/.cursor/mcp.json as user-global fallback.",
+          "confidence": "verified",
+          "sources": [
+            "https://cursor.com/docs/context/mcp"
+          ]
+        },
+        "hooks": {
+          "confidence": "unsupported",
+          "notes": "Configured in IDE settings, not file-based."
+        },
+        "memory": {
+          "confidence": "unsupported"
+        },
+        "ignore": {
+          "project_paths": [
+            ".cursorignore"
+          ],
+          "format": "gitignore-style",
+          "notes": "Excludes files from Cursor's indexing.",
+          "confidence": "documented"
+        },
+        "settings": {
+          "confidence": "documented",
+          "notes": "Settings in Cursor app (not filesystem)."
+        }
       }
     },
     "opencode": {
@@ -147,18 +420,140 @@
       "docs_homepage": "https://opencode.ai/docs/",
       "category": "native-cli",
       "status": "active",
-      "csaw_relevance": "in-code",
-      "scope_notes": "OSS leader (150K+ stars). EXPLICIT cross-tool compat — reads .claude/ and .agents/ as skill fallbacks.",
+      "csaw_in_code": true,
+      "scope_notes": "OSS leader (150K+ stars). EXPLICIT cross-tool compat \u2014 reads .claude/ and .agents/ as skill fallbacks.",
       "kinds": {
-        "instructions": {"project_paths": ["AGENTS.md"], "user_paths": ["~/.config/opencode/AGENTS.md"], "format": "markdown", "confidence": "verified", "sources": ["https://opencode.ai/docs/rules/"]},
-        "rules": {"confidence": "unsupported", "notes": "Unified under AGENTS.md."},
-        "agents": {"project_paths": [".opencode/agents/"], "user_paths": ["~/.config/opencode/agents/"], "format": "markdown", "file_pattern": "*.md", "frontmatter_required": ["description"], "frontmatter_optional": ["mode", "permission", "model", "temperature"], "notes": "Filename = agent name. mode: subagent | primary.", "confidence": "verified", "sources": ["https://opencode.ai/docs/agents/"]},
-        "skills": {"project_paths": [".opencode/skills/<name>/SKILL.md", ".claude/skills/<name>/SKILL.md", ".agents/skills/<name>/SKILL.md"], "user_paths": ["~/.config/opencode/skills/<name>/SKILL.md", "~/.claude/skills/<name>/SKILL.md", "~/.agents/skills/<name>/SKILL.md"], "format": "markdown", "file_pattern": "folder containing SKILL.md", "frontmatter_required": ["name", "description"], "notes": "SIX paths. csaw projects .claude/skills/ and .agents/skills/ → free OpenCode coverage.", "confidence": "verified", "sources": ["https://opencode.ai/docs/skills/"]},
-        "mcp": {"project_paths": ["opencode.json", "opencode.jsonc"], "user_paths": ["~/.config/opencode/opencode.json"], "format": "json", "file_pattern": "nested under `mcp` key", "schema_top_level_key": "mcp", "transports": ["local (subprocess)", "remote (http)"], "auth_types": ["OAuth auto (RFC 7591 dynamic registration)", "static OAuth", "API key headers"], "env_var_substitution": ["{env:VAR_NAME}"], "additional_fields": ["type", "enabled", "command (local)", "environment (local)", "url (remote)", "headers (remote)", "timeout (default 5000ms)", "oauth.clientId", "oauth.clientSecret", "oauth.scope", "tools (glob filtering)"], "notes": "Tokens at ~/.local/share/opencode/mcp-auth.json. Per-agent tool overrides.", "confidence": "verified", "sources": ["https://opencode.ai/docs/mcp-servers/"]},
-        "hooks": {"confidence": "documented", "notes": "Plugin events / hook adapter via ECC. Native story unclear."},
-        "memory": {"confidence": "unsupported"},
-        "ignore": {"project_paths": [".gitignore"], "confidence": "inferred"},
-        "settings": {"project_paths": ["opencode.json", "opencode.jsonc"], "user_paths": ["~/.config/opencode/opencode.json"], "format": "json", "notes": "Single config holds MCP, agent config, models.", "confidence": "verified"}
+        "instructions": {
+          "project_paths": [
+            "AGENTS.md"
+          ],
+          "user_paths": [
+            "~/.config/opencode/AGENTS.md"
+          ],
+          "format": "markdown",
+          "confidence": "verified",
+          "sources": [
+            "https://opencode.ai/docs/rules/"
+          ]
+        },
+        "rules": {
+          "confidence": "unsupported",
+          "notes": "Unified under AGENTS.md."
+        },
+        "agents": {
+          "project_paths": [
+            ".opencode/agents/"
+          ],
+          "user_paths": [
+            "~/.config/opencode/agents/"
+          ],
+          "format": "markdown",
+          "file_pattern": "*.md",
+          "frontmatter_required": [
+            "description"
+          ],
+          "frontmatter_optional": [
+            "mode",
+            "permission",
+            "model",
+            "temperature"
+          ],
+          "notes": "Filename = agent name. mode: subagent | primary.",
+          "confidence": "verified",
+          "sources": [
+            "https://opencode.ai/docs/agents/"
+          ]
+        },
+        "skills": {
+          "project_paths": [
+            ".opencode/skills/<name>/SKILL.md",
+            ".claude/skills/<name>/SKILL.md",
+            ".agents/skills/<name>/SKILL.md"
+          ],
+          "user_paths": [
+            "~/.config/opencode/skills/<name>/SKILL.md",
+            "~/.claude/skills/<name>/SKILL.md",
+            "~/.agents/skills/<name>/SKILL.md"
+          ],
+          "format": "markdown",
+          "file_pattern": "folder containing SKILL.md",
+          "frontmatter_required": [
+            "name",
+            "description"
+          ],
+          "notes": "SIX paths. csaw projects .claude/skills/ and .agents/skills/ \u2192 free OpenCode coverage.",
+          "confidence": "verified",
+          "sources": [
+            "https://opencode.ai/docs/skills/"
+          ]
+        },
+        "mcp": {
+          "project_paths": [
+            "opencode.json",
+            "opencode.jsonc"
+          ],
+          "user_paths": [
+            "~/.config/opencode/opencode.json"
+          ],
+          "format": "json",
+          "file_pattern": "nested under `mcp` key",
+          "schema_top_level_key": "mcp",
+          "transports": [
+            "local (subprocess)",
+            "remote (http)"
+          ],
+          "auth_types": [
+            "OAuth auto (RFC 7591 dynamic registration)",
+            "static OAuth",
+            "API key headers"
+          ],
+          "env_var_substitution": [
+            "{env:VAR_NAME}"
+          ],
+          "additional_fields": [
+            "type",
+            "enabled",
+            "command (local)",
+            "environment (local)",
+            "url (remote)",
+            "headers (remote)",
+            "timeout (default 5000ms)",
+            "oauth.clientId",
+            "oauth.clientSecret",
+            "oauth.scope",
+            "tools (glob filtering)"
+          ],
+          "notes": "Tokens at ~/.local/share/opencode/mcp-auth.json. Per-agent tool overrides.",
+          "confidence": "verified",
+          "sources": [
+            "https://opencode.ai/docs/mcp-servers/"
+          ]
+        },
+        "hooks": {
+          "confidence": "documented",
+          "notes": "Plugin events / hook adapter via ECC. Native story unclear."
+        },
+        "memory": {
+          "confidence": "unsupported"
+        },
+        "ignore": {
+          "project_paths": [
+            ".gitignore"
+          ],
+          "confidence": "inferred"
+        },
+        "settings": {
+          "project_paths": [
+            "opencode.json",
+            "opencode.jsonc"
+          ],
+          "user_paths": [
+            "~/.config/opencode/opencode.json"
+          ],
+          "format": "json",
+          "notes": "Single config holds MCP, agent config, models.",
+          "confidence": "verified"
+        }
       }
     },
     "windsurf": {
@@ -166,18 +561,96 @@
       "docs_homepage": "https://docs.windsurf.com/",
       "category": "ide",
       "status": "active",
-      "csaw_relevance": "in-code",
+      "csaw_in_code": true,
       "scope_notes": "Cascade has workflows (skill-like).",
       "kinds": {
-        "instructions": {"project_paths": [".windsurfrules", ".windsurf/rules/"], "user_paths": ["~/.codeium/windsurf/memories/global_rules.md"], "format": "markdown", "notes": "Char limits: 6000/file, 12000 total.", "confidence": "verified"},
-        "rules": {"project_paths": [".windsurfrules", ".windsurf/rules/"], "user_paths": ["~/.codeium/windsurf/memories/global_rules.md"], "format": "markdown", "confidence": "verified"},
-        "agents": {"confidence": "unsupported", "notes": "No file-based agents."},
-        "skills": {"project_paths": [".windsurf/workflows/"], "user_paths": ["~/.codeium/windsurf/global_workflows/"], "format": "markdown", "file_pattern": "*.md", "notes": "12000 char limit per workflow.", "confidence": "verified", "sources": ["https://docs.windsurf.com/windsurf/cascade/workflows"]},
-        "mcp": {"user_paths": ["~/.codeium/windsurf/mcp_config.json"], "format": "json", "schema_top_level_key": "mcpServers", "transports": ["stdio", "http", "sse"], "auth_types": ["env vars", "headers"], "env_var_substitution": ["variable interpolation in command, args, env, serverUrl, url, headers"], "notes": "User-scope ONLY. 100 total tools limit across all MCP servers.", "confidence": "verified", "sources": ["https://docs.windsurf.com/windsurf/cascade/mcp"]},
-        "hooks": {"confidence": "unsupported"},
-        "memory": {"user_paths": ["~/.codeium/windsurf/memories/"], "format": "markdown", "notes": "Cascade memories — manage via 'Manage memories' UI.", "confidence": "verified"},
-        "ignore": {"project_paths": [".gitignore"], "confidence": "inferred"},
-        "settings": {"confidence": "documented", "notes": "Windsurf settings in IDE."}
+        "instructions": {
+          "project_paths": [
+            ".windsurfrules",
+            ".windsurf/rules/"
+          ],
+          "user_paths": [
+            "~/.codeium/windsurf/memories/global_rules.md"
+          ],
+          "format": "markdown",
+          "notes": "Char limits: 6000/file, 12000 total.",
+          "confidence": "verified"
+        },
+        "rules": {
+          "project_paths": [
+            ".windsurfrules",
+            ".windsurf/rules/"
+          ],
+          "user_paths": [
+            "~/.codeium/windsurf/memories/global_rules.md"
+          ],
+          "format": "markdown",
+          "confidence": "verified"
+        },
+        "agents": {
+          "confidence": "unsupported",
+          "notes": "No file-based agents."
+        },
+        "skills": {
+          "project_paths": [
+            ".windsurf/workflows/"
+          ],
+          "user_paths": [
+            "~/.codeium/windsurf/global_workflows/"
+          ],
+          "format": "markdown",
+          "file_pattern": "*.md",
+          "notes": "12000 char limit per workflow.",
+          "confidence": "verified",
+          "sources": [
+            "https://docs.windsurf.com/windsurf/cascade/workflows"
+          ]
+        },
+        "mcp": {
+          "user_paths": [
+            "~/.codeium/windsurf/mcp_config.json"
+          ],
+          "format": "json",
+          "schema_top_level_key": "mcpServers",
+          "transports": [
+            "stdio",
+            "http",
+            "sse"
+          ],
+          "auth_types": [
+            "env vars",
+            "headers"
+          ],
+          "env_var_substitution": [
+            "variable interpolation in command, args, env, serverUrl, url, headers"
+          ],
+          "notes": "User-scope ONLY. 100 total tools limit across all MCP servers.",
+          "confidence": "verified",
+          "sources": [
+            "https://docs.windsurf.com/windsurf/cascade/mcp"
+          ]
+        },
+        "hooks": {
+          "confidence": "unsupported"
+        },
+        "memory": {
+          "user_paths": [
+            "~/.codeium/windsurf/memories/"
+          ],
+          "format": "markdown",
+          "notes": "Cascade memories \u2014 manage via 'Manage memories' UI.",
+          "confidence": "verified"
+        },
+        "ignore": {
+          "project_paths": [
+            ".gitignore"
+          ],
+          "confidence": "inferred"
+        },
+        "settings": {
+          "confidence": "documented",
+          "notes": "Windsurf settings in IDE."
+        }
       }
     },
     "vscode-copilot": {
@@ -185,18 +658,136 @@
       "docs_homepage": "https://code.visualstudio.com/docs/copilot/",
       "category": "vscode-extension",
       "status": "active",
-      "csaw_relevance": "consider",
+      "csaw_in_code": false,
       "scope_notes": "Mandatory filename suffixes. User-scope agents at ~/.copilot/agents/ SHARED with Copilot CLI.",
       "kinds": {
-        "instructions": {"project_paths": [".github/copilot-instructions.md", "AGENTS.md", "CLAUDE.md", ".claude/CLAUDE.md", "CLAUDE.local.md"], "format": "markdown", "frontmatter_optional": ["paths"], "notes": "Priority: Personal (user) > Repository > Organization.", "confidence": "verified", "sources": ["https://code.visualstudio.com/docs/copilot/customization/custom-instructions"]},
-        "rules": {"project_paths": [".github/instructions/"], "format": "markdown", "file_pattern": "*.instructions.md (suffix mandatory)", "frontmatter_required": ["applyTo"], "frontmatter_optional": ["name", "description"], "notes": "applyTo is glob. Recursive.", "confidence": "verified"},
-        "agents": {"project_paths": [".github/agents/", ".claude/agents/"], "user_paths": ["~/.copilot/agents/"], "format": "markdown", "file_pattern": "*.agent.md (suffix mandatory)", "frontmatter_optional": ["name", "description", "tools", "model"], "notes": "Reads .claude/agents/ for compat. SHARES ~/.copilot/agents/ with Copilot CLI. .chatmode.md DEPRECATED.", "confidence": "verified", "sources": ["https://code.visualstudio.com/docs/copilot/customization/custom-agents"]},
-        "skills": {"project_paths": [".github/prompts/"], "format": "markdown", "file_pattern": "*.prompt.md (suffix mandatory)", "frontmatter_optional": ["description", "name", "argument-hint", "agent", "model", "tools"], "notes": "Single-file, not folder-per-skill.", "confidence": "verified"},
-        "mcp": {"project_paths": [".vscode/mcp.json"], "format": "json", "schema_top_level_key": "servers", "transports": ["stdio (command/args)", "http (type: http, url)"], "auth_types": ["env vars", "input variables (VS Code Inputs)"], "additional_fields": ["type", "command", "args", "env", "url", "sandboxEnabled", "sandbox"], "sandboxing": "macOS/Linux stdio: sandboxEnabled + sandbox object for fs/network", "notes": "VS Code's NATIVE MCP. Top-level `servers` NOT `mcpServers`.", "confidence": "verified", "sources": ["https://code.visualstudio.com/docs/copilot/customization/mcp-servers"]},
-        "hooks": {"confidence": "unsupported", "notes": "Via VS Code extension API, not file-based."},
-        "memory": {"confidence": "unsupported"},
-        "ignore": {"project_paths": [".gitignore"], "confidence": "inferred"},
-        "settings": {"project_paths": [".vscode/settings.json"], "user_paths": ["(VS Code user profile)"], "format": "json", "notes": "VS Code workspace settings (Copilot-related keys nested).", "confidence": "documented"}
+        "instructions": {
+          "project_paths": [
+            ".github/copilot-instructions.md",
+            "AGENTS.md",
+            "CLAUDE.md",
+            ".claude/CLAUDE.md",
+            "CLAUDE.local.md"
+          ],
+          "format": "markdown",
+          "frontmatter_optional": [
+            "paths"
+          ],
+          "notes": "Priority: Personal (user) > Repository > Organization.",
+          "confidence": "verified",
+          "sources": [
+            "https://code.visualstudio.com/docs/copilot/customization/custom-instructions"
+          ]
+        },
+        "rules": {
+          "project_paths": [
+            ".github/instructions/"
+          ],
+          "format": "markdown",
+          "file_pattern": "*.instructions.md (suffix mandatory)",
+          "frontmatter_required": [
+            "applyTo"
+          ],
+          "frontmatter_optional": [
+            "name",
+            "description"
+          ],
+          "notes": "applyTo is glob. Recursive.",
+          "confidence": "verified"
+        },
+        "agents": {
+          "project_paths": [
+            ".github/agents/",
+            ".claude/agents/"
+          ],
+          "user_paths": [
+            "~/.copilot/agents/"
+          ],
+          "format": "markdown",
+          "file_pattern": "*.agent.md (suffix mandatory)",
+          "frontmatter_optional": [
+            "name",
+            "description",
+            "tools",
+            "model"
+          ],
+          "notes": "Reads .claude/agents/ for compat. SHARES ~/.copilot/agents/ with Copilot CLI. .chatmode.md DEPRECATED.",
+          "confidence": "verified",
+          "sources": [
+            "https://code.visualstudio.com/docs/copilot/customization/custom-agents"
+          ]
+        },
+        "skills": {
+          "project_paths": [
+            ".github/prompts/"
+          ],
+          "format": "markdown",
+          "file_pattern": "*.prompt.md (suffix mandatory)",
+          "frontmatter_optional": [
+            "description",
+            "name",
+            "argument-hint",
+            "agent",
+            "model",
+            "tools"
+          ],
+          "notes": "Single-file, not folder-per-skill.",
+          "confidence": "verified"
+        },
+        "mcp": {
+          "project_paths": [
+            ".vscode/mcp.json"
+          ],
+          "format": "json",
+          "schema_top_level_key": "servers",
+          "transports": [
+            "stdio (command/args)",
+            "http (type: http, url)"
+          ],
+          "auth_types": [
+            "env vars",
+            "input variables (VS Code Inputs)"
+          ],
+          "additional_fields": [
+            "type",
+            "command",
+            "args",
+            "env",
+            "url",
+            "sandboxEnabled",
+            "sandbox"
+          ],
+          "sandboxing": "macOS/Linux stdio: sandboxEnabled + sandbox object for fs/network",
+          "notes": "VS Code's NATIVE MCP. Top-level `servers` NOT `mcpServers`.",
+          "confidence": "verified",
+          "sources": [
+            "https://code.visualstudio.com/docs/copilot/customization/mcp-servers"
+          ]
+        },
+        "hooks": {
+          "confidence": "unsupported",
+          "notes": "Via VS Code extension API, not file-based."
+        },
+        "memory": {
+          "confidence": "unsupported"
+        },
+        "ignore": {
+          "project_paths": [
+            ".gitignore"
+          ],
+          "confidence": "inferred"
+        },
+        "settings": {
+          "project_paths": [
+            ".vscode/settings.json"
+          ],
+          "user_paths": [
+            "(VS Code user profile)"
+          ],
+          "format": "json",
+          "notes": "VS Code workspace settings (Copilot-related keys nested).",
+          "confidence": "documented"
+        }
       }
     },
     "copilot-cli": {
@@ -204,37 +795,195 @@
       "docs_homepage": "https://docs.github.com/en/copilot/reference/copilot-cli-reference/",
       "category": "native-cli",
       "status": "active",
-      "csaw_relevance": "consider",
-      "scope_notes": "Shares ~/.copilot/ with VS Code Copilot — converging Copilot surface.",
+      "csaw_in_code": false,
+      "scope_notes": "Shares ~/.copilot/ with VS Code Copilot \u2014 converging Copilot surface.",
       "kinds": {
-        "instructions": {"project_paths": [".github/copilot-instructions.md", "AGENTS.md"], "user_paths": ["~/.copilot/copilot-instructions.md"], "format": "markdown", "confidence": "verified", "sources": ["https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-config-dir-reference"]},
-        "rules": {"project_paths": [".github/instructions/"], "user_paths": ["~/.copilot/instructions/"], "format": "markdown", "file_pattern": "*.instructions.md (suffix mandatory)", "frontmatter_required": ["applyTo"], "confidence": "verified"},
-        "agents": {"project_paths": [".github/agents/"], "user_paths": ["~/.copilot/agents/"], "format": "markdown", "file_pattern": "*.agent.md (suffix mandatory)", "notes": "SAME ~/.copilot/agents/ as VS Code Copilot.", "confidence": "verified"},
-        "skills": {"user_paths": ["~/.copilot/skills/<name>/SKILL.md"], "format": "markdown", "file_pattern": "folder containing SKILL.md", "frontmatter_required": ["description"], "notes": "User-scope only.", "confidence": "documented"},
-        "mcp": {"project_paths": [".github/mcp.json", ".mcp.json"], "user_paths": ["~/.copilot/mcp-config.json"], "format": "json", "schema_top_level_key": "mcpServers", "transports": ["stdio", "http"], "notes": "Repo-level CAN be .mcp.json (Claude-compatible) OR .github/mcp.json.", "confidence": "verified"},
-        "hooks": {"user_paths": ["~/.copilot/hooks/"], "format": "scripts", "confidence": "verified"},
-        "memory": {"confidence": "unsupported"},
-        "ignore": {"project_paths": [".gitignore"], "confidence": "inferred"},
-        "settings": {"project_paths": [".github/copilot/settings.json", ".github/copilot/settings.local.json"], "user_paths": ["~/.copilot/settings.json", "~/.copilot/config.json"], "format": "json", "notes": "settings.json = primary; config.json = internal state (auth).", "confidence": "verified"}
+        "instructions": {
+          "project_paths": [
+            ".github/copilot-instructions.md",
+            "AGENTS.md"
+          ],
+          "user_paths": [
+            "~/.copilot/copilot-instructions.md"
+          ],
+          "format": "markdown",
+          "confidence": "verified",
+          "sources": [
+            "https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-config-dir-reference"
+          ]
+        },
+        "rules": {
+          "project_paths": [
+            ".github/instructions/"
+          ],
+          "user_paths": [
+            "~/.copilot/instructions/"
+          ],
+          "format": "markdown",
+          "file_pattern": "*.instructions.md (suffix mandatory)",
+          "frontmatter_required": [
+            "applyTo"
+          ],
+          "confidence": "verified"
+        },
+        "agents": {
+          "project_paths": [
+            ".github/agents/"
+          ],
+          "user_paths": [
+            "~/.copilot/agents/"
+          ],
+          "format": "markdown",
+          "file_pattern": "*.agent.md (suffix mandatory)",
+          "notes": "SAME ~/.copilot/agents/ as VS Code Copilot.",
+          "confidence": "verified"
+        },
+        "skills": {
+          "user_paths": [
+            "~/.copilot/skills/<name>/SKILL.md"
+          ],
+          "format": "markdown",
+          "file_pattern": "folder containing SKILL.md",
+          "frontmatter_required": [
+            "description"
+          ],
+          "notes": "User-scope only.",
+          "confidence": "documented"
+        },
+        "mcp": {
+          "project_paths": [
+            ".github/mcp.json",
+            ".mcp.json"
+          ],
+          "user_paths": [
+            "~/.copilot/mcp-config.json"
+          ],
+          "format": "json",
+          "schema_top_level_key": "mcpServers",
+          "transports": [
+            "stdio",
+            "http"
+          ],
+          "notes": "Repo-level CAN be .mcp.json (Claude-compatible) OR .github/mcp.json.",
+          "confidence": "verified"
+        },
+        "hooks": {
+          "user_paths": [
+            "~/.copilot/hooks/"
+          ],
+          "format": "scripts",
+          "confidence": "verified"
+        },
+        "memory": {
+          "confidence": "unsupported"
+        },
+        "ignore": {
+          "project_paths": [
+            ".gitignore"
+          ],
+          "confidence": "inferred"
+        },
+        "settings": {
+          "project_paths": [
+            ".github/copilot/settings.json",
+            ".github/copilot/settings.local.json"
+          ],
+          "user_paths": [
+            "~/.copilot/settings.json",
+            "~/.copilot/config.json"
+          ],
+          "format": "json",
+          "notes": "settings.json = primary; config.json = internal state (auth).",
+          "confidence": "verified"
+        }
       }
     },
     "antigravity": {
-      "display_name": "Antigravity (Google) — unified CLI + IDE",
+      "display_name": "Antigravity (Google) \u2014 unified CLI + IDE",
       "docs_homepage": "https://antigravity.google/docs/",
       "category": "ide-or-cli",
       "status": "active",
-      "csaw_relevance": "recommended-add",
-      "scope_notes": "Gemini CLI's successor (Gemini sunset 2026-06-18). Built in Go. Uses .agents/ (plural) — same as csaw's StandardFallback.",
+      "csaw_in_code": true,
+      "scope_notes": "Gemini CLI's successor (Gemini sunset 2026-06-18). Built in Go. Uses .agents/ (plural) \u2014 same as csaw's StandardFallback.",
       "kinds": {
-        "instructions": {"project_paths": ["GEMINI.md", "AGENTS.md"], "format": "markdown", "confidence": "verified", "sources": ["https://ai.google.dev/gemini-api/docs/antigravity-agent"]},
-        "rules": {"project_paths": [".agents/"], "format": "markdown", "file_pattern": "agents.md, rules.md, skills.md inside .agents/", "notes": "Loose rules concept.", "confidence": "documented"},
-        "agents": {"project_paths": [".agents/agents.md"], "format": "markdown", "file_pattern": "single markdown declarations file", "notes": "Single file enumerating agents, not folder-per-agent.", "confidence": "documented"},
-        "skills": {"project_paths": [".agents/skills/<name>/SKILL.md", ".agents/skills.md"], "user_paths": ["~/.gemini/antigravity/skills/"], "format": "markdown", "file_pattern": "folder containing SKILL.md AND/OR skills.md declaration", "notes": "Same SKILL.md folder as Claude (agentskills.io). csaw's .agents/skills/ fallback SERVES Antigravity for free.", "confidence": "verified"},
-        "mcp": {"user_paths": ["~/.gemini/antigravity-cli/settings.json"], "format": "json", "transports": ["stdio", "http"], "notes": "Settings holds colorScheme, model, trustedWorkspaces. MCP schema likely inherits Gemini CLI.", "confidence": "documented"},
-        "hooks": {"confidence": "documented", "notes": "Hooks supported (inherited from Gemini CLI); paths unclear."},
-        "memory": {"user_paths": ["~/.gemini/antigravity/brain/"], "notes": "Antigravity 2.0 uses ~/.gemini/antigravity/ for brain entries, scratch space.", "confidence": "inferred"},
-        "ignore": {"project_paths": [".gitignore"], "confidence": "inferred"},
-        "settings": {"user_paths": ["~/.gemini/antigravity-cli/settings.json"], "format": "json", "confidence": "documented"}
+        "instructions": {
+          "project_paths": [
+            "GEMINI.md",
+            "AGENTS.md"
+          ],
+          "format": "markdown",
+          "confidence": "verified",
+          "sources": [
+            "https://ai.google.dev/gemini-api/docs/antigravity-agent"
+          ]
+        },
+        "rules": {
+          "project_paths": [
+            ".agents/"
+          ],
+          "format": "markdown",
+          "file_pattern": "agents.md, rules.md, skills.md inside .agents/",
+          "notes": "Loose rules concept.",
+          "confidence": "documented"
+        },
+        "agents": {
+          "project_paths": [
+            ".agents/agents.md"
+          ],
+          "format": "markdown",
+          "file_pattern": "single markdown declarations file",
+          "notes": "Single file enumerating agents, not folder-per-agent.",
+          "confidence": "documented"
+        },
+        "skills": {
+          "project_paths": [
+            ".agents/skills/<name>/SKILL.md",
+            ".agents/skills.md"
+          ],
+          "user_paths": [
+            "~/.gemini/antigravity/skills/"
+          ],
+          "format": "markdown",
+          "file_pattern": "folder containing SKILL.md AND/OR skills.md declaration",
+          "notes": "Same SKILL.md folder as Claude (agentskills.io). csaw's .agents/skills/ fallback SERVES Antigravity for free.",
+          "confidence": "verified"
+        },
+        "mcp": {
+          "user_paths": [
+            "~/.gemini/antigravity-cli/settings.json"
+          ],
+          "format": "json",
+          "transports": [
+            "stdio",
+            "http"
+          ],
+          "notes": "Settings holds colorScheme, model, trustedWorkspaces. MCP schema likely inherits Gemini CLI.",
+          "confidence": "documented"
+        },
+        "hooks": {
+          "confidence": "documented",
+          "notes": "Hooks supported (inherited from Gemini CLI); paths unclear."
+        },
+        "memory": {
+          "user_paths": [
+            "~/.gemini/antigravity/brain/"
+          ],
+          "notes": "Antigravity 2.0 uses ~/.gemini/antigravity/ for brain entries, scratch space.",
+          "confidence": "inferred"
+        },
+        "ignore": {
+          "project_paths": [
+            ".gitignore"
+          ],
+          "confidence": "inferred"
+        },
+        "settings": {
+          "user_paths": [
+            "~/.gemini/antigravity-cli/settings.json"
+          ],
+          "format": "json",
+          "confidence": "documented"
+        }
       }
     },
     "kiro": {
@@ -242,18 +991,85 @@
       "docs_homepage": "https://kiro.dev/docs/",
       "category": "ide-or-cli",
       "status": "active",
-      "csaw_relevance": "recommended-add",
+      "csaw_in_code": true,
       "scope_notes": "AWS agentic coding IDE on Bedrock. Spec-driven.",
       "kinds": {
-        "instructions": {"project_paths": ["AGENTS.md", ".kiro/steering/"], "user_paths": ["~/.kiro/steering/", "~/.kiro/steering/AGENTS.md"], "format": "markdown", "frontmatter_optional": ["inclusion"], "notes": "Foundation steering: product.md, tech.md, structure.md.", "confidence": "verified", "sources": ["https://kiro.dev/docs/steering/"]},
-        "rules": {"project_paths": [".kiro/steering/"], "user_paths": ["~/.kiro/steering/"], "format": "markdown", "confidence": "verified"},
-        "agents": {"project_paths": [".kiro/agents/"], "user_paths": ["~/.kiro/agents/"], "format": "markdown / yaml", "confidence": "documented", "sources": ["https://kiro.dev/docs/cli/custom-agents/configuration-reference/"]},
-        "skills": {"project_paths": [".kiro/specs/"], "format": "markdown", "notes": "Kiro 'specs' (Requirements/Design/Tasks in EARS notation) — different from Claude skills semantically.", "confidence": "documented"},
-        "mcp": {"confidence": "inferred", "notes": "MCP supported but exact paths not in fetched docs."},
-        "hooks": {"project_paths": [".kiro/hooks/"], "format": "scripts/yaml", "notes": "Triggers on file events, prompt/agent lifecycle, spec task events, manual.", "confidence": "documented"},
-        "memory": {"confidence": "documented", "notes": "Steering provides persistent context."},
-        "ignore": {"project_paths": [".gitignore"], "confidence": "inferred"},
-        "settings": {"confidence": "documented", "notes": "Kiro settings managed in IDE."}
+        "instructions": {
+          "project_paths": [
+            "AGENTS.md",
+            ".kiro/steering/"
+          ],
+          "user_paths": [
+            "~/.kiro/steering/",
+            "~/.kiro/steering/AGENTS.md"
+          ],
+          "format": "markdown",
+          "frontmatter_optional": [
+            "inclusion"
+          ],
+          "notes": "Foundation steering: product.md, tech.md, structure.md.",
+          "confidence": "verified",
+          "sources": [
+            "https://kiro.dev/docs/steering/"
+          ]
+        },
+        "rules": {
+          "project_paths": [
+            ".kiro/steering/"
+          ],
+          "user_paths": [
+            "~/.kiro/steering/"
+          ],
+          "format": "markdown",
+          "confidence": "verified"
+        },
+        "agents": {
+          "project_paths": [
+            ".kiro/agents/"
+          ],
+          "user_paths": [
+            "~/.kiro/agents/"
+          ],
+          "format": "markdown / yaml",
+          "confidence": "documented",
+          "sources": [
+            "https://kiro.dev/docs/cli/custom-agents/configuration-reference/"
+          ]
+        },
+        "skills": {
+          "project_paths": [
+            ".kiro/specs/"
+          ],
+          "format": "markdown",
+          "notes": "Kiro 'specs' (Requirements/Design/Tasks in EARS notation) \u2014 different from Claude skills semantically.",
+          "confidence": "documented"
+        },
+        "mcp": {
+          "confidence": "inferred",
+          "notes": "MCP supported but exact paths not in fetched docs."
+        },
+        "hooks": {
+          "project_paths": [
+            ".kiro/hooks/"
+          ],
+          "format": "scripts/yaml",
+          "notes": "Triggers on file events, prompt/agent lifecycle, spec task events, manual.",
+          "confidence": "documented"
+        },
+        "memory": {
+          "confidence": "documented",
+          "notes": "Steering provides persistent context."
+        },
+        "ignore": {
+          "project_paths": [
+            ".gitignore"
+          ],
+          "confidence": "inferred"
+        },
+        "settings": {
+          "confidence": "documented",
+          "notes": "Kiro settings managed in IDE."
+        }
       }
     },
     "continue": {
@@ -261,18 +1077,89 @@
       "docs_homepage": "https://docs.continue.dev/",
       "category": "vscode-extension",
       "status": "active",
-      "csaw_relevance": "recommended-add",
-      "scope_notes": "Has .continue/rules/ (project) and ~/.continue/rules/ (user) — file-based, NOT all nested in config.",
+      "csaw_in_code": false,
+      "scope_notes": "Has .continue/rules/ (project) and ~/.continue/rules/ (user) \u2014 file-based, NOT all nested in config.",
       "kinds": {
-        "instructions": {"project_paths": [".continue/rules/", ".continuerc.json", ".continue/config.yaml"], "user_paths": ["~/.continue/config.yaml", "~/.continue/config.json", "~/.continue/config.ts"], "format": "markdown / yaml / json / typescript", "notes": "json deprecated. config.ts for programmatic.", "confidence": "verified", "sources": ["https://docs.continue.dev/customize/deep-dives/configuration"]},
-        "rules": {"project_paths": [".continue/rules/"], "user_paths": ["~/.continue/rules/"], "format": "markdown / yaml", "file_pattern": "*.md or *.yaml (lexicographical order)", "notes": "Hub-based rules via `uses:` in config.yaml. Use 01-, 02- prefixes for order.", "confidence": "verified"},
-        "agents": {"confidence": "documented", "notes": "Assistants inline in config.yaml."},
-        "skills": {"confidence": "documented", "notes": "Slash commands in config.yaml under `prompts`."},
-        "mcp": {"project_paths": [".continue/config.yaml"], "user_paths": ["~/.continue/config.yaml"], "format": "yaml", "file_pattern": "nested under mcpServers key", "schema_top_level_key": "mcpServers", "transports": ["stdio", "sse", "http"], "notes": "Nested in config — not file-projectable separately.", "confidence": "verified"},
-        "hooks": {"confidence": "unsupported"},
-        "memory": {"confidence": "unsupported"},
-        "ignore": {"project_paths": [".gitignore"], "confidence": "inferred"},
-        "settings": {"project_paths": [".continuerc.json", ".continue/config.yaml"], "user_paths": ["~/.continue/config.yaml"], "format": "json / yaml", "notes": ".continuerc.json supports `mergeBehavior: merge | overwrite`.", "confidence": "verified"}
+        "instructions": {
+          "project_paths": [
+            ".continue/rules/",
+            ".continuerc.json",
+            ".continue/config.yaml"
+          ],
+          "user_paths": [
+            "~/.continue/config.yaml",
+            "~/.continue/config.json",
+            "~/.continue/config.ts"
+          ],
+          "format": "markdown / yaml / json / typescript",
+          "notes": "json deprecated. config.ts for programmatic.",
+          "confidence": "verified",
+          "sources": [
+            "https://docs.continue.dev/customize/deep-dives/configuration"
+          ]
+        },
+        "rules": {
+          "project_paths": [
+            ".continue/rules/"
+          ],
+          "user_paths": [
+            "~/.continue/rules/"
+          ],
+          "format": "markdown / yaml",
+          "file_pattern": "*.md or *.yaml (lexicographical order)",
+          "notes": "Hub-based rules via `uses:` in config.yaml. Use 01-, 02- prefixes for order.",
+          "confidence": "verified"
+        },
+        "agents": {
+          "confidence": "documented",
+          "notes": "Assistants inline in config.yaml."
+        },
+        "skills": {
+          "confidence": "documented",
+          "notes": "Slash commands in config.yaml under `prompts`."
+        },
+        "mcp": {
+          "project_paths": [
+            ".continue/config.yaml"
+          ],
+          "user_paths": [
+            "~/.continue/config.yaml"
+          ],
+          "format": "yaml",
+          "file_pattern": "nested under mcpServers key",
+          "schema_top_level_key": "mcpServers",
+          "transports": [
+            "stdio",
+            "sse",
+            "http"
+          ],
+          "notes": "Nested in config \u2014 not file-projectable separately.",
+          "confidence": "verified"
+        },
+        "hooks": {
+          "confidence": "unsupported"
+        },
+        "memory": {
+          "confidence": "unsupported"
+        },
+        "ignore": {
+          "project_paths": [
+            ".gitignore"
+          ],
+          "confidence": "inferred"
+        },
+        "settings": {
+          "project_paths": [
+            ".continuerc.json",
+            ".continue/config.yaml"
+          ],
+          "user_paths": [
+            "~/.continue/config.yaml"
+          ],
+          "format": "json / yaml",
+          "notes": ".continuerc.json supports `mergeBehavior: merge | overwrite`.",
+          "confidence": "verified"
+        }
       }
     },
     "cline": {
@@ -280,18 +1167,61 @@
       "docs_homepage": "https://docs.cline.bot/",
       "category": "vscode-extension",
       "status": "active",
-      "csaw_relevance": "recommended-add",
+      "csaw_in_code": false,
       "scope_notes": "Formerly Claude Dev. VS Code + JetBrains + CLI. Roo Code is popular fork.",
       "kinds": {
-        "instructions": {"project_paths": [".clinerules", ".clinerules/", "AGENTS.md"], "user_paths": ["~/.cline/rules/"], "format": "markdown", "notes": ".clinerules can be file or directory. Workspace > global.", "confidence": "verified"},
-        "rules": {"project_paths": [".clinerules", ".clinerules/"], "user_paths": ["~/.cline/rules/"], "format": "markdown", "confidence": "verified"},
-        "agents": {"confidence": "unsupported", "notes": "No file-based subagents."},
-        "skills": {"confidence": "documented", "notes": "Skills feature mentioned but file convention unclear."},
-        "mcp": {"confidence": "documented", "notes": "Managed in Cline IDE settings panel."},
-        "hooks": {"confidence": "unsupported"},
-        "memory": {"confidence": "unsupported"},
-        "ignore": {"project_paths": [".gitignore"], "confidence": "inferred"},
-        "settings": {"confidence": "documented", "notes": "Settings in IDE."}
+        "instructions": {
+          "project_paths": [
+            ".clinerules",
+            ".clinerules/",
+            "AGENTS.md"
+          ],
+          "user_paths": [
+            "~/.cline/rules/"
+          ],
+          "format": "markdown",
+          "notes": ".clinerules can be file or directory. Workspace > global.",
+          "confidence": "verified"
+        },
+        "rules": {
+          "project_paths": [
+            ".clinerules",
+            ".clinerules/"
+          ],
+          "user_paths": [
+            "~/.cline/rules/"
+          ],
+          "format": "markdown",
+          "confidence": "verified"
+        },
+        "agents": {
+          "confidence": "unsupported",
+          "notes": "No file-based subagents."
+        },
+        "skills": {
+          "confidence": "documented",
+          "notes": "Skills feature mentioned but file convention unclear."
+        },
+        "mcp": {
+          "confidence": "documented",
+          "notes": "Managed in Cline IDE settings panel."
+        },
+        "hooks": {
+          "confidence": "unsupported"
+        },
+        "memory": {
+          "confidence": "unsupported"
+        },
+        "ignore": {
+          "project_paths": [
+            ".gitignore"
+          ],
+          "confidence": "inferred"
+        },
+        "settings": {
+          "confidence": "documented",
+          "notes": "Settings in IDE."
+        }
       }
     },
     "goose": {
@@ -299,103 +1229,502 @@
       "docs_homepage": "https://goose-docs.ai/",
       "category": "native-cli",
       "status": "active",
-      "csaw_relevance": "recommended-add",
+      "csaw_in_code": true,
       "scope_notes": "MOVED from block/goose to aaif-goose/goose. .goosehints + .goose/recipes/ are real file-based concepts.",
       "kinds": {
-        "instructions": {"project_paths": [".goosehints", "AGENTS.md"], "user_paths": ["~/.goosehints"], "format": "markdown / plain text", "notes": "Subdirectory walk combines hints up to repo root. Respects .gitignore.", "confidence": "verified"},
-        "rules": {"project_paths": [".goosehints"], "user_paths": ["~/.goosehints"], "format": "markdown / plain text", "confidence": "verified"},
-        "agents": {"project_paths": [".goose/recipes/"], "user_paths": ["~/.config/goose/recipes/"], "format": "yaml", "file_pattern": "*.yaml or *.json (recipes)", "frontmatter_required": ["name", "version"], "frontmatter_optional": ["description", "parameters", "extensions", "instructions", "sub_recipes", "response_schema"], "notes": "Discovery: current dir → GOOSE_RECIPE_PATH env → ~/.config/goose/recipes/ → .goose/recipes/ → GitHub via GOOSE_RECIPE_GITHUB_REPO env.", "confidence": "verified", "sources": ["https://goose-docs.ai/docs/guides/recipes/storing-recipes/"]},
-        "skills": {"project_paths": [".goose/recipes/"], "user_paths": ["~/.config/goose/recipes/"], "format": "yaml", "notes": "Recipes serve as both agents and skills (workflows).", "confidence": "verified"},
-        "mcp": {"user_paths": ["~/.config/goose/config.yaml"], "format": "yaml", "file_pattern": "nested under `extensions` key", "schema_top_level_key": "extensions", "transports": ["stdio", "sse"], "notes": "Goose extensions = MCP servers. 70+ extensions. Configured via `goose configure`.", "confidence": "verified"},
-        "hooks": {"confidence": "unsupported"},
-        "memory": {"project_paths": [".goosehints"], "user_paths": ["~/.goosehints"], "format": "markdown / plain text", "notes": ".goosehints is Goose's persistent project context.", "confidence": "verified"},
-        "ignore": {"project_paths": [".gitignore"], "notes": ".goosehints respects .gitignore.", "confidence": "verified"},
-        "settings": {"user_paths": ["~/.config/goose/config.yaml"], "format": "yaml", "confidence": "verified"}
+        "instructions": {
+          "project_paths": [
+            ".goosehints",
+            "AGENTS.md"
+          ],
+          "user_paths": [
+            "~/.goosehints"
+          ],
+          "format": "markdown / plain text",
+          "notes": "Subdirectory walk combines hints up to repo root. Respects .gitignore.",
+          "confidence": "verified"
+        },
+        "rules": {
+          "project_paths": [
+            ".goosehints"
+          ],
+          "user_paths": [
+            "~/.goosehints"
+          ],
+          "format": "markdown / plain text",
+          "confidence": "verified"
+        },
+        "agents": {
+          "project_paths": [
+            ".goose/recipes/"
+          ],
+          "user_paths": [
+            "~/.config/goose/recipes/"
+          ],
+          "format": "yaml",
+          "file_pattern": "*.yaml or *.json (recipes)",
+          "frontmatter_required": [
+            "name",
+            "version"
+          ],
+          "frontmatter_optional": [
+            "description",
+            "parameters",
+            "extensions",
+            "instructions",
+            "sub_recipes",
+            "response_schema"
+          ],
+          "notes": "Discovery: current dir \u2192 GOOSE_RECIPE_PATH env \u2192 ~/.config/goose/recipes/ \u2192 .goose/recipes/ \u2192 GitHub via GOOSE_RECIPE_GITHUB_REPO env.",
+          "confidence": "verified",
+          "sources": [
+            "https://goose-docs.ai/docs/guides/recipes/storing-recipes/"
+          ]
+        },
+        "skills": {
+          "project_paths": [
+            ".goose/recipes/"
+          ],
+          "user_paths": [
+            "~/.config/goose/recipes/"
+          ],
+          "format": "yaml",
+          "notes": "Recipes serve as both agents and skills (workflows).",
+          "confidence": "verified"
+        },
+        "mcp": {
+          "user_paths": [
+            "~/.config/goose/config.yaml"
+          ],
+          "format": "yaml",
+          "file_pattern": "nested under `extensions` key",
+          "schema_top_level_key": "extensions",
+          "transports": [
+            "stdio",
+            "sse"
+          ],
+          "notes": "Goose extensions = MCP servers. 70+ extensions. Configured via `goose configure`.",
+          "confidence": "verified"
+        },
+        "hooks": {
+          "confidence": "unsupported"
+        },
+        "memory": {
+          "project_paths": [
+            ".goosehints"
+          ],
+          "user_paths": [
+            "~/.goosehints"
+          ],
+          "format": "markdown / plain text",
+          "notes": ".goosehints is Goose's persistent project context.",
+          "confidence": "verified"
+        },
+        "ignore": {
+          "project_paths": [
+            ".gitignore"
+          ],
+          "notes": ".goosehints respects .gitignore.",
+          "confidence": "verified"
+        },
+        "settings": {
+          "user_paths": [
+            "~/.config/goose/config.yaml"
+          ],
+          "format": "yaml",
+          "confidence": "verified"
+        }
       }
     }
   },
   "watchlist": {
     "description": "Tools with file-based projection that are less prioritized for csaw's MVP. Promoted to deep entries when adoption signals warrant.",
     "tools": {
-      "gemini": {"display_name": "Gemini CLI", "status": "deprecated", "csaw_relevance": "deprecated", "scope_notes": "Sunset 2026-06-18. Migration: Antigravity.", "project_paths": ["GEMINI.md", ".gemini/agents/", ".gemini/commands/ (TOML)", ".gemini/settings.json"], "user_paths": ["~/.gemini/"], "mcp_key": "mcpServers (in settings.json)"},
-      "roo-code": {"display_name": "Roo Code", "status": "active", "csaw_relevance": "recommended-add", "scope_notes": "Cline fork. Strongest file-based mode system.", "project_paths": [".roo/rules/", ".roo/rules-<mode-slug>/", ".roomodes", ".roo/mcp.json"], "user_paths": ["~/.roo/rules-<slug>/"], "mcp_key": "mcpServers"},
-      "trae": {"display_name": "Trae (ByteDance)", "status": "active", "csaw_relevance": "recommended-add", "scope_notes": "Reads ~/.cursor/mcp.json as user-global fallback.", "project_paths": ["project_rules.md", ".rules", ".trae/mcp.json"], "user_paths": ["user_rules.md", "~/.cursor/mcp.json (fallback)"], "mcp_key": "mcpServers"},
-      "codebuddy": {"display_name": "CodeBuddy (Tencent)", "status": "active", "csaw_relevance": "recommended-add", "scope_notes": "Cleanest Claude-like structure.", "project_paths": [".codebuddy/CODEBUDDY.md", ".codebuddy/rules/", ".codebuddy/agents/", ".codebuddy/settings.json"], "user_paths": ["~/.codebuddy/agents/"], "mcp_key": "mcpServers (in settings.json)"},
-      "qwen": {"display_name": "Qwen Code (Alibaba)", "status": "active", "csaw_relevance": "recommended-add", "scope_notes": "Mirrors Gemini CLI pattern.", "project_paths": ["QWEN.md", ".qwen/agents/", ".qwen/skills/"], "user_paths": ["~/.qwen/"], "mcp_key": "mcpServers (inferred)"},
-      "kilo-code": {"display_name": "Kilo Code", "status": "active", "csaw_relevance": "recommended-add", "scope_notes": "Reads .claude/ and .agents/ — csaw's projection serves Kilo for free.", "project_paths": ["AGENTS.md", "AGENT.md", ".kilo/skills/", ".kilo/agent", ".kilocode/rules/memory-bank/"], "user_paths": ["~/.config/kilo/kilo.jsonc"], "mcp_key": "mcpServers (likely; nested in kilo.jsonc)"},
-      "aider": {"display_name": "Aider", "status": "active", "csaw_relevance": "recommended-add", "scope_notes": "Model-agnostic. Single CONVENTIONS.md.", "project_paths": ["CONVENTIONS.md", "AGENTS.md", ".aider.conf.yml"], "user_paths": ["~/.aider.conf.yml"], "mcp_key": "(no MCP client support)"},
-      "amp": {"display_name": "Amp (Sourcegraph)", "status": "active", "csaw_relevance": "recommended-add", "scope_notes": "AGENT.md / AGENTS.md / CLAUDE.md cascading.", "project_paths": ["AGENTS.md", "AGENT.md", "CLAUDE.md"], "user_paths": ["$HOME/.config/amp/AGENTS.md", "$HOME/.config/AGENTS.md"], "mcp_key": "(inferred)"},
-      "amazon-q": {"display_name": "Amazon Q Developer", "status": "active", "csaw_relevance": "recommended-add", "scope_notes": "Clean .amazonq/rules/ with subdir support.", "project_paths": ["AGENTS.md", ".amazonq/rules/"], "user_paths": [], "mcp_key": "(via AWS Q agent settings)"},
-      "augment": {"display_name": "Augment Code", "status": "active", "csaw_relevance": "recommended-add", "scope_notes": "Supports .augment-guidelines (legacy) AND .augment/rules/ AND AGENTS.md/CLAUDE.md hierarchical.", "project_paths": [".augment-guidelines", ".augment/rules/", "AGENTS.md", "CLAUDE.md"], "user_paths": [], "mcp_key": "(IDE settings)"},
-      "openhands": {"display_name": "OpenHands (formerly OpenDevin)", "status": "active", "csaw_relevance": "recommended-add", "scope_notes": ".openhands/microagents/ — V0 'microagents', V1 'skills'. Same path.", "project_paths": [".openhands/microagents/", "AGENTS.md"], "user_paths": ["~/.openhands/"], "mcp_key": "(inferred)"},
-      "cody": {"display_name": "Cody (Sourcegraph)", "status": "active", "csaw_relevance": "consider", "scope_notes": ".vscode/cody.json (workspace) + ~/.vscode/cody.json (user) for custom commands. Plus .cody/ignore.", "project_paths": [".vscode/cody.json", ".cody/ignore"], "user_paths": ["~/.vscode/cody.json"], "mcp_key": "(server-side / IDE settings)"},
-      "zed": {"display_name": "Zed", "status": "active", "csaw_relevance": "consider", "scope_notes": "Reads .rules at project root. MCP via settings.json context_servers (user-scope).", "project_paths": [".rules", "AGENTS.md"], "user_paths": ["~/.config/zed/settings.json (Linux)", "~/Library/Application Support/Zed/settings.json (macOS)"], "mcp_key": "context_servers"},
-      "pi": {"display_name": "Pi (earendil-works)", "status": "active", "csaw_relevance": "consider", "scope_notes": "Canonical user-scope ~/.pi/agent/.", "project_paths": ["AGENTS.md", "CLAUDE.md"], "user_paths": ["~/.pi/agent/AGENTS.md", "~/.pi/agent/auth.json"], "mcp_key": "mcpServers (inferred)"},
-      "hermes": {"display_name": "Hermes Agent (Nous Research)", "status": "active", "csaw_relevance": "served-by-proxy", "scope_notes": "CROSS-TOOL READER. Already served by csaw projecting AGENTS.md, CLAUDE.md, and .cursor/rules/ — Hermes reads all of those. Adding explicit .hermes.md/HERMES.md projection would require a dedicated entry but is not necessary for csaw to be useful to Hermes users today.", "project_paths": [".hermes.md", "HERMES.md", "AGENTS.md", "CLAUDE.md", ".cursorrules", ".cursor/rules/*.mdc"], "user_paths": ["~/.hermes/SOUL.md", "~/.hermes/config.yaml", "~/.hermes/skills/"], "mcp_key": "mcp_servers (YAML)"},
-      "claw-code": {"display_name": "Claw Code (ultraworkers)", "status": "active", "csaw_relevance": "watch", "scope_notes": "Clean-room rewrite of Claude Code. Reuses .claude/ — csaw projection serves automatically.", "project_paths": ["CLAUDE.md", "AGENTS.md", ".claude/agents/", ".claude/skills/<name>/SKILL.md", ".mcp.json"], "user_paths": ["~/.claude/"], "mcp_key": "mcpServers"},
-      "devin": {"display_name": "Devin (Cognition)", "status": "active", "csaw_relevance": "watch", "scope_notes": "Cloud agent. Playbooks in UI.", "project_paths": ["AGENTS.md", ".devin/wiki.json (docs)"], "user_paths": [], "mcp_key": "(cloud)"},
-      "factory": {"display_name": "Factory CLI (Droids)", "status": "active", "csaw_relevance": "watch", "scope_notes": "AGENTS.md only — already served.", "project_paths": ["AGENTS.md"], "user_paths": ["~/.factory/AGENTS.md"], "mcp_key": "(none documented)"},
-      "qodo": {"display_name": "Qodo Code / Qodo Merge", "status": "active", "csaw_relevance": "watch", "scope_notes": "Code review tool. Hierarchical best_practices.md.", "project_paths": ["best_practices.md", "pr-agent-settings/codebase_standards/"], "user_paths": [], "mcp_key": "(none)"},
-      "lingma": {"display_name": "Tongyi Lingma (Alibaba)", "status": "active", "csaw_relevance": "watch", "scope_notes": "Mostly IDE-internal. Docs primarily Chinese.", "project_paths": ["AGENTS.md (likely)", ".tongyiignore"], "user_paths": ["~/.lingma/"], "mcp_key": "(unclear)"},
-      "plandex": {"display_name": "Plandex", "status": "active", "csaw_relevance": "watch", "scope_notes": "Plan-first CLI. Dotfile conventions less standardized.", "project_paths": ["AGENTS.md (likely)"], "user_paths": [], "mcp_key": "(undocumented)"},
-      "joycode": {"display_name": "JoyCode", "status": "active", "csaw_relevance": "watch", "scope_notes": "ECC adapter, not standalone.", "project_paths": [".joycode/rules/", ".joycode/agents/", ".joycode/skills/", ".joycode/mcp-configs/"], "user_paths": [], "mcp_key": "(adapter-specific)"},
-      "openclaw": {"display_name": "OpenClaw / OpenClaw ecosystem", "status": "active", "csaw_relevance": "watch", "scope_notes": "Reference architecture; ecosystem of derivatives.", "project_paths": ["AGENTS.md", "SOUL.md", "TOOLS.md"], "user_paths": ["~/.openclaw/workspace/skills/<skill>/SKILL.md"], "mcp_key": "(documented elsewhere)"}
+      "gemini": {
+        "display_name": "Gemini CLI",
+        "status": "deprecated",
+        "csaw_in_code": true,
+        "scope_notes": "Sunset 2026-06-18. Migration: Antigravity.",
+        "project_paths": [
+          "GEMINI.md",
+          ".gemini/agents/",
+          ".gemini/commands/ (TOML)",
+          ".gemini/settings.json"
+        ],
+        "user_paths": [
+          "~/.gemini/"
+        ],
+        "mcp_key": "mcpServers (in settings.json)"
+      },
+      "roo-code": {
+        "display_name": "Roo Code",
+        "status": "active",
+        "csaw_in_code": false,
+        "scope_notes": "Cline fork. Strongest file-based mode system.",
+        "project_paths": [
+          ".roo/rules/",
+          ".roo/rules-<mode-slug>/",
+          ".roomodes",
+          ".roo/mcp.json"
+        ],
+        "user_paths": [
+          "~/.roo/rules-<slug>/"
+        ],
+        "mcp_key": "mcpServers"
+      },
+      "trae": {
+        "display_name": "Trae (ByteDance)",
+        "status": "active",
+        "csaw_in_code": false,
+        "scope_notes": "Reads ~/.cursor/mcp.json as user-global fallback.",
+        "project_paths": [
+          "project_rules.md",
+          ".rules",
+          ".trae/mcp.json"
+        ],
+        "user_paths": [
+          "user_rules.md",
+          "~/.cursor/mcp.json (fallback)"
+        ],
+        "mcp_key": "mcpServers"
+      },
+      "codebuddy": {
+        "display_name": "CodeBuddy (Tencent)",
+        "status": "active",
+        "csaw_in_code": true,
+        "scope_notes": "Cleanest Claude-like structure.",
+        "project_paths": [
+          ".codebuddy/CODEBUDDY.md",
+          ".codebuddy/rules/",
+          ".codebuddy/agents/",
+          ".codebuddy/settings.json"
+        ],
+        "user_paths": [
+          "~/.codebuddy/agents/"
+        ],
+        "mcp_key": "mcpServers (in settings.json)"
+      },
+      "qwen": {
+        "display_name": "Qwen Code (Alibaba)",
+        "status": "active",
+        "csaw_in_code": false,
+        "scope_notes": "Mirrors Gemini CLI pattern.",
+        "project_paths": [
+          "QWEN.md",
+          ".qwen/agents/",
+          ".qwen/skills/"
+        ],
+        "user_paths": [
+          "~/.qwen/"
+        ],
+        "mcp_key": "mcpServers (inferred)"
+      },
+      "kilo-code": {
+        "display_name": "Kilo Code",
+        "status": "active",
+        "csaw_in_code": false,
+        "scope_notes": "Reads .claude/ and .agents/ \u2014 csaw's projection serves Kilo for free.",
+        "project_paths": [
+          "AGENTS.md",
+          "AGENT.md",
+          ".kilo/skills/",
+          ".kilo/agent",
+          ".kilocode/rules/memory-bank/"
+        ],
+        "user_paths": [
+          "~/.config/kilo/kilo.jsonc"
+        ],
+        "mcp_key": "mcpServers (likely; nested in kilo.jsonc)"
+      },
+      "aider": {
+        "display_name": "Aider",
+        "status": "active",
+        "csaw_in_code": false,
+        "scope_notes": "Model-agnostic. Single CONVENTIONS.md.",
+        "project_paths": [
+          "CONVENTIONS.md",
+          "AGENTS.md",
+          ".aider.conf.yml"
+        ],
+        "user_paths": [
+          "~/.aider.conf.yml"
+        ],
+        "mcp_key": "(no MCP client support)"
+      },
+      "amp": {
+        "display_name": "Amp (Sourcegraph)",
+        "status": "active",
+        "csaw_in_code": false,
+        "scope_notes": "AGENT.md / AGENTS.md / CLAUDE.md cascading.",
+        "project_paths": [
+          "AGENTS.md",
+          "AGENT.md",
+          "CLAUDE.md"
+        ],
+        "user_paths": [
+          "$HOME/.config/amp/AGENTS.md",
+          "$HOME/.config/AGENTS.md"
+        ],
+        "mcp_key": "(inferred)"
+      },
+      "amazon-q": {
+        "display_name": "Amazon Q Developer",
+        "status": "active",
+        "csaw_in_code": true,
+        "scope_notes": "Clean .amazonq/rules/ with subdir support.",
+        "project_paths": [
+          "AGENTS.md",
+          ".amazonq/rules/"
+        ],
+        "user_paths": [],
+        "mcp_key": "(via AWS Q agent settings)"
+      },
+      "augment": {
+        "display_name": "Augment Code",
+        "status": "active",
+        "csaw_in_code": false,
+        "scope_notes": "Supports .augment-guidelines (legacy) AND .augment/rules/ AND AGENTS.md/CLAUDE.md hierarchical.",
+        "project_paths": [
+          ".augment-guidelines",
+          ".augment/rules/",
+          "AGENTS.md",
+          "CLAUDE.md"
+        ],
+        "user_paths": [],
+        "mcp_key": "(IDE settings)"
+      },
+      "openhands": {
+        "display_name": "OpenHands (formerly OpenDevin)",
+        "status": "active",
+        "csaw_in_code": true,
+        "scope_notes": ".openhands/microagents/ \u2014 V0 'microagents', V1 'skills'. Same path.",
+        "project_paths": [
+          ".openhands/microagents/",
+          "AGENTS.md"
+        ],
+        "user_paths": [
+          "~/.openhands/"
+        ],
+        "mcp_key": "(inferred)"
+      },
+      "cody": {
+        "display_name": "Cody (Sourcegraph)",
+        "status": "active",
+        "csaw_in_code": false,
+        "scope_notes": ".vscode/cody.json (workspace) + ~/.vscode/cody.json (user) for custom commands. Plus .cody/ignore.",
+        "project_paths": [
+          ".vscode/cody.json",
+          ".cody/ignore"
+        ],
+        "user_paths": [
+          "~/.vscode/cody.json"
+        ],
+        "mcp_key": "(server-side / IDE settings)"
+      },
+      "zed": {
+        "display_name": "Zed",
+        "status": "active",
+        "csaw_in_code": false,
+        "scope_notes": "Reads .rules at project root. MCP via settings.json context_servers (user-scope).",
+        "project_paths": [
+          ".rules",
+          "AGENTS.md"
+        ],
+        "user_paths": [
+          "~/.config/zed/settings.json (Linux)",
+          "~/Library/Application Support/Zed/settings.json (macOS)"
+        ],
+        "mcp_key": "context_servers"
+      },
+      "pi": {
+        "display_name": "Pi (earendil-works)",
+        "status": "active",
+        "csaw_in_code": false,
+        "scope_notes": "Canonical user-scope ~/.pi/agent/.",
+        "project_paths": [
+          "AGENTS.md",
+          "CLAUDE.md"
+        ],
+        "user_paths": [
+          "~/.pi/agent/AGENTS.md",
+          "~/.pi/agent/auth.json"
+        ],
+        "mcp_key": "mcpServers (inferred)"
+      },
+      "hermes": {
+        "display_name": "Hermes Agent (Nous Research)",
+        "status": "active",
+        "csaw_in_code": false,
+        "scope_notes": "CROSS-TOOL READER. Already served by csaw projecting AGENTS.md, CLAUDE.md, and .cursor/rules/ \u2014 Hermes reads all of those. Adding explicit .hermes.md/HERMES.md projection would require a dedicated entry but is not necessary for csaw to be useful to Hermes users today.",
+        "project_paths": [
+          ".hermes.md",
+          "HERMES.md",
+          "AGENTS.md",
+          "CLAUDE.md",
+          ".cursorrules",
+          ".cursor/rules/*.mdc"
+        ],
+        "user_paths": [
+          "~/.hermes/SOUL.md",
+          "~/.hermes/config.yaml",
+          "~/.hermes/skills/"
+        ],
+        "mcp_key": "mcp_servers (YAML)"
+      },
+      "claw-code": {
+        "display_name": "Claw Code (ultraworkers)",
+        "status": "active",
+        "csaw_in_code": false,
+        "scope_notes": "Clean-room rewrite of Claude Code. Reuses .claude/ \u2014 csaw projection serves automatically.",
+        "project_paths": [
+          "CLAUDE.md",
+          "AGENTS.md",
+          ".claude/agents/",
+          ".claude/skills/<name>/SKILL.md",
+          ".mcp.json"
+        ],
+        "user_paths": [
+          "~/.claude/"
+        ],
+        "mcp_key": "mcpServers"
+      },
+      "devin": {
+        "display_name": "Devin (Cognition)",
+        "status": "active",
+        "csaw_in_code": false,
+        "scope_notes": "Cloud agent. Playbooks in UI.",
+        "project_paths": [
+          "AGENTS.md",
+          ".devin/wiki.json (docs)"
+        ],
+        "user_paths": [],
+        "mcp_key": "(cloud)"
+      },
+      "factory": {
+        "display_name": "Factory CLI (Droids)",
+        "status": "active",
+        "csaw_in_code": false,
+        "scope_notes": "AGENTS.md only \u2014 already served.",
+        "project_paths": [
+          "AGENTS.md"
+        ],
+        "user_paths": [
+          "~/.factory/AGENTS.md"
+        ],
+        "mcp_key": "(none documented)"
+      },
+      "qodo": {
+        "display_name": "Qodo Code / Qodo Merge",
+        "status": "active",
+        "csaw_in_code": false,
+        "scope_notes": "Code review tool. Hierarchical best_practices.md.",
+        "project_paths": [
+          "best_practices.md",
+          "pr-agent-settings/codebase_standards/"
+        ],
+        "user_paths": [],
+        "mcp_key": "(none)"
+      },
+      "lingma": {
+        "display_name": "Tongyi Lingma (Alibaba)",
+        "status": "active",
+        "csaw_in_code": false,
+        "scope_notes": "Mostly IDE-internal. Docs primarily Chinese.",
+        "project_paths": [
+          "AGENTS.md (likely)",
+          ".tongyiignore"
+        ],
+        "user_paths": [
+          "~/.lingma/"
+        ],
+        "mcp_key": "(unclear)"
+      },
+      "plandex": {
+        "display_name": "Plandex",
+        "status": "active",
+        "csaw_in_code": false,
+        "scope_notes": "Plan-first CLI. Dotfile conventions less standardized.",
+        "project_paths": [
+          "AGENTS.md (likely)"
+        ],
+        "user_paths": [],
+        "mcp_key": "(undocumented)"
+      },
+      "joycode": {
+        "display_name": "JoyCode",
+        "status": "active",
+        "csaw_in_code": false,
+        "scope_notes": "ECC adapter, not standalone.",
+        "project_paths": [
+          ".joycode/rules/",
+          ".joycode/agents/",
+          ".joycode/skills/",
+          ".joycode/mcp-configs/"
+        ],
+        "user_paths": [],
+        "mcp_key": "(adapter-specific)"
+      },
+      "openclaw": {
+        "display_name": "OpenClaw / OpenClaw ecosystem",
+        "status": "active",
+        "csaw_in_code": false,
+        "scope_notes": "Reference architecture; ecosystem of derivatives.",
+        "project_paths": [
+          "AGENTS.md",
+          "SOUL.md",
+          "TOOLS.md"
+        ],
+        "user_paths": [
+          "~/.openclaw/workspace/skills/<skill>/SKILL.md"
+        ],
+        "mcp_key": "(documented elsewhere)"
+      }
     }
-  },
-  "csaw_projection_audit": {
-    "in_code_now": [
-      {"tool": "claude", "status": "Fully covered."},
-      {"tool": "codex", "status": "Instructions + skills. Agents/MCP TOML inline — intentional out of scope."},
-      {"tool": "cursor", "status": "Rules + MCP + instructions. Skills (.cursor/commands/) NOT projected."},
-      {"tool": "opencode", "status": "Agents + skills + instructions. MCP nested — intentional out of scope."},
-      {"tool": "windsurf", "status": "Rules + instructions. Workflows NOT projected."},
-      {"tool": "gemini", "status": "Agents + instructions. DEPRECATED 2026-06-18 — keep for migration window; remove in v0.6.0."},
-      {"tool": "antigravity", "status": "Added v0.5.1. Skills projection at .agents/skills/ (also csaw's StandardFallback)."},
-      {"tool": "amazon-q", "status": "Added v0.5.1. Rules at .amazonq/rules/."},
-      {"tool": "kiro", "status": "Added v0.5.1. Rules at .kiro/steering/, agents at .kiro/agents/."},
-      {"tool": "codebuddy", "status": "Added v0.5.1. Rules + agents under .codebuddy/."},
-      {"tool": "openhands", "status": "Added v0.5.1. Agents at .openhands/microagents/."}
-    ],
-    "recommended_additions_v0_6_0": [
-      {"tool": "goose", "reason": ".goosehints + .goose/recipes/ — needs new csaw kind support (recipes are YAML, not SKILL.md folders)."}
-    ],
-    "recommended_additions_phase_2": [
-      {"tool": "continue", "reason": ".continue/rules/ directory."},
-      {"tool": "augment", "reason": ".augment/rules/ directory."},
-      {"tool": "cline", "reason": ".clinerules/ clean."},
-      {"tool": "roo-code", "reason": "Strong modes + .roo/mcp.json."},
-      {"tool": "qwen", "reason": "Mirrors Gemini pattern."},
-      {"tool": "kilo-code", "reason": "Reads .claude/ and .agents/."},
-      {"tool": "amp", "reason": "AGENTS.md cascading — already served via instructions."},
-      {"tool": "aider", "reason": "CONVENTIONS.md + AGENTS.md."},
-      {"tool": "trae", "reason": ".trae/mcp.json clean."}
-    ],
-    "needs_structural_work_before_adding": [
-      {"tool": "vscode-copilot", "needs": "Per-subdir filename suffix (.agent.md, .instructions.md, .prompt.md). Single-file instruction target. Per-tool CommitToGit flag."},
-      {"tool": "copilot-cli", "needs": "Same as vscode-copilot. Should be unified `copilot` entry."},
-      {"tool": "cody", "needs": "Project .vscode/cody.json content schema is Cody-specific."},
-      {"tool": "hermes", "needs": "csaw already serves via .cursor/rules/ + AGENTS.md. Could add explicit .hermes.md/HERMES.md target."},
-      {"tool": "pi", "needs": "Only AGENTS.md/CLAUDE.md project paths (already served). MCP in ~/.pi/agent/ — out of scope."}
-    ],
-    "out_of_scope_with_current_model": [
-      {"tool": "zed", "reason": "Settings.json user-scope only. Project .rules is single file."},
-      {"tool": "devin", "reason": "Cloud-first."},
-      {"tool": "plandex", "reason": "No dotfile-dir convention documented."},
-      {"tool": "factory", "reason": "AGENTS.md only — already served."},
-      {"tool": "qodo", "reason": "Code review tool, different model."},
-      {"tool": "lingma", "reason": "Mostly IDE-internal."}
-    ],
-    "deprecated": [
-      {"tool": "gemini", "reason": "Sunset 2026-06-18. Migration: Antigravity."}
-    ],
-    "watch_list": [
-      {"tool": "claw-code", "reason": "Reuses .claude/ — auto-served."},
-      {"tool": "joycode", "reason": "ECC adapter."},
-      {"tool": "openclaw", "reason": "Reference architecture."}
-    ]
   },
   "additional_tools_known_to_exist_not_researched": {
     "description": "Tools from various catalogues not deep-researched. Most lack documented or significant filesystem config.",
-    "tools": ["Crush (TUI in Go)", "SWE-agent", "Smol Developer", "Claude Engineer", "Claurst", "Kimi CLI", "ForgeCode", "Codebuff", "Kode CLI", "OH-MY-PI", "gptme", "Mistral Vibe", "Devon", "AutoCodeRover", "Grok CLI (xAI)", "Letta Code", "CodeMachine-CLI", "Codel", "RA.Aid", "open-codex", "Neovate Code", "Groq Code CLI", "Dexto", "g3 (Rust)", "Coro Code", "openHarness", "Crab Code", "Open Interpreter", "Warp", "Droid", "FetchCoder", "Junie CLI (JetBrains — out of scope)", "Cortex Code CLI (Snowflake)", "Tabnine CLI", "Mentat CLI", "Tabby (on-prem)", "MarsCode (ByteDance, cloud)", "Comate (Baidu)", "Naver Agent N", "Kakao Kanana", "Rakuten AI 3.0"]
+    "tools": [
+      "Crush (TUI in Go)",
+      "SWE-agent",
+      "Smol Developer",
+      "Claude Engineer",
+      "Claurst",
+      "Kimi CLI",
+      "ForgeCode",
+      "Codebuff",
+      "Kode CLI",
+      "OH-MY-PI",
+      "gptme",
+      "Mistral Vibe",
+      "Devon",
+      "AutoCodeRover",
+      "Grok CLI (xAI)",
+      "Letta Code",
+      "CodeMachine-CLI",
+      "Codel",
+      "RA.Aid",
+      "open-codex",
+      "Neovate Code",
+      "Groq Code CLI",
+      "Dexto",
+      "g3 (Rust)",
+      "Coro Code",
+      "openHarness",
+      "Crab Code",
+      "Open Interpreter",
+      "Warp",
+      "Droid",
+      "FetchCoder",
+      "Junie CLI (JetBrains \u2014 out of scope)",
+      "Cortex Code CLI (Snowflake)",
+      "Tabnine CLI",
+      "Mentat CLI",
+      "Tabby (on-prem)",
+      "MarsCode (ByteDance, cloud)",
+      "Comate (Baidu)",
+      "Naver Agent N",
+      "Kakao Kanana",
+      "Rakuten AI 3.0"
+    ]
   }
 }

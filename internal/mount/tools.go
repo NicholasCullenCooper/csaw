@@ -1,5 +1,7 @@
 package mount
 
+//go:generate go run github.com/NicholasCullenCooper/csaw/cmd/tools-gen
+
 import (
 	"fmt"
 	"os"
@@ -19,11 +21,13 @@ const (
 	KindRule        Kind = "rule"
 	KindMCP         Kind = "mcp"
 	KindInstruction Kind = "instruction"
+	KindHook        Kind = "hook"
+	KindIgnore      Kind = "ignore"
 	KindOther       Kind = "other"
 )
 
 // AllKinds returns the set of user-selectable kinds, in display order.
-var AllKinds = []Kind{KindAgent, KindSkill, KindRule, KindMCP, KindInstruction}
+var AllKinds = []Kind{KindAgent, KindSkill, KindRule, KindMCP, KindInstruction, KindHook, KindIgnore}
 
 // KindOf classifies a registry-side source entry by inspecting its path.
 func KindOf(entry SourceEntry) Kind {
@@ -36,6 +40,10 @@ func KindOf(entry SourceEntry) Kind {
 		return KindRule
 	case isMCPEntry(entry):
 		return KindMCP
+	case isHookEntry(entry):
+		return KindHook
+	case isIgnoreEntry(entry):
+		return KindIgnore
 	case isInstructionEntry(entry):
 		return KindInstruction
 	default:
@@ -45,12 +53,33 @@ func KindOf(entry SourceEntry) Kind {
 
 // isInstructionEntry returns true for top-level instruction files like
 // AGENTS.md, CLAUDE.md that mount to the project root and are always loaded.
+// Also recognizes tool-specific project-root instruction files: GEMINI.md
+// (Gemini CLI / Antigravity), QWEN.md (Qwen Code), and .goosehints (Goose).
 func isInstructionEntry(entry SourceEntry) bool {
 	rel := entry.RelativePath
 	if strings.Contains(rel, "/") {
 		return false
 	}
-	return rel == "AGENTS.md" || rel == "CLAUDE.md" || rel == "AGENT.md"
+	switch rel {
+	case "AGENTS.md", "CLAUDE.md", "AGENT.md", "GEMINI.md", "QWEN.md", ".goosehints":
+		return true
+	}
+	return false
+}
+
+// isHookEntry returns true for entries under the registry's hooks/ directory.
+// These project into per-tool hook directories (e.g., .claude/hooks/, .kiro/hooks/).
+func isHookEntry(entry SourceEntry) bool {
+	return strings.HasPrefix(entry.RelativePath, "hooks/")
+}
+
+// isIgnoreEntry returns true for entries under the registry's ignore/ directory.
+// Each file projects to a single tool-specific ignore path at project root
+// (e.g., ignore/cursor → .cursorignore, ignore/cody → .cody/ignore).
+func isIgnoreEntry(entry SourceEntry) bool {
+	rel := entry.RelativePath
+	dir := filepath.Dir(rel)
+	return dir == "ignore"
 }
 
 // ParseKind maps a user-supplied name (singular or plural) to a Kind value.
@@ -62,6 +91,10 @@ func ParseKind(s string) (Kind, error) {
 		return KindSkill, nil
 	case "rule", "rules":
 		return KindRule, nil
+	case "hook", "hooks":
+		return KindHook, nil
+	case "ignore", "ignores":
+		return KindIgnore, nil
 	case "mcp", "mcps":
 		return KindMCP, nil
 	case "instruction", "instructions":
@@ -84,6 +117,10 @@ func KindLabel(k Kind) string {
 		return "mcp"
 	case KindInstruction:
 		return "instructions"
+	case KindHook:
+		return "hooks"
+	case KindIgnore:
+		return "ignore"
 	default:
 		return "other"
 	}
@@ -96,8 +133,15 @@ func KindOfProjectPath(rel string) Kind {
 	rel = filepath.ToSlash(rel)
 
 	if !strings.Contains(rel, "/") {
-		if rel == "AGENTS.md" || rel == "CLAUDE.md" || rel == "AGENT.md" {
+		switch rel {
+		case "AGENTS.md", "CLAUDE.md", "AGENT.md", "GEMINI.md", "QWEN.md", ".goosehints":
 			return KindInstruction
+		}
+	}
+
+	for _, target := range KnownIgnoreTargets {
+		if rel == target.ProjectPath {
+			return KindIgnore
 		}
 	}
 
@@ -126,6 +170,9 @@ func KindOfProjectPath(rel string) Kind {
 		if tool.RulesSubdir != "" && strings.HasPrefix(rest, tool.RulesSubdir+"/") {
 			return KindRule
 		}
+		if tool.HooksSubdir != "" && strings.HasPrefix(rest, tool.HooksSubdir+"/") {
+			return KindHook
+		}
 	}
 
 	if strings.HasPrefix(rel, StandardFallback.Dir+"/") {
@@ -138,7 +185,7 @@ func KindOfProjectPath(rel string) Kind {
 	return KindOther
 }
 
-// ToolDir describes a tool's directory conventions for skills, rules, and agents.
+// ToolDir describes a tool's directory conventions for skills, rules, agents, and hooks.
 type ToolDir struct {
 	// Dir is the dot-directory name (e.g., ".claude").
 	Dir string
@@ -150,6 +197,9 @@ type ToolDir struct {
 	// AgentsSubdir is the path under Dir where subagent definitions are stored.
 	// Empty means this tool doesn't support subagents.
 	AgentsSubdir string
+	// HooksSubdir is the path under Dir where lifecycle hook scripts are stored.
+	// Empty means this tool doesn't have a file-based hooks directory.
+	HooksSubdir string
 }
 
 // ToolRegistry maps short tool names to their directory conventions.
@@ -165,17 +215,18 @@ type ToolDir struct {
 //   - gemini: Google sunsets 2026-06-18; users should migrate to antigravity which
 //     reuses `.agents/` (also csaw's StandardFallback path).
 var ToolRegistry = map[string]ToolDir{
-	"claude":      {Dir: ".claude", SkillsSubdir: "skills", RulesSubdir: "rules", AgentsSubdir: "agents"},
+	"claude":      {Dir: ".claude", SkillsSubdir: "skills", RulesSubdir: "rules", AgentsSubdir: "agents", HooksSubdir: "hooks"},
 	"opencode":    {Dir: ".opencode", SkillsSubdir: "skills", AgentsSubdir: "agents"},
-	"codex":       {Dir: ".codex", SkillsSubdir: "skills"},
+	"codex":       {Dir: ".codex", SkillsSubdir: "skills"}, // hooks live in config.toml [hooks] — not file-projectable
 	"cursor":      {Dir: ".cursor", RulesSubdir: "rules"},
 	"windsurf":    {Dir: ".windsurf", RulesSubdir: "rules"},
 	"gemini":      {Dir: ".gemini", AgentsSubdir: "agents"}, // DEPRECATED: sunset 2026-06-18.
 	"antigravity": {Dir: ".agents", SkillsSubdir: "skills"}, // Replaces gemini. Same path as StandardFallback.
 	"amazon-q":    {Dir: ".amazonq", RulesSubdir: "rules"},
-	"kiro":        {Dir: ".kiro", RulesSubdir: "steering", AgentsSubdir: "agents"},
+	"kiro":        {Dir: ".kiro", RulesSubdir: "steering", AgentsSubdir: "agents", HooksSubdir: "hooks"},
 	"codebuddy":   {Dir: ".codebuddy", RulesSubdir: "rules", AgentsSubdir: "agents"},
 	"openhands":   {Dir: ".openhands", AgentsSubdir: "microagents"},
+	"goose":       {Dir: ".goose"}, // .goosehints handled at instruction layer; recipes are user-scope.
 }
 
 // KnownToolDirs returns all known tool directories.
@@ -281,6 +332,8 @@ func skillName(entry SourceEntry) string {
 func ExpandToolTargets(entries []SourceEntry, toolDirs []ToolDir) []SourceEntry {
 	// First pass: project MCP configs to tool-specific paths.
 	entries = expandMCPTargets(entries)
+	// Second pass: project ignore files to tool-specific paths.
+	entries = expandIgnoreTargets(entries)
 
 	var expanded []SourceEntry
 	for _, entry := range entries {
@@ -323,6 +376,13 @@ func ExpandToolTargets(entries []SourceEntry, toolDirs []ToolDir) []SourceEntry 
 			continue
 		}
 
+		if isHookEntry(entry) {
+			// Mount hook scripts into tool hook directories
+			// (e.g., hooks/pre-commit.sh → .claude/hooks/pre-commit.sh)
+			expanded = appendProjected(expanded, entry, toolDirs, func(t ToolDir) string { return t.HooksSubdir })
+			continue
+		}
+
 		// Everything else (AGENTS.md, CLAUDE.md, etc.): keep at original path
 		expanded = append(expanded, entry)
 	}
@@ -345,6 +405,65 @@ var KnownMCPTargets = []MCPTarget{
 	{RegistryFile: "claude-code.json", ProjectPath: ".mcp.json"},
 	{RegistryFile: "vscode.json", ProjectPath: ".vscode/mcp.json"},
 	{RegistryFile: "cursor.json", ProjectPath: ".cursor/mcp.json"},
+}
+
+// IgnoreTarget maps a registry filename under ignore/ to a project-relative
+// path where the corresponding tool expects its ignore file.
+type IgnoreTarget struct {
+	// RegistryFile is the filename in the registry's ignore/ directory
+	// (e.g., "cursor" for ignore/cursor).
+	RegistryFile string
+	// ProjectPath is the relative path in the project (e.g., ".cursorignore").
+	ProjectPath string
+}
+
+// KnownIgnoreTargets lists the supported per-tool ignore file projections.
+// Each entry maps a file in the registry's ignore/ directory to the path the
+// corresponding tool reads. Uses gitignore-style syntax in all cases.
+var KnownIgnoreTargets = []IgnoreTarget{
+	{RegistryFile: "cursor", ProjectPath: ".cursorignore"},
+	{RegistryFile: "cody", ProjectPath: ".cody/ignore"},
+	{RegistryFile: "aider", ProjectPath: ".aiderignore"},
+	{RegistryFile: "lingma", ProjectPath: ".tongyiignore"},
+}
+
+// ignoreProjectPath returns the project-relative target path for an ignore
+// entry, or empty string if the filename is not a known target.
+func ignoreProjectPath(entry SourceEntry) string {
+	base := filepath.Base(entry.RelativePath)
+	for _, target := range KnownIgnoreTargets {
+		if base == target.RegistryFile {
+			return target.ProjectPath
+		}
+	}
+	return ""
+}
+
+// expandIgnoreTargets redirects ignore entries from their registry paths
+// (ignore/cursor) to tool-specific project paths (.cursorignore). Unknown
+// ignore files are kept at their original path.
+func expandIgnoreTargets(entries []SourceEntry) []SourceEntry {
+	var expanded []SourceEntry
+	for _, entry := range entries {
+		if !isIgnoreEntry(entry) {
+			expanded = append(expanded, entry)
+			continue
+		}
+		projectPath := ignoreProjectPath(entry)
+		if projectPath == "" {
+			expanded = append(expanded, entry)
+			continue
+		}
+		expanded = append(expanded, SourceEntry{
+			SourceName:    entry.SourceName,
+			RelativePath:  projectPath,
+			QualifiedPath: entry.QualifiedPath + "→" + projectPath,
+			FullPath:      entry.FullPath,
+			Priority:      entry.Priority,
+			Protected:     entry.Protected,
+		})
+	}
+	return expanded
 }
 
 // isMCPEntry returns true if the source entry is an MCP config file
