@@ -1820,12 +1820,17 @@ func newHideCommand() *cobra.Command {
 }
 
 var toolDisplayNames = map[string]string{
-	"claude":   "Claude Code",
-	"cursor":   "Cursor",
-	"opencode": "OpenCode",
-	"codex":    "Codex",
-	"windsurf": "Windsurf",
-	"gemini":   "Gemini CLI",
+	"claude":      "Claude Code",
+	"cursor":      "Cursor",
+	"opencode":    "OpenCode",
+	"codex":       "Codex CLI",
+	"windsurf":    "Windsurf",
+	"gemini":      "Gemini CLI (deprecated; sunset 2026-06-18)",
+	"antigravity": "Antigravity (Google)",
+	"amazon-q":    "Amazon Q Developer",
+	"kiro":        "Kiro (AWS)",
+	"codebuddy":   "CodeBuddy (Tencent)",
+	"openhands":   "OpenHands",
 }
 
 func toolDisplayName(key string) string {

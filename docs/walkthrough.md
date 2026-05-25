@@ -1,0 +1,489 @@
+# csaw Walkthrough
+
+Scenario-based guide for csaw beyond the [README](../README.md) quick start. Each section is self-contained — jump to the one that matches your situation.
+
+**Contents:**
+- [I Already Have an AGENTS.md](#i-already-have-an-agentsmd) — adopt existing AI config files into a registry
+- [Using a Team Source](#using-a-team-source) — share config from a team git repo
+- [Composing Multiple Sources](#composing-multiple-sources) — layer company + team + personal
+- [Protected Files](#protected-files) — enforce mandates that can't be overridden
+- [Auditing Active Context](#auditing-active-context) — declare and verify project policy
+- [Experimental Skills](#experimental-skills) — develop skills before promoting
+- [Pulling Team Updates](#pulling-team-updates) — keep in sync with team changes
+- [Sharing Your Changes](#sharing-your-changes) — push edits back to a source
+- [Testing a Branch](#testing-a-branch) — pin a project to a feature branch
+- [Forking a Team File](#forking-a-team-file) — customize without breaking the upstream
+- [Switching Profiles](#switching-profiles) — change active work mode
+- [Clean Removal](#clean-removal) — unmount everything cleanly
+
+---
+
+## I Already Have an AGENTS.md
+
+You have an existing project with AI config files scattered around — an AGENTS.md, maybe some skills in `.claude/skills/`. You want to pull them into a registry instead of leaving them committed.
+
+```bash
+cd ~/my-project
+csaw init --adopt ~/my-ai-config
+```
+
+```
+╭───────────────────────────────────────╮
+│                                       │
+│  adopted 3 files                      │
+│                                       │
+│   ✔ AGENTS.md                         │
+│   ✔ skills/testing/SKILL.md           │
+│   ✔ rules/go.md                       │
+│                                       │
+╰───────────────────────────────────────╯
+```
+
+csaw scans your project, finds AI config files, and copies them into the new registry with the correct structure. It reverses the projection — `.claude/skills/testing/SKILL.md` becomes `skills/testing/SKILL.md` in the registry, `.claude/rules/go.md` becomes `rules/go.md`, `.claude/agents/reviewer.md` becomes `agents/reviewer.md`.
+
+Now you can delete the originals from your project, register the source, and activate it instead:
+
+```bash
+csaw source add personal ~/my-ai-config --priority 10
+csaw use personal/default
+```
+
+---
+
+## Using a Team Source
+
+Your team keeps shared AI config in a git repo. One command to get it:
+
+```bash
+csaw source add team git@github.com:your-org/ai-config.git
+```
+
+```
+✔ registered source "team"
+✔ cloned team
+```
+
+csaw auto-clones the repo. Now activate a named work mode:
+
+```bash
+cd ~/my-project
+csaw profile list
+csaw use team/backend
+```
+
+`team/backend` means: use the `backend` profile from the configured `team`
+source. Your project gets the team's AGENTS.md, skills, and rules — all
+symlinked. Every repo on the team can activate the same named mode. When
+someone updates the team config:
+
+```bash
+csaw pull team
+# ✔ pulled team
+```
+
+Every project sees edits to already-mounted files instantly through the symlinks.
+If the update added new files, rerun the same activation command to add the new
+symlinks.
+
+---
+
+## Composing Multiple Sources
+
+You want company standards, team conventions, and your personal preferences composed into every repo — with priority and protection in the right places.
+
+Adding a source only makes it available. It does not activate that source in a project. The active context is whatever `csaw use` last mounted, and you can verify it with `csaw inspect` or `csaw audit`.
+
+```bash
+csaw source add company git@github.com:your-org/eng-standards.git --priority 100
+csaw source add team git@github.com:your-team/ai-config.git --priority 50
+csaw init ~/my-ai-config
+csaw source add personal ~/my-ai-config --priority 10
+```
+
+Activate one source's profile and only that gets mounted:
+
+```bash
+csaw use team/backend
+```
+
+That activates the `backend` profile from `team`, not every configured source. To compose multiple sources into one work mode, define a named profile in your personal source's `csaw.yml`:
+
+```yaml
+work:
+  description: Company standards + team backend + my personal helpers
+  extends:
+    - company/required
+    - team/backend
+  include:
+    - skills/debugging/**
+    - skills/note-capture/**
+```
+
+Then activate it:
+
+```bash
+csaw use personal/work
+```
+
+Because this profile lives in the `personal` source, `skills/debugging/**` resolves to `personal/skills/debugging/**`. `company/required` and `team/backend` remain source-qualified. The only string you type day-to-day is `personal/work`.
+
+For one-off debugging, the raw pattern command still exists:
+
+```bash
+csaw mount paths 'company/**' 'team/**' 'personal/skills/**'
+```
+
+It is the advanced escape hatch, not the normal workflow.
+
+### Consultant variant: client isolation
+
+If you're a contractor or consultant, the same compose-and-activate pattern applies — substitute client sources for company+team, and pair activation with project policy that blocks other clients:
+
+```bash
+csaw source add client-acme git@github.com:acme/ai-config.git --priority 50
+```
+
+Define a profile in your personal source bundling the client with safe-for-client helpers:
+
+```yaml
+acme-work:
+  description: Acme config plus my safe-for-client helpers
+  extends:
+    - client-acme/backend
+  include:
+    - skills/code-review/**
+    - skills/debugging/**
+```
+
+In the project, declare what's required and what's forbidden:
+
+```yaml
+required_sources:
+  - client-acme
+blocked_sources:
+  - client-globex
+  - personal-experimental
+blocked_kinds:
+  - mcp
+required_kinds:
+  - instructions
+```
+
+```bash
+csaw audit --strict
+```
+
+The contractor's case is the same composition pattern as the canonical — project policy is what does the isolation work.
+
+### What if two sources provide the same file?
+
+**Priority decides.** Higher number wins.
+
+```bash
+csaw inspect
+```
+
+```
+Sources
+  company  (remote, priority 100) → ~/.csaw/sources/company
+  team     (remote, priority 50)  → ~/.csaw/sources/team
+  personal (local,  priority 10)  → ~/my-ai-config
+```
+
+You can set priority on any source:
+
+```bash
+csaw source add personal ~/my-config --priority 10
+csaw source add team git@github.com:org/config.git --priority 50    # team wins over personal on overlap
+csaw source add company git@github.com:org/standards.git --priority 100  # company wins over both
+```
+
+Protected files in higher-priority sources can't be overridden by lower layers at all (see [Protected Files](#protected-files) below).
+
+If two sources have the same priority and provide the same file, csaw errors and tells you to resolve it explicitly.
+
+---
+
+## Protected Files
+
+When a source needs to enforce that certain files **cannot be overridden** — company-wide security rules, a department's mandatory PR-workflow skill, a client's required `AGENTS.md` — mark them as protected in that source's `csaw.yml`:
+
+```yaml
+csaw:
+  protected:
+    - AGENTS.md
+    - rules/security.md
+
+backend:
+  include:
+    - AGENTS.md
+    - rules/**
+```
+
+When a file is protected:
+
+- **Priority is bypassed.** Even if personal has priority 100, the protected source wins for that file.
+- **Fork is refused.** `csaw fork client-acme/AGENTS.md --into personal` returns an error.
+- **Protection is visible.** `csaw inspect` marks protected files with a `*` under the source.
+- **Protection is verified.** csaw records a SHA-256 hash for protected mounts and `csaw check` / `csaw audit` detect content drift.
+
+This is the mechanism for layered governance — let any upstream source (company, department, team, or client) publish required files, layer personal preferences on top, and csaw won't let the personal layer break the protected ones.
+
+Protection is **local assurance, not hard enforcement**. csaw prevents its own mechanisms from bypassing protected files and detects if protected mounted content no longer matches the mount-time hash. Remount to accept an intentional protected source update. csaw does not sandbox the machine or stop a user from manually editing files outside csaw.
+
+---
+
+## Auditing Active Context
+
+Create a starter policy:
+
+```bash
+csaw audit --init
+```
+
+Projects can declare local context requirements in `.csaw/policy.yml`. The canonical case is "this repo must mount the company and team sources, and not personal-experimental":
+
+```yaml
+required_sources:
+  - company
+  - department
+  - name: team
+    url: git@github.com:my-team/ai-config.git
+    ref: main
+blocked_sources:
+  - personal-experimental
+required_kinds:
+  - instructions
+  - rules
+```
+
+Run audit before starting work, before handing off, or in local/CI checks:
+
+```bash
+csaw audit
+csaw audit --strict
+csaw audit --json
+```
+
+`csaw audit` checks active mount health, protected file content drift, required sources, required source URLs and project pins, blocked source patterns, blocked kinds, blocked mounted paths, and required artifact kinds. Default mode exits nonzero on errors. `--strict` also exits nonzero on warnings, including a missing project policy.
+
+The `ref` field checks the project pin set by `csaw pin team@main`; it is not inferred from the source checkout's current branch. The JSON output is documented in [docs/reference/audit-json.md](docs/reference/audit-json.md).
+
+This is **local assurance**, not hard prevention. csaw can tell you the right sources are active and forbidden ones are absent, but it does not sandbox your machine or stop a user from manually editing files.
+
+Example client isolation policy:
+
+```yaml
+required_sources:
+  - name: client-acme
+    url: git@example.com:org/client-acme-ai.git
+    ref: approved
+blocked_sources:
+  - other-client-*
+  - personal-experimental
+blocked_kinds:
+  - mcp
+blocked_paths:
+  - .claude/agents/**
+required_kinds:
+  - instructions
+  - rules
+```
+
+Example team policy:
+
+```yaml
+required_sources:
+  - platform-team
+blocked_sources: []
+blocked_kinds: []
+blocked_paths: []
+required_kinds:
+  - instructions
+  - rules
+```
+
+---
+
+## Experimental Skills
+
+Working on a new skill? Put it in `skills/experimental/`:
+
+```
+~/my-ai-config/
+  skills/
+    code-review/SKILL.md         ← stable, always mounted
+    experimental/
+      debug-strategy/SKILL.md    ← hidden from default mounts
+```
+
+The `.csawignore` file hides `skills/experimental/**` by default. To test an experimental skill:
+
+```bash
+csaw use personal/default --include-experimental
+```
+
+When you're confident it works, promote it:
+
+```bash
+csaw promote personal/skills/experimental/debug-strategy
+# ✔ promoted debug-strategy from experimental to stable
+#   Push: csaw push personal -m "promote debug-strategy"
+```
+
+This moves it from `skills/experimental/debug-strategy/` to `skills/debug-strategy/` — now it mounts by default.
+
+To share a promoted skill with the team:
+
+```bash
+csaw fork personal/skills/debug-strategy/SKILL.md --into team
+csaw push team -m "add debug-strategy skill"
+```
+
+---
+
+## Pulling Team Updates
+
+A teammate updated the team's AGENTS.md. Get the latest:
+
+```bash
+csaw pull team
+# ✔ pulled team
+```
+
+Since your project's `AGENTS.md` is a symlink to the team registry, edits to
+that file are visible instantly. If the team added new rules, skills, agents, or
+MCP files, rerun the profile activation to add those new symlinks.
+
+### What if I edited a mounted file?
+
+If you edited `AGENTS.md` in your project, you actually edited the team registry (through the symlink). Now `csaw pull` detects uncommitted changes:
+
+```
+! team has uncommitted changes
+  Commit:  cd ~/.csaw/sources/team && git add -A && git commit -m "..."
+  Or stash: csaw pull team --stash
+```
+
+**`--stash`** stashes your changes, pulls, then pops the stash:
+
+```bash
+csaw pull team --stash
+# ✔ pulled team
+```
+
+### What if the team and I changed the same file?
+
+If you have local commits and the remote has diverged:
+
+```
+! team has diverged (2 local, 5 remote commits)
+  Resolve: cd ~/.csaw/sources/team && git pull --rebase
+```
+
+This is standard git — csaw tells you what happened and where to fix it. The registry is a normal git repo.
+
+---
+
+## Sharing Your Changes
+
+You updated a skill through a symlink (or edited the registry directly). Push it:
+
+```bash
+csaw push team -m "improve code review skill"
+# ✔ pushed team
+```
+
+This runs `git add -A && git commit && git push` in the team registry. Your teammates pull the update with `csaw pull`.
+
+If you're not sure and want to go through a PR instead:
+
+```bash
+csaw source clone team ~/Developer/team-config
+cd ~/Developer/team-config
+git checkout -b improve-code-review
+# ... edit files ...
+git add -A && git commit -m "improve code review"
+git push -u origin improve-code-review
+gh pr create
+```
+
+`csaw source clone` moves a remote source to a local directory for contribution. Now you can branch, PR, and collaborate like any codebase.
+
+---
+
+## Testing a Branch
+
+You want to try a feature branch of the team config without affecting other projects:
+
+```bash
+csaw pin team@feature/new-rules
+csaw pull team
+csaw use team/backend
+```
+
+This project now uses the `feature/new-rules` branch. Other projects stay on main. When you're done:
+
+```bash
+csaw unpin team
+csaw pull team
+```
+
+Back to main.
+
+---
+
+## Forking a Team File
+
+You like the team's `AGENTS.md` but want to customize it. Fork it:
+
+```bash
+csaw fork team/AGENTS.md --into personal
+```
+
+This copies the file to your personal registry. Since personal has higher priority, your version gets mounted instead of the team's. The team original is untouched.
+
+---
+
+## Switching Profiles
+
+Activating a new profile **replaces** the previous one automatically:
+
+```bash
+csaw use team/backend
+# ... working on backend ...
+
+csaw use team/frontend
+# previous mount removed, frontend mounted
+```
+
+To go back to what you had before:
+
+```bash
+csaw mount --restore
+```
+
+To add files on top of an existing mount without replacing:
+
+```bash
+csaw use personal/extras --keep
+```
+
+---
+
+## Clean Removal
+
+```bash
+csaw unmount
+```
+
+Every symlink is removed. If csaw stashed any original files during mount (because they existed before), they're restored. Your project is exactly as it was.
+
+```
+✔ 6 removed · 2 restored
+
+  Remount: csaw mount --restore
+```
+
+---
+

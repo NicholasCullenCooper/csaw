@@ -154,19 +154,28 @@ type ToolDir struct {
 
 // ToolRegistry maps short tool names to their directory conventions.
 //
-// Per-tool support matrix is derived from docs/reference/tool-projection.json:
+// Per-tool support matrix is derived from docs/reference/tool-projection.json.
+// Tools NOT included and why:
 //   - codex has no `.codex/agents/` (uses TOML inline tables in config.toml)
 //   - cursor has no `.cursor/agents/` (Background Agents are runtime, not files)
-//   - opencode reads `.opencode/agents/*.md` (markdown)
-//   - gemini reads `.gemini/agents/*.md` (markdown); skills are TOML commands and
-//     MCP is nested in settings.json — neither fits file-to-file symlinking
+//   - goose has `.goose/recipes/` (YAML, not csaw's SKILL.md folder pattern) and
+//     `.goosehints` (project-root single file); needs new kind support — pending.
+//
+// DEPRECATIONS:
+//   - gemini: Google sunsets 2026-06-18; users should migrate to antigravity which
+//     reuses `.agents/` (also csaw's StandardFallback path).
 var ToolRegistry = map[string]ToolDir{
-	"claude":   {Dir: ".claude", SkillsSubdir: "skills", RulesSubdir: "rules", AgentsSubdir: "agents"},
-	"opencode": {Dir: ".opencode", SkillsSubdir: "skills", AgentsSubdir: "agents"},
-	"codex":    {Dir: ".codex", SkillsSubdir: "skills"},
-	"cursor":   {Dir: ".cursor", RulesSubdir: "rules"},
-	"windsurf": {Dir: ".windsurf", RulesSubdir: "rules"},
-	"gemini":   {Dir: ".gemini", AgentsSubdir: "agents"},
+	"claude":      {Dir: ".claude", SkillsSubdir: "skills", RulesSubdir: "rules", AgentsSubdir: "agents"},
+	"opencode":    {Dir: ".opencode", SkillsSubdir: "skills", AgentsSubdir: "agents"},
+	"codex":       {Dir: ".codex", SkillsSubdir: "skills"},
+	"cursor":      {Dir: ".cursor", RulesSubdir: "rules"},
+	"windsurf":    {Dir: ".windsurf", RulesSubdir: "rules"},
+	"gemini":      {Dir: ".gemini", AgentsSubdir: "agents"}, // DEPRECATED: sunset 2026-06-18.
+	"antigravity": {Dir: ".agents", SkillsSubdir: "skills"}, // Replaces gemini. Same path as StandardFallback.
+	"amazon-q":    {Dir: ".amazonq", RulesSubdir: "rules"},
+	"kiro":        {Dir: ".kiro", RulesSubdir: "steering", AgentsSubdir: "agents"},
+	"codebuddy":   {Dir: ".codebuddy", RulesSubdir: "rules", AgentsSubdir: "agents"},
+	"openhands":   {Dir: ".openhands", AgentsSubdir: "microagents"},
 }
 
 // KnownToolDirs returns all known tool directories.

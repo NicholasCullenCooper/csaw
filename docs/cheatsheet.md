@@ -128,8 +128,8 @@ csaw update                             # repair broken links
 | Kind | Registry path | Projects to |
 |---|---|---|
 | Instructions | `AGENTS.md`, `CLAUDE.md` | Project root |
-| Rules | `rules/*.md` | `.claude/rules/`, `.cursor/rules/`, `.windsurf/rules/` |
-| Agents | `agents/*.md` | `.claude/agents/`, `.opencode/agents/`, `.gemini/agents/` |
+| Rules | `rules/*.md` | `.claude/rules/`, `.cursor/rules/`, `.amazonq/rules/`, `.kiro/steering/`, `.codebuddy/rules/`, `.windsurf/rules/` |
+| Agents | `agents/*.md` | `.claude/agents/`, `.opencode/agents/`, `.kiro/agents/`, `.codebuddy/agents/`, `.openhands/microagents/` |
 | Skills | `skills/*/SKILL.md` | `.claude/skills/`, `.opencode/skills/`, `.codex/skills/`, `.agents/skills/` |
 | MCP | `mcp/*.json` | `.mcp.json`, `.cursor/mcp.json`, `.vscode/mcp.json` |
 

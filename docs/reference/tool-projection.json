@@ -1,7 +1,7 @@
 {
   "$schema_version": 6,
   "updated_at": "2026-05-24",
-  "scope_notes": "Projection map for AI coding tools csaw projects config into. Drives ToolRegistry, README claims, and audit decisions. v6 simplified from v5 — removed aspirational sections (design_intent, methodology, mcp_comparison, cross_tool_patterns, competitive_landscape, per-cell evidence/freshness) that weren't driving code or docs. Kept the data csaw actually uses: tool entries, universal paths (fallback graph), audit. Richer schema is recoverable from prior commits if a registry-product direction emerges later.",
+  "scope_notes": "Projection map for AI coding tools csaw projects config into. Drives ToolRegistry, README claims, and audit decisions. Tool entries list project + user filesystem paths per kind; the audit section tracks which tools csaw currently projects to vs. recommended additions.",
   "confidence_legend": {
     "verified": "Read directly from official tool docs.",
     "documented": "Official docs mention but with caveats.",
@@ -16,6 +16,7 @@
   },
   "csaw_relevance_legend": {
     "in-code": "Currently in csaw's ToolRegistry.",
+    "served-by-proxy": "csaw already serves this tool by projecting files the tool reads from another tool's paths (e.g., Hermes reads .cursor/rules/, csaw projects .cursor/rules/). No direct entry needed.",
     "recommended-add": "Clean file-based projection that fits csaw's current model.",
     "consider": "File-based projection with structural mismatches (suffixes, single-file targets, git-visibility).",
     "watch": "Emerging or limited filesystem story.",
@@ -330,7 +331,7 @@
       "cody": {"display_name": "Cody (Sourcegraph)", "status": "active", "csaw_relevance": "consider", "scope_notes": ".vscode/cody.json (workspace) + ~/.vscode/cody.json (user) for custom commands. Plus .cody/ignore.", "project_paths": [".vscode/cody.json", ".cody/ignore"], "user_paths": ["~/.vscode/cody.json"], "mcp_key": "(server-side / IDE settings)"},
       "zed": {"display_name": "Zed", "status": "active", "csaw_relevance": "consider", "scope_notes": "Reads .rules at project root. MCP via settings.json context_servers (user-scope).", "project_paths": [".rules", "AGENTS.md"], "user_paths": ["~/.config/zed/settings.json (Linux)", "~/Library/Application Support/Zed/settings.json (macOS)"], "mcp_key": "context_servers"},
       "pi": {"display_name": "Pi (earendil-works)", "status": "active", "csaw_relevance": "consider", "scope_notes": "Canonical user-scope ~/.pi/agent/.", "project_paths": ["AGENTS.md", "CLAUDE.md"], "user_paths": ["~/.pi/agent/AGENTS.md", "~/.pi/agent/auth.json"], "mcp_key": "mcpServers (inferred)"},
-      "hermes": {"display_name": "Hermes Agent (Nous Research)", "status": "active", "csaw_relevance": "consider", "scope_notes": "CROSS-TOOL READER. Reads .hermes.md/HERMES.md (own), AGENTS.md, CLAUDE.md, .cursorrules, .cursor/rules/*.mdc. csaw projecting .cursor/rules/ serves Hermes for free.", "project_paths": [".hermes.md", "HERMES.md", "AGENTS.md", "CLAUDE.md", ".cursorrules", ".cursor/rules/*.mdc"], "user_paths": ["~/.hermes/SOUL.md", "~/.hermes/config.yaml", "~/.hermes/skills/"], "mcp_key": "mcp_servers (YAML)"},
+      "hermes": {"display_name": "Hermes Agent (Nous Research)", "status": "active", "csaw_relevance": "served-by-proxy", "scope_notes": "CROSS-TOOL READER. Already served by csaw projecting AGENTS.md, CLAUDE.md, and .cursor/rules/ — Hermes reads all of those. Adding explicit .hermes.md/HERMES.md projection would require a dedicated entry but is not necessary for csaw to be useful to Hermes users today.", "project_paths": [".hermes.md", "HERMES.md", "AGENTS.md", "CLAUDE.md", ".cursorrules", ".cursor/rules/*.mdc"], "user_paths": ["~/.hermes/SOUL.md", "~/.hermes/config.yaml", "~/.hermes/skills/"], "mcp_key": "mcp_servers (YAML)"},
       "claw-code": {"display_name": "Claw Code (ultraworkers)", "status": "active", "csaw_relevance": "watch", "scope_notes": "Clean-room rewrite of Claude Code. Reuses .claude/ — csaw projection serves automatically.", "project_paths": ["CLAUDE.md", "AGENTS.md", ".claude/agents/", ".claude/skills/<name>/SKILL.md", ".mcp.json"], "user_paths": ["~/.claude/"], "mcp_key": "mcpServers"},
       "devin": {"display_name": "Devin (Cognition)", "status": "active", "csaw_relevance": "watch", "scope_notes": "Cloud agent. Playbooks in UI.", "project_paths": ["AGENTS.md", ".devin/wiki.json (docs)"], "user_paths": [], "mcp_key": "(cloud)"},
       "factory": {"display_name": "Factory CLI (Droids)", "status": "active", "csaw_relevance": "watch", "scope_notes": "AGENTS.md only — already served.", "project_paths": ["AGENTS.md"], "user_paths": ["~/.factory/AGENTS.md"], "mcp_key": "(none documented)"},
@@ -348,15 +349,15 @@
       {"tool": "cursor", "status": "Rules + MCP + instructions. Skills (.cursor/commands/) NOT projected."},
       {"tool": "opencode", "status": "Agents + skills + instructions. MCP nested — intentional out of scope."},
       {"tool": "windsurf", "status": "Rules + instructions. Workflows NOT projected."},
-      {"tool": "gemini", "status": "Agents + instructions. DEPRECATED 2026-06-18."}
+      {"tool": "gemini", "status": "Agents + instructions. DEPRECATED 2026-06-18 — keep for migration window; remove in v0.6.0."},
+      {"tool": "antigravity", "status": "Added v0.5.1. Skills projection at .agents/skills/ (also csaw's StandardFallback)."},
+      {"tool": "amazon-q", "status": "Added v0.5.1. Rules at .amazonq/rules/."},
+      {"tool": "kiro", "status": "Added v0.5.1. Rules at .kiro/steering/, agents at .kiro/agents/."},
+      {"tool": "codebuddy", "status": "Added v0.5.1. Rules + agents under .codebuddy/."},
+      {"tool": "openhands", "status": "Added v0.5.1. Agents at .openhands/microagents/."}
     ],
-    "recommended_additions_phase_1": [
-      {"tool": "antigravity", "reason": "Gemini CLI's successor. csaw's .agents/skills/ ALREADY serves it."},
-      {"tool": "amazon-q", "reason": "Clean .amazonq/rules/ — direct fit."},
-      {"tool": "kiro", "reason": ".kiro/steering/ + .kiro/agents/. AWS adoption."},
-      {"tool": "codebuddy", "reason": "Cleanest Claude-like structure."},
-      {"tool": "openhands", "reason": ".openhands/microagents/ clean."},
-      {"tool": "goose", "reason": ".goosehints + .goose/recipes/."}
+    "recommended_additions_v0_6_0": [
+      {"tool": "goose", "reason": ".goosehints + .goose/recipes/ — needs new csaw kind support (recipes are YAML, not SKILL.md folders)."}
     ],
     "recommended_additions_phase_2": [
       {"tool": "continue", "reason": ".continue/rules/ directory."},
