@@ -317,7 +317,7 @@ csaw config set tools claude,cursor
 
 > **Notes on tool coverage:**
 > - **GitHub Copilot (VS Code + CLI):** csaw serves both via the universal `AGENTS.md` convention. Direct `.github/` projection requires per-suffix filename support and per-tool git-visibility flags — tracked as future work.
-> - **Gemini CLI:** Google announced sunset on 2026-06-18; csaw users should migrate to Antigravity, which uses `.agents/` (csaw's StandardFallback path, served automatically).
+> - **Gemini CLI:** Removed in v0.6.0 (Google sunset 2026-06-18). Migrate to Antigravity — it uses `.agents/` (csaw's StandardFallback, served automatically) and reads `GEMINI.md`.
 >
 > Full per-tool projection details — paths, fallbacks, MCP schemas, and tools we don't yet target — are catalogued in [docs/reference/tool-projection.json](docs/reference/tool-projection.json).
 

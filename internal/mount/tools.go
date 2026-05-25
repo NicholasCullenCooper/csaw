@@ -210,18 +210,17 @@ type ToolDir struct {
 //   - cursor has no `.cursor/agents/` (Background Agents are runtime, not files)
 //   - goose has `.goose/recipes/` (YAML, not csaw's SKILL.md folder pattern) and
 //     `.goosehints` (project-root single file); needs new kind support — pending.
-//
-// DEPRECATIONS:
-//   - gemini: Google sunsets 2026-06-18; users should migrate to antigravity which
-//     reuses `.agents/` (also csaw's StandardFallback path).
+//   - gemini removed in v0.6.0: Google sunset Gemini CLI on 2026-06-18; users
+//     should migrate to antigravity which reuses `.agents/` (also csaw's
+//     StandardFallback path). GEMINI.md is still recognized as an instruction
+//     file (Antigravity reads it).
 var ToolRegistry = map[string]ToolDir{
 	"claude":      {Dir: ".claude", SkillsSubdir: "skills", RulesSubdir: "rules", AgentsSubdir: "agents", HooksSubdir: "hooks"},
 	"opencode":    {Dir: ".opencode", SkillsSubdir: "skills", AgentsSubdir: "agents"},
 	"codex":       {Dir: ".codex", SkillsSubdir: "skills"}, // hooks live in config.toml [hooks] — not file-projectable
 	"cursor":      {Dir: ".cursor", RulesSubdir: "rules"},
 	"windsurf":    {Dir: ".windsurf", RulesSubdir: "rules"},
-	"gemini":      {Dir: ".gemini", AgentsSubdir: "agents"}, // DEPRECATED: sunset 2026-06-18.
-	"antigravity": {Dir: ".agents", SkillsSubdir: "skills"}, // Replaces gemini. Same path as StandardFallback.
+	"antigravity": {Dir: ".agents", SkillsSubdir: "skills"}, // Replaces sunset Gemini CLI. Same path as StandardFallback.
 	"amazon-q":    {Dir: ".amazonq", RulesSubdir: "rules"},
 	"kiro":        {Dir: ".kiro", RulesSubdir: "steering", AgentsSubdir: "agents", HooksSubdir: "hooks"},
 	"codebuddy":   {Dir: ".codebuddy", RulesSubdir: "rules", AgentsSubdir: "agents"},

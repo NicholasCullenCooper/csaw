@@ -1343,8 +1343,8 @@
       "gemini": {
         "display_name": "Gemini CLI",
         "status": "deprecated",
-        "csaw_in_code": true,
-        "scope_notes": "Sunset 2026-06-18. Migration: Antigravity.",
+        "csaw_in_code": false,
+        "scope_notes": "Sunset 2026-06-18 by Google. Removed from ToolRegistry in v0.6.0. Migration: Antigravity (.agents/). GEMINI.md is still recognized as an instruction file (Antigravity reads it).",
         "project_paths": [
           "GEMINI.md",
           ".gemini/agents/",

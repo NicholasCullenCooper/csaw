@@ -45,7 +45,6 @@ func TestKindOfProjectPath(t *testing.T) {
 		{"CLAUDE.md", KindInstruction},
 		{".claude/agents/code-reviewer.md", KindAgent},
 		{".opencode/agents/reviewer.md", KindAgent},
-		{".gemini/agents/researcher.md", KindAgent},
 		{".kiro/agents/specialist.md", KindAgent},
 		{".codebuddy/agents/helper.md", KindAgent},
 		{".openhands/microagents/explorer.md", KindAgent},

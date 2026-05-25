@@ -21,7 +21,6 @@ Tools with `csaw_in_code: true` (consistency-tested against `ToolRegistry`):
 - **`codebuddy`** — CodeBuddy (Tencent)
 - **`codex`** — OpenAI Codex CLI
 - **`cursor`** — Cursor (IDE + CLI)
-- **`gemini`** — Gemini CLI
 - **`goose`** — Goose (AAIF / Linux Foundation)
 - **`kiro`** — Kiro (AWS)
 - **`opencode`** — OpenCode
@@ -356,7 +355,7 @@ Tools with file-based projection that are less prioritized for csaw's MVP. Promo
 | Cody (Sourcegraph) (`cody`) | — | `.vscode/cody.json`, `.cody/ignore` | `~/.vscode/cody.json` |
 | Devin (Cognition) (`devin`) | — | `AGENTS.md`, `.devin/wiki.json (docs)` | — |
 | Factory CLI (Droids) (`factory`) | — | `AGENTS.md` | `~/.factory/AGENTS.md` |
-| Gemini CLI (`gemini`) | true | `GEMINI.md`, `.gemini/agents/`, `.gemini/commands/ (TOML)`, `.gemini/settings.json` | `~/.gemini/` |
+| Gemini CLI (`gemini`) | — | `GEMINI.md`, `.gemini/agents/`, `.gemini/commands/ (TOML)`, `.gemini/settings.json` | `~/.gemini/` |
 | Hermes Agent (Nous Research) (`hermes`) | — | `.hermes.md`, `HERMES.md`, `AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.cursor/rules/*.mdc` | `~/.hermes/SOUL.md`, `~/.hermes/config.yaml`, `~/.hermes/skills/` |
 | JoyCode (`joycode`) | — | `.joycode/rules/`, `.joycode/agents/`, `.joycode/skills/`, `.joycode/mcp-configs/` | — |
 | Kilo Code (`kilo-code`) | — | `AGENTS.md`, `AGENT.md`, `.kilo/skills/`, `.kilo/agent`, `.kilocode/rules/memory-bank/` | `~/.config/kilo/kilo.jsonc` |

@@ -1108,6 +1108,6 @@ You are operating at expert level when you can:
 - Write a client isolation policy from memory.
 - Decide when to protect, pin, fork, promote, or keep repo-local.
 - Design a source layout that works across Claude Code, Codex, Cursor,
-  Windsurf, OpenCode, Copilot, and Gemini CLI.
+  Windsurf, OpenCode, Copilot, and Antigravity.
 - Review a csaw code change and identify which docs, tests, and workflows need
   updates.

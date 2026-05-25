@@ -34,9 +34,9 @@ See [`tool-projection.json`](../reference/tool-projection.json) tools with `"csa
 - **Memory** as a csaw kind — most "memory" today is session state or user-private. csaw is project-scope. Revisit if a portable memory standard emerges.
 - **goose recipes** at `.goose/recipes/` — recipes are YAML files, not csaw's SKILL.md folder pattern. Recipes can be a future kind if there's demand, but the .goosehints file (now recognized as `instructions`) covers the common Goose use case.
 
-## Deprecated
+## Removed
 
-- **gemini** — Google sunset 2026-06-18. Migration target: `antigravity`. Remove `gemini` from `ToolRegistry` post-sunset (~v0.7.0).
+- **gemini** (removed v0.6.0) — Google sunset 2026-06-18. Migration target: `antigravity` (`.agents/`, also csaw's StandardFallback). `GEMINI.md` is still recognized as an instruction file because Antigravity reads it.
 
 ## Watch list
 

@@ -1825,12 +1825,12 @@ var toolDisplayNames = map[string]string{
 	"opencode":    "OpenCode",
 	"codex":       "Codex CLI",
 	"windsurf":    "Windsurf",
-	"gemini":      "Gemini CLI (deprecated; sunset 2026-06-18)",
 	"antigravity": "Antigravity (Google)",
 	"amazon-q":    "Amazon Q Developer",
 	"kiro":        "Kiro (AWS)",
 	"codebuddy":   "CodeBuddy (Tencent)",
 	"openhands":   "OpenHands",
+	"goose":       "Goose (AAIF / Linux Foundation)",
 }
 
 func toolDisplayName(key string) string {
