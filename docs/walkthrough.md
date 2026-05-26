@@ -471,6 +471,95 @@ csaw use personal/extras --keep
 
 ---
 
+## Lifecycle Hooks
+
+Your team ships a pre-commit script that runs `go test ./...` on changed packages before allowing a commit. You want every project using `team/` to run it without each engineer copy-pasting.
+
+In your team source:
+
+```
+team/
+├── AGENTS.md
+└── hooks/
+    └── pre-commit-test.sh
+```
+
+In a project with claude configured, after `csaw mount`:
+
+```
+project/
+├── .claude/
+│   └── hooks/
+│       └── pre-commit-test.sh    ← symlink to team/hooks/pre-commit-test.sh
+```
+
+Claude Code reads the script when its commit lifecycle fires. Today only `.claude/hooks/` is a projection target — other tools either don't have file-based hooks (Codex inlines them in `config.toml`) or weren't added yet.
+
+`csaw inspect` shows hooks under the **Hooks** group, alongside the source they came from.
+
+---
+
+## Ignore Patterns
+
+You want Cursor and Aider to skip `node_modules/`, `dist/`, and `*.snap` files across every project. Same patterns, different tool conventions.
+
+In your source:
+
+```
+team/
+├── AGENTS.md
+└── ignore/
+    ├── cursor          # gitignore-style patterns
+    └── aider           # same content; tools read different files
+```
+
+After mount in a project with cursor configured:
+
+```
+project/
+└── .cursorignore       ← symlink to team/ignore/cursor
+```
+
+Add aider to the tools list and `.aiderignore` shows up too. Each tool gets its own file at the path it expects (`.cursorignore`, `.cody/ignore`, `.aiderignore`, `.tongyiignore`), all linked back to the same source file group.
+
+If you only want to maintain one set of patterns: put them in `ignore/cursor` and `ignore/aider` as two files with identical content (today there's no single-source-of-truth aliasing — that's a roadmap item).
+
+---
+
+## Sharing Context With GitHub Copilot
+
+GitHub Copilot is unusual: it reads `.github/instructions/` and `.github/agents/`, which are the team's *committed* shared context (PR reviewers see them in diffs). csaw handles this differently from every other tool.
+
+You author rules and agents the normal way:
+
+```
+team/
+├── rules/
+│   └── security.md
+└── agents/
+    └── code-reviewer.md
+```
+
+After `csaw mount` with copilot in your tools list:
+
+```
+project/
+├── .github/
+│   ├── instructions/
+│   │   └── security.instructions.md    ← suffix added automatically
+│   └── agents/
+│       └── code-reviewer.agent.md      ← suffix added automatically
+```
+
+Two things to notice:
+
+1. **Filename suffixes are automatic.** Copilot *requires* `.instructions.md` and `.agent.md` suffixes on the disk. csaw rewrites the projected filename; your source file in `team/rules/security.md` is unchanged.
+2. **These paths are NOT git-excluded.** Every other projection is hidden via `.git/info/exclude`. Copilot's `.github/` paths intentionally show up in `git status` and PRs — that's the GitHub-blessed pattern for shared team context. If you don't want a specific file committed, `csaw hide .github/instructions/<file>` works the same as elsewhere.
+
+If you also have claude configured, `rules/security.md` lands in two places: `.claude/rules/security.md` (hidden from git) and `.github/instructions/security.instructions.md` (visible to git). Same source file; two audiences.
+
+---
+
 ## Clean Removal
 
 ```bash

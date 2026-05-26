@@ -15,7 +15,7 @@ After completing this curriculum, you should be able to:
 - Design company, department, team, personal, client, and community AI workspace sources.
 - Adopt existing repo-local AI files into a reusable source.
 - Use profiles, priorities, protected files, pins, fork, promote, and restore.
-- Predict where instructions, rules, agents, skills, and MCP files mount.
+- Predict where instructions, rules, agents, skills, MCP, hooks, and ignore files mount.
 - Audit active context for required sources, blocked sources, required kinds,
   source URL, project pin, mount health, and protected content drift.
 - Diagnose and recover from link drift, replaced files, missing sources, and
@@ -30,7 +30,7 @@ You should already be comfortable with:
 - Basic shell navigation.
 - Git repositories, branches, remotes, commits, and ignored files.
 - The idea of AI coding tool context files such as `AGENTS.md`, rules, agents,
-  skills, and MCP server configuration.
+  skills, MCP server configuration, lifecycle hooks, and context-ignore patterns.
 
 Use generic test directories throughout the curriculum. Do not use real client
 or production secrets in exercises.
@@ -82,7 +82,7 @@ Use csaw when context crosses at least one boundary:
 | Source         | A local directory or git repo containing AI workspace files. |
 | Profile        | A named selection in `csaw.yml` that says what to mount.     |
 | Mount          | The linked files placed into the project.                    |
-| Kind           | One of instructions, rules, agents, skills, MCP, or other.   |
+| Kind           | One of instructions, rules, agents, skills, MCP, hooks, ignore, or other. |
 | Policy         | `.csaw/policy.yml`, checked by `csaw audit`.                 |
 | Pin            | A per-project source ref set with `csaw pin source@ref`.     |
 | Protected file | A file a source marks as mandatory and non-overridable.      |
@@ -284,21 +284,26 @@ mount with `--force`, or mount with `--skip-conflicts`.
 
 csaw classifies AI workspace files by kind:
 
-| Kind         | Registry path            | Project target         |
-| ------------ | ------------------------ | ---------------------- |
-| Instructions | `AGENTS.md`, `CLAUDE.md` | Project root           |
-| Rules        | `rules/*.md`             | Tool rule directories  |
-| Agents       | `agents/*.md`            | Tool agent directories |
-| Skills       | `skills/*/SKILL.md`      | Tool skill directories |
-| MCP          | `mcp/*.json`             | Tool MCP config paths  |
+| Kind         | Registry path                                                | Project target              |
+| ------------ | ------------------------------------------------------------ | --------------------------- |
+| Instructions | `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.goosehints`         | Project root                |
+| Rules        | `rules/*.md`                                                 | Tool rule directories       |
+| Agents       | `agents/*.md`                                                | Tool agent directories      |
+| Skills       | `skills/*/SKILL.md`                                          | Tool skill directories      |
+| MCP          | `mcp/*.json`                                                 | Tool MCP config paths       |
+| Hooks        | `hooks/*`                                                    | Tool hook directories       |
+| Ignore       | `ignore/*` (one file per tool)                               | Tool-specific ignore paths  |
+
+csaw deliberately does **not** project two additional kinds you might expect: `settings` (contains API keys and credentials — never project to a team source) and `memory` (today this is session state or user-private — revisit if a portable standard emerges). See [planning/projection-roadmap.md](planning/projection-roadmap.md).
 
 Tool projection means one registry shape can support multiple tools. For
 example, `skills/review/SKILL.md` can mount to `.claude/skills/review/SKILL.md`
-and `.opencode/skills/review/SKILL.md`.
+and `.opencode/skills/review/SKILL.md`. **GitHub Copilot is the rewriting case**: `rules/security.md` projects to `.github/instructions/security.instructions.md` (suffix is mandatory for Copilot; csaw applies it automatically).
 
 The starter `default` profile includes instructions, rules, agents, and skills.
-It does not include MCP files. Mount MCP by adding `mcp/**` to a profile or by
-using an explicit qualified pattern.
+It does not include MCP, hooks, or ignore files. Mount those by adding
+`mcp/**`, `hooks/**`, or `ignore/**` to a profile or by using explicit
+qualified patterns.
 
 Set preferred tools:
 
@@ -323,11 +328,25 @@ csaw hide AGENTS.md
 
 ### Exercise
 
-Create one file of each kind in `personal-ai`. Mount the starter profile for
-instructions, rules, agents, and skills. Mount MCP with the explicit
-`csaw mount paths 'personal/mcp/**'` command or add `mcp/**` to
-`personal-ai/csaw.yml`. Predict where each file should appear before running
-`csaw inspect`.
+Create one file of each kind in `personal-ai`:
+
+```
+personal-ai/
+├── AGENTS.md                          # instructions
+├── rules/security.md                  # rules
+├── agents/code-reviewer.md            # agents
+├── skills/code-review/SKILL.md        # skills
+├── mcp/claude-code.json               # mcp
+├── hooks/pre-commit.sh                # hooks
+└── ignore/cursor                      # ignore (gitignore-style patterns)
+```
+
+Mount the starter profile for instructions, rules, agents, and skills. Then mount the rest explicitly: `csaw mount paths 'personal/mcp/**' 'personal/hooks/**' 'personal/ignore/**'` — or add `mcp/**`, `hooks/**`, `ignore/**` to `personal-ai/csaw.yml`. Predict where each file should appear before running `csaw inspect`.
+
+The interesting projections to predict:
+- `hooks/pre-commit.sh` → `.claude/hooks/pre-commit.sh` (only claude has `HooksSubdir` today).
+- `ignore/cursor` → `.cursorignore` (single-file alias, like MCP).
+- If you have copilot in your tools config, `rules/security.md` *also* lands at `.github/instructions/security.instructions.md` with the suffix rewritten — and is **not** hidden from git (Copilot's `.github/` paths are committed shared context, marked `CommitToGit`).
 
 ## Module 6: Multi-Source Composition
 
@@ -813,6 +832,8 @@ If you show a file under a hidden tool directory, the parent directory can
 appear in `git status` until you hide the file again. Project policy files such
 as `.csaw/policy.yml` are independent of mount visibility.
 
+**GitHub Copilot is the exception.** Tools marked `CommitToGit` in the registry skip the default hide-from-git behavior. Today only Copilot uses this: projections into `.github/instructions/` and `.github/agents/` appear in `git status` and PRs without `csaw show`. This is intentional — those paths are the GitHub-blessed location for shared team context. If you want them hidden, run `csaw hide .github/instructions/<file>` per file.
+
 ### Exercise
 
 Show and hide a mounted file. Inspect `.git/info/exclude` before and after.
@@ -944,6 +965,8 @@ csaw hide <path>
 git check-ignore -v <path>
 ```
 
+If the path is under `.github/instructions/` or `.github/agents/`, this is intentional — those tools (currently only Copilot) are marked `CommitToGit` because the GitHub-blessed location for shared team context is reviewed in PRs. `csaw hide` will still work to suppress it, but reconsider whether you want to.
+
 ### Audit Says Policy Missing
 
 Run:
@@ -1015,10 +1038,11 @@ Package map:
 | Package              | Responsibility                                        |
 | -------------------- | ----------------------------------------------------- |
 | `cmd/csaw`           | CLI wiring and command behavior.                      |
+| `cmd/tools-gen`      | Renders `docs/reference/tool-projection.md` from `tool-projection.json`. Run via `go generate ./internal/mount/...`. CI fails if the generated file is out of date. |
 | `internal/runtime`   | Paths, constants, normalization helpers.              |
 | `internal/sources`   | Source config, git operations, catalogs.              |
 | `internal/profiles`  | `csaw.yml` parsing and inheritance.                   |
-| `internal/mount`     | Planning, projection, priority, protected resolution. |
+| `internal/mount`     | Planning, projection, priority, protected resolution. `ToolRegistry` lives here; `cmd/tools-gen` reads its JSON counterpart for docs. |
 | `internal/workspace` | Stash, excludes, mount state, hashes.                 |
 | `internal/drift`     | Mounted link and protected content health.            |
 | `internal/audit`     | Project policy, findings, renderers, exit semantics.  |
@@ -1029,11 +1053,14 @@ Package map:
 Before committing:
 
 ```bash
+go generate ./internal/mount/...   # regenerate docs/reference/tool-projection.md
 gofmt -l .
 go test ./...
 go vet ./...
 go build ./...
 ```
+
+If you touched `docs/reference/tool-projection.json` or anything in `internal/mount/tools.go`, the `go generate` step is mandatory — CI verifies the markdown is in sync.
 
 Use the repo-local skills in `skills/` when a task matches.
 
@@ -1053,14 +1080,16 @@ When a feature changes, update this curriculum if any answer changes for:
 
 Build a personal source with:
 
-- One instruction file.
-- Two rules.
-- One agent.
-- One stable skill.
-- One experimental skill.
+- One instruction file (`AGENTS.md`).
+- Two rules (`rules/*.md`).
+- One agent (`agents/*.md`).
+- One stable skill (`skills/<name>/SKILL.md`).
+- One experimental skill (under `skills/experimental/<name>/`).
+- One hook script (`hooks/*.sh` — e.g., a pre-commit linter).
+- One ignore file (`ignore/cursor` — gitignore-style patterns excluding `node_modules/` and `dist/`).
 
 Mount it into a disposable project, inspect it, audit it, promote the
-experimental skill, and unmount cleanly.
+experimental skill, and unmount cleanly. Confirm with `git status` and `.git/info/exclude` that all projected files are hidden — *unless* you have Copilot configured, in which case `.github/instructions/` and `.github/agents/` projections are visible by design (`CommitToGit`).
 
 ## Capstone 2: Team Governance
 
