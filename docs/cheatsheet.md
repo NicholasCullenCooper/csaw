@@ -100,6 +100,8 @@ csaw promote personal/skills/experimental/debug-strategy
 csaw push personal -m "promote debug-strategy"
 ```
 
+Any path segment named `experimental/` is hidden by built-in convention — applies to `rules/experimental/`, `agents/experimental/`, `hooks/experimental/` too. Test in-progress files alongside stable with `--include-experimental`. (`.csawignore` is separate; `--include-ignored` mounts those.)
+
 ## Source Priority
 
 When two sources provide the same file, higher priority wins:

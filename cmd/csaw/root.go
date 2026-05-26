@@ -614,6 +614,7 @@ func renderProfileDetails(profile profiles.Profile) string {
 	}
 	fmt.Fprintf(&b, "use: csaw use %s\n", profile.Name)
 	fmt.Fprintf(&b, "include_ignored: %t\n", profile.IncludeIgnored)
+	fmt.Fprintf(&b, "include_experimental: %t\n", profile.IncludeExperimental)
 	writeProfilePatterns(&b, "include", profile.Include)
 	writeProfilePatterns(&b, "exclude", profile.Exclude)
 	return b.String()
@@ -637,6 +638,9 @@ func profileStats(profile profiles.Profile) string {
 	if profile.IncludeIgnored {
 		parts = append(parts, "includes ignored files")
 	}
+	if profile.IncludeExperimental {
+		parts = append(parts, "includes experimental")
+	}
 	return strings.Join(parts, " · ")
 }
 
@@ -649,16 +653,17 @@ func countLabel(count int, singular string) string {
 }
 
 type mountRunOptions struct {
-	excludes       []string
-	profile        string
-	includeIgnored bool
-	forceAll       bool
-	skipConflicts  bool
-	restore        bool
-	keep           bool
-	toolsFlag      []string
-	kindsFlag      []string
-	allowPicker    bool
+	excludes            []string
+	profile             string
+	includeIgnored      bool
+	includeExperimental bool
+	forceAll            bool
+	skipConflicts       bool
+	restore             bool
+	keep                bool
+	toolsFlag           []string
+	kindsFlag           []string
+	allowPicker         bool
 }
 
 func newUseCommand() *cobra.Command {
@@ -735,8 +740,8 @@ func addMountFlags(cmd *cobra.Command, options *mountRunOptions, includeProfile 
 		cmd.Flags().StringVar(&options.profile, "profile", "", "named profile to use for mount selection")
 	}
 	cmd.Flags().StringArrayVar(&options.excludes, "exclude", nil, "exclude matching file or glob")
-	cmd.Flags().BoolVar(&options.includeIgnored, "include-ignored", false, "include files hidden by .csawignore")
-	cmd.Flags().BoolVar(&options.includeIgnored, "include-experimental", false, "include experimental skills (alias for --include-ignored)")
+	cmd.Flags().BoolVar(&options.includeIgnored, "include-ignored", false, "include files matched by .csawignore patterns")
+	cmd.Flags().BoolVar(&options.includeExperimental, "include-experimental", false, "include files under any 'experimental/' path segment (built-in convention)")
 	cmd.Flags().BoolVar(&options.forceAll, "force", false, "overwrite conflicts and stash originals")
 	cmd.Flags().BoolVar(&options.skipConflicts, "skip-conflicts", false, "skip files that conflict with existing paths")
 	if includeRestore {
@@ -802,11 +807,12 @@ func runMountCommand(cmd *cobra.Command, args []string, options mountRunOptions)
 	}
 
 	selection := mount.Selection{
-		IncludePatterns: append([]string(nil), args...),
-		ExcludePatterns: append([]string(nil), options.excludes...),
-		Profile:         profile,
-		IncludeIgnored:  options.includeIgnored,
-		Kinds:           kinds,
+		IncludePatterns:     append([]string(nil), args...),
+		ExcludePatterns:     append([]string(nil), options.excludes...),
+		Profile:             profile,
+		IncludeIgnored:      options.includeIgnored,
+		IncludeExperimental: options.includeExperimental,
+		Kinds:               kinds,
 	}
 
 	var entries []mount.SourceEntry

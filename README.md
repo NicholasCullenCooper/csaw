@@ -189,14 +189,14 @@ This creates a ready-to-use registry:
 ```
 ~/my-ai-config/
   csaw.yml              ← default profile
-  .csawignore           ← hides skills/experimental/** by default
+  .csawignore           ← optional: custom hide patterns (drafts/, archived/, etc.)
   AGENTS.md             ← your coding rules
   rules/                ← always-on standards
   agents/               ← subagent definitions
   skills/
     code-review/SKILL.md
     commit-message/SKILL.md
-    experimental/       ← work-in-progress skills
+    experimental/       ← work-in-progress skills (hidden by built-in convention)
 ```
 
 Now activate it in your project:
@@ -329,11 +329,12 @@ A csaw source is just a git repo with markdown files:
 ```
 my-ai-config/
   csaw.yml              ← profiles (which files to mount)
-  .csawignore           ← files hidden from default mounts
+  .csawignore           ← optional: custom hide patterns
   AGENTS.md             ← project guidance (the standard)
   rules/                ← always-on coding standards
     go-conventions.md
     testing-standards.md
+    experimental/       ← work-in-progress rules (hidden by convention)
   agents/               ← subagent definitions (separate context windows)
     code-reviewer.md
     planner.md
@@ -342,7 +343,7 @@ my-ai-config/
       SKILL.md
     testing/
       SKILL.md
-    experimental/       ← work in progress (hidden by .csawignore)
+    experimental/       ← work-in-progress skills (hidden by convention)
       new-idea/
         SKILL.md
   mcp/                  ← MCP server configs
@@ -436,7 +437,8 @@ inside `personal`, while `team/backend` resolves inside the `team` source.
 | `--keep` | use, mount | Add to existing mount instead of replacing. |
 | `--tools list` | use, mount | Target tools (e.g., `--tools claude,cursor`). |
 | `--restore` | mount | Re-mount previous selection. |
-| `--include-experimental` | use, mount | Include experimental skills (hidden by .csawignore). |
+| `--include-experimental` | use, mount | Mount files under any `experimental/` path segment (built-in convention; applies to rules, skills, agents, hooks). |
+| `--include-ignored` | use, mount | Mount files matched by `.csawignore` patterns. |
 | `--strict` | audit | Fail on warnings as well as errors. |
 | `--json` | audit | Emit a machine-readable audit report. |
 | `--init` | audit | Write a starter `.csaw/policy.yml`. |

@@ -13,11 +13,12 @@ import (
 )
 
 type Profile struct {
-	Name           string
-	Description    string
-	Include        []string
-	Exclude        []string
-	IncludeIgnored bool
+	Name                string
+	Description         string
+	Include             []string
+	Exclude             []string
+	IncludeIgnored      bool
+	IncludeExperimental bool
 }
 
 type Resolver interface {
@@ -37,11 +38,12 @@ type FileResolver struct {
 }
 
 type definition struct {
-	Description    string
-	Extends        []string
-	Include        []string
-	Exclude        []string
-	IncludeIgnored bool
+	Description         string
+	Extends             []string
+	Include             []string
+	Exclude             []string
+	IncludeIgnored      bool
+	IncludeExperimental bool
 }
 
 func NewFileResolver(file string) (*FileResolver, error) {
@@ -158,11 +160,13 @@ func (r *FileResolver) resolve(name string, stack map[string]bool) (Profile, map
 		profile.Include = mergeUnique(profile.Include, parent.Include)
 		profile.Exclude = mergeUnique(profile.Exclude, parent.Exclude)
 		profile.IncludeIgnored = profile.IncludeIgnored || parent.IncludeIgnored
+		profile.IncludeExperimental = profile.IncludeExperimental || parent.IncludeExperimental
 	}
 
 	profile.Include = mergeUnique(profile.Include, definition.Include)
 	profile.Exclude = mergeUnique(profile.Exclude, definition.Exclude)
 	profile.IncludeIgnored = profile.IncludeIgnored || definition.IncludeIgnored
+	profile.IncludeExperimental = profile.IncludeExperimental || definition.IncludeExperimental
 
 	return profile, nil, nil
 }
@@ -209,6 +213,14 @@ func normalizeMapDefinition(name string, value map[string]any) (definition, erro
 			return definition{}, fmt.Errorf("profile %q has an invalid includeIgnored", name)
 		}
 		result.IncludeIgnored = flag
+	}
+
+	if includeExperimental, ok := value["includeExperimental"]; ok {
+		flag, ok := includeExperimental.(bool)
+		if !ok {
+			return definition{}, fmt.Errorf("profile %q has an invalid includeExperimental", name)
+		}
+		result.IncludeExperimental = flag
 	}
 
 	if rawExtends, ok := value["extends"]; ok {

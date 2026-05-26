@@ -305,25 +305,35 @@ required_kinds:
 
 ---
 
-## Experimental Skills
+## Experimental Work (Skills, Rules, Agents, Hooks)
 
-Working on a new skill? Put it in `skills/experimental/`:
+Working on something new? Put it under an `experimental/` segment — anywhere, in any kind:
 
 ```
 ~/my-ai-config/
-  skills/
-    code-review/SKILL.md         ← stable, always mounted
+  rules/
+    security.md                  ← stable, always mounted
     experimental/
-      debug-strategy/SKILL.md    ← hidden from default mounts
+      new-policy.md              ← hidden by built-in convention
+  agents/
+    code-reviewer.md             ← stable
+    experimental/
+      perf-analyzer.md           ← hidden
+  skills/
+    code-review/SKILL.md         ← stable
+    experimental/
+      debug-strategy/SKILL.md    ← hidden
 ```
 
-The `.csawignore` file hides `skills/experimental/**` by default. To test an experimental skill:
+csaw treats any path segment exactly named `experimental` as in-progress, at any depth and across all kinds. No `.csawignore` entry needed — it's a built-in convention. (Substring matches like `experimental-features.md` are NOT hidden — only the exact segment.)
+
+To test work-in-progress files alongside your stable mount:
 
 ```bash
 csaw use personal/default --include-experimental
 ```
 
-When you're confident it works, promote it:
+When you're confident a skill is ready, promote it:
 
 ```bash
 csaw promote personal/skills/experimental/debug-strategy
@@ -331,7 +341,9 @@ csaw promote personal/skills/experimental/debug-strategy
 #   Push: csaw push personal -m "promote debug-strategy"
 ```
 
-This moves it from `skills/experimental/debug-strategy/` to `skills/debug-strategy/` — now it mounts by default.
+This moves it from `skills/experimental/debug-strategy/` to `skills/debug-strategy/` — now it mounts by default. (`csaw promote` currently only handles skills; for rules/agents you move the file manually.)
+
+**`.csawignore` is separate.** `.csawignore` is for custom hide patterns (drafts/, archived/, client-specific stuff). The override flag is different too: `--include-ignored` mounts `.csawignore`'d files; `--include-experimental` mounts files under `experimental/`. Use either, both, or neither.
 
 To share a promoted skill with the team:
 

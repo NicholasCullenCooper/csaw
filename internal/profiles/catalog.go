@@ -171,11 +171,13 @@ func resolveDefinition(name string, definitions map[string]definition, stack map
 		profile.Include = mergeUnique(profile.Include, parent.Include)
 		profile.Exclude = mergeUnique(profile.Exclude, parent.Exclude)
 		profile.IncludeIgnored = profile.IncludeIgnored || parent.IncludeIgnored
+		profile.IncludeExperimental = profile.IncludeExperimental || parent.IncludeExperimental
 	}
 
 	profile.Include = mergeUnique(profile.Include, definition.Include)
 	profile.Exclude = mergeUnique(profile.Exclude, definition.Exclude)
 	profile.IncludeIgnored = profile.IncludeIgnored || definition.IncludeIgnored
+	profile.IncludeExperimental = profile.IncludeExperimental || definition.IncludeExperimental
 
 	return profile, nil
 }

@@ -18,6 +18,13 @@ type Selection struct {
 	ExcludePatterns []string
 	Profile         string
 	IncludeIgnored  bool
+	// IncludeExperimental, when true, mounts files under any path segment
+	// named "experimental" (e.g., skills/experimental/foo/, rules/experimental/draft.md).
+	// csaw treats this as a built-in convention — the segment hides files by
+	// default without needing a `.csawignore` entry. IncludeIgnored is a
+	// separate concept (matches `.csawignore` patterns) and the two flags can
+	// be combined.
+	IncludeExperimental bool
 	// Kinds restricts the selection to entries matching one of the given kinds.
 	// When empty, all kinds are included.
 	Kinds []Kind
@@ -43,7 +50,7 @@ func NewPlanner() Planner {
 }
 
 func (selection Selection) IsEmpty() bool {
-	return len(selection.IncludePatterns) == 0 && len(selection.ExcludePatterns) == 0 && selection.Profile == "" && !selection.IncludeIgnored && len(selection.Kinds) == 0
+	return len(selection.IncludePatterns) == 0 && len(selection.ExcludePatterns) == 0 && selection.Profile == "" && !selection.IncludeIgnored && !selection.IncludeExperimental && len(selection.Kinds) == 0
 }
 
 // FilterByKind returns only entries whose kind matches one of the given kinds.
@@ -78,6 +85,9 @@ func (selection Selection) String() string {
 	}
 	if selection.IncludeIgnored {
 		parts = append(parts, "includeIgnored=true")
+	}
+	if selection.IncludeExperimental {
+		parts = append(parts, "includeExperimental=true")
 	}
 	if len(parts) == 0 {
 		return "default"
@@ -247,6 +257,38 @@ func ApplyIgnore(entries []SourceEntry, patterns []string) ([]SourceEntry, error
 		filtered = append(filtered, entry)
 	}
 	return filtered, nil
+}
+
+// IsExperimentalPath reports whether any segment of the registry-relative
+// path is exactly "experimental". This is csaw's built-in convention for
+// in-progress work that should be hidden by default — it applies at any
+// depth and across all kinds (skills/experimental/, rules/experimental/,
+// hooks/experimental/, etc.). The match is strict: "experimental-features"
+// does NOT trigger the convention.
+func IsExperimentalPath(rel string) bool {
+	rel = runtime.NormalizeRegistryPath(rel)
+	for _, segment := range strings.Split(rel, "/") {
+		if segment == "experimental" {
+			return true
+		}
+	}
+	return false
+}
+
+// FilterExperimental removes entries that match csaw's built-in experimental
+// convention (any path segment equal to "experimental"). Use the second
+// return value to report how many were hidden — callers can surface this in
+// mount output so users see "N experimental files hidden, use --include-experimental".
+func FilterExperimental(entries []SourceEntry) (kept []SourceEntry, hiddenCount int) {
+	kept = make([]SourceEntry, 0, len(entries))
+	for _, entry := range entries {
+		if IsExperimentalPath(entry.RelativePath) {
+			hiddenCount++
+			continue
+		}
+		kept = append(kept, entry)
+	}
+	return kept, hiddenCount
 }
 
 func FilterSourceEntries(entries []SourceEntry, selection Selection) ([]SourceEntry, error) {

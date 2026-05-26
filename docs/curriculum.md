@@ -184,18 +184,22 @@ backend:
     - mcp/claude-code.json
 ```
 
-`.csawignore` hides files from default enumeration:
+`.csawignore` hides files from default enumeration (custom patterns beyond the built-in `experimental/` convention):
 
 ```text
-skills/experimental/**
+drafts/**
+archived/**
 ```
+
+Separately, **any path segment named exactly `experimental` is hidden by csaw's built-in convention** — at any depth, across all kinds (`skills/experimental/`, `rules/experimental/`, `agents/experimental/`, `hooks/experimental/`). No `.csawignore` entry needed.
 
 ### Profile Rules
 
 - `include` is a list of paths or glob patterns.
 - `exclude` removes paths from the profile.
 - `extends` inherits another profile.
-- `include_ignored` allows files hidden by `.csawignore`.
+- `includeIgnored` (YAML: `includeIgnored: true`) allows files matched by `.csawignore` patterns.
+- `includeExperimental` (YAML: `includeExperimental: true`) allows files under any `experimental/` segment.
 
 ### Exercise
 

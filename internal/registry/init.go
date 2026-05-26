@@ -26,8 +26,15 @@ var starterProfile = `default:
 `
 
 var starterIgnore = `# Patterns listed here are excluded from mounting by default.
-# Use --include-ignored or --include-experimental to override.
-skills/experimental/**
+# Use --include-ignored to mount them anyway.
+#
+# Note: Files under any "experimental/" path segment are hidden by csaw's
+# built-in convention (no need to list them here). Use --include-experimental
+# to mount those.
+#
+# Example patterns (uncomment to use):
+# drafts/**
+# archived/**
 `
 
 var starterAgents = `# Agent Instructions

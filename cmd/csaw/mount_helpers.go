@@ -173,6 +173,7 @@ func collectMountEntries(manager sources.Manager, paths runtime.Paths, selection
 		selection.IncludePatterns = append(append([]string(nil), profile.Include...), selection.IncludePatterns...)
 		selection.ExcludePatterns = append(append([]string(nil), profile.Exclude...), selection.ExcludePatterns...)
 		selection.IncludeIgnored = selection.IncludeIgnored || profile.IncludeIgnored
+		selection.IncludeExperimental = selection.IncludeExperimental || profile.IncludeExperimental
 	}
 
 	var entries []mount.SourceEntry
@@ -190,6 +191,9 @@ func collectMountEntries(manager sources.Manager, paths runtime.Paths, selection
 			if err != nil {
 				return nil, err
 			}
+		}
+		if !selection.IncludeExperimental {
+			sourceEntries, _ = mount.FilterExperimental(sourceEntries)
 		}
 		// Mark protected entries
 		for i := range sourceEntries {

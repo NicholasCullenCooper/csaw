@@ -106,3 +106,60 @@ func TestFilterSourceEntriesAppliesKindFilter(t *testing.T) {
 		t.Errorf("unexpected entry: %s", filtered[0].RelativePath)
 	}
 }
+
+func TestIsExperimentalPath(t *testing.T) {
+	cases := []struct {
+		path string
+		want bool
+	}{
+		// Exact segment match at any depth, any kind
+		{"skills/experimental/foo/SKILL.md", true},
+		{"rules/experimental/draft.md", true},
+		{"agents/experimental/wip.md", true},
+		{"hooks/experimental/pre-commit.sh", true},
+		{"ignore/experimental/cursor", true},
+		{"experimental/anything.md", true},
+		{"deep/nested/experimental/file.md", true},
+
+		// NOT a match — substring is not enough
+		{"rules/experimental-features.md", false},
+		{"skills/my-experimental-skill/SKILL.md", false},
+		{"agents/experimentalist.md", false},
+
+		// Normal paths
+		{"AGENTS.md", false},
+		{"rules/security.md", false},
+		{"skills/code-review/SKILL.md", false},
+
+		// Windows-style separators normalize
+		{"skills\\experimental\\foo.md", true},
+	}
+	for _, tc := range cases {
+		got := IsExperimentalPath(tc.path)
+		if got != tc.want {
+			t.Errorf("IsExperimentalPath(%q) = %v, want %v", tc.path, got, tc.want)
+		}
+	}
+}
+
+func TestFilterExperimentalRemovesAndCounts(t *testing.T) {
+	entries := []SourceEntry{
+		{RelativePath: "AGENTS.md"},
+		{RelativePath: "rules/security.md"},
+		{RelativePath: "skills/experimental/wip/SKILL.md"},
+		{RelativePath: "rules/experimental/draft.md"},
+		{RelativePath: "agents/reviewer.md"},
+	}
+	kept, hidden := FilterExperimental(entries)
+	if hidden != 2 {
+		t.Errorf("hiddenCount = %d, want 2", hidden)
+	}
+	if len(kept) != 3 {
+		t.Fatalf("len(kept) = %d, want 3", len(kept))
+	}
+	for _, e := range kept {
+		if IsExperimentalPath(e.RelativePath) {
+			t.Errorf("kept entry %q is experimental — should have been filtered", e.RelativePath)
+		}
+	}
+}
