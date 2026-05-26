@@ -139,7 +139,7 @@ csaw update                             # repair broken links
 
 Files at unrecognized registry paths are mounted at the same path in the project (no per-tool projection).
 
-**GitHub Copilot is the exception** to csaw's hide-from-git default: `.github/` paths are marked `CommitToGit`, so projected Copilot files appear in `git status` and PRs as the team expects. Suffix rewriting is automatic — you write `rules/security.md` in your registry; Copilot sees `.github/instructions/security.instructions.md`.
+**GitHub Copilot** projections get automatic suffix rewriting — you write `rules/security.md` in your registry; Copilot sees `.github/instructions/security.instructions.md`. Like every csaw projection, these files are hidden from git by default. If your team wants them committed for PR review, opt in with `csaw show .github/instructions/*` (or per-file).
 
 ## Profile Format (`csaw.yml`)
 

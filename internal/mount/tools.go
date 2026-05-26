@@ -210,10 +210,6 @@ type ToolDir struct {
 	// HooksSuffix, if non-empty, rewrites projected hook filenames the same
 	// way as RulesSuffix.
 	HooksSuffix string
-	// CommitToGit means projected files in this tool's Dir should NOT be added
-	// to .git/info/exclude. Use for tools where the directory is the team's
-	// committed shared location (e.g., GitHub Copilot's .github/).
-	CommitToGit bool
 }
 
 // ToolRegistry maps short tool names to their directory conventions.
@@ -236,18 +232,19 @@ var ToolRegistry = map[string]ToolDir{
 	"antigravity": {Dir: ".agents", SkillsSubdir: "skills"}, // Replaces sunset Gemini CLI. Same path as StandardFallback.
 	"goose":       {Dir: ".goose"},                          // .goosehints handled at instruction layer; recipes are user-scope.
 
-	// GitHub Copilot (VS Code + CLI share .github/ paths). Requires:
-	//   - per-file suffixes (.instructions.md, .agent.md)
-	//   - CommitToGit so .github/ projections stay visible to PRs.
-	// Single-file .github/copilot-instructions.md alias is not yet projected;
-	// AGENTS.md at project root covers Copilot's universal-instructions case.
+	// GitHub Copilot (VS Code + CLI share .github/ paths). Requires per-file
+	// suffixes (.instructions.md, .agent.md); csaw rewrites filenames on
+	// projection. Projected files are hidden from git like every other
+	// projection — teams who want them committed for PR review run
+	// `csaw show .github/instructions/*` or equivalent. Single-file
+	// .github/copilot-instructions.md alias is not yet projected; AGENTS.md
+	// at project root covers Copilot's universal-instructions case.
 	"copilot": {
 		Dir:          ".github",
 		RulesSubdir:  "instructions",
 		RulesSuffix:  ".instructions.md",
 		AgentsSubdir: "agents",
 		AgentsSuffix: ".agent.md",
-		CommitToGit:  true,
 	},
 }
 
@@ -379,7 +376,6 @@ func ExpandToolTargets(entries []SourceEntry, toolDirs []ToolDir) []SourceEntry 
 					FullPath:      entry.FullPath,
 					Priority:      entry.Priority,
 					Protected:     entry.Protected,
-					KeepInGit:     tool.CommitToGit,
 				})
 			}
 			continue
@@ -572,7 +568,6 @@ func appendProjected(expanded []SourceEntry, entry SourceEntry, toolDirs []ToolD
 			FullPath:      entry.FullPath,
 			Priority:      entry.Priority,
 			Protected:     entry.Protected,
-			KeepInGit:     tool.CommitToGit,
 		})
 		mounted = true
 	}

@@ -554,9 +554,9 @@ project/
 Two things to notice:
 
 1. **Filename suffixes are automatic.** Copilot *requires* `.instructions.md` and `.agent.md` suffixes on the disk. csaw rewrites the projected filename; your source file in `team/rules/security.md` is unchanged.
-2. **These paths are NOT git-excluded.** Every other projection is hidden via `.git/info/exclude`. Copilot's `.github/` paths intentionally show up in `git status` and PRs — that's the GitHub-blessed pattern for shared team context. If you don't want a specific file committed, `csaw hide .github/instructions/<file>` works the same as elsewhere.
+2. **These paths are hidden from git like every other projection.** csaw treats the projected `.github/instructions/security.instructions.md` exactly the way it treats `.claude/rules/security.md` — added to `.git/info/exclude` by default. If your team wants Copilot's `.github/` context committed for PR review (the conventional GitHub pattern), opt in with `csaw show .github/instructions/*` or per-file `csaw show .github/instructions/security.instructions.md`. This is an explicit decision — not a hidden default — and you can codify it in your onboarding script.
 
-If you also have claude configured, `rules/security.md` lands in two places: `.claude/rules/security.md` (hidden from git) and `.github/instructions/security.instructions.md` (visible to git). Same source file; two audiences.
+If you also have claude configured, `rules/security.md` lands in two places: `.claude/rules/security.md` and `.github/instructions/security.instructions.md`. Both hidden by default; both shown via `csaw show` if you want.
 
 ---
 

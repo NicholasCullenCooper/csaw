@@ -370,32 +370,6 @@ func TestExpandToolTargetsAppliesCopilotSuffixes(t *testing.T) {
 	}
 }
 
-// TestExpandToolTargetsPropagatesKeepInGit verifies that projections through
-// a CommitToGit tool (Copilot) carry KeepInGit:true, while projections
-// through default tools (Claude) carry KeepInGit:false. The mount engine
-// uses this flag to decide whether to add the projection to .git/info/exclude.
-func TestExpandToolTargetsPropagatesKeepInGit(t *testing.T) {
-	toolDirs := []ToolDir{
-		ToolRegistry["claude"],
-		ToolRegistry["copilot"],
-	}
-	entries := []SourceEntry{
-		{SourceName: "reg", RelativePath: "rules/style.md", FullPath: "/r/rules/style.md"},
-	}
-	expanded := ExpandToolTargets(entries, toolDirs)
-
-	got := make(map[string]bool)
-	for _, e := range expanded {
-		got[e.RelativePath] = e.KeepInGit
-	}
-	if keep, ok := got[".claude/rules/style.md"]; !ok || keep {
-		t.Errorf(".claude/rules/style.md: want KeepInGit=false, got present=%v keep=%v", ok, keep)
-	}
-	if keep, ok := got[".github/instructions/style.instructions.md"]; !ok || !keep {
-		t.Errorf(".github/instructions/style.instructions.md: want KeepInGit=true, got present=%v keep=%v", ok, keep)
-	}
-}
-
 func TestExpandMCPTargetsProjectsToToolPaths(t *testing.T) {
 	entries := []SourceEntry{
 		{

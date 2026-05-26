@@ -4,7 +4,7 @@ Planning doc for what csaw projects (and doesn't) across AI coding tools. Living
 
 Source of truth for *what csaw actually projects today* is [`docs/reference/tool-projection.json`](../reference/tool-projection.json) (tools with `csaw_in_code: true`). This file is for what's *coming* or explicitly *out of scope*.
 
-## Currently in code (v0.7.0)
+## Currently in code (v0.7.1)
 
 Seven tools with `"csaw_in_code": true`: **claude, cursor, codex, opencode, copilot, antigravity, goose**. The projection test (`internal/mount/projection_consistency_test.go`) enforces that the JSON's claims match the actual Go `ToolRegistry`.
 
@@ -13,15 +13,25 @@ Seven tools with `"csaw_in_code": true`: **claude, cursor, codex, opencode, copi
 - **`.github/prompts/` (Copilot single-file prompts)** — Deferred from v0.7.0. csaw's skills are folder-based (`<name>/SKILL.md`); Copilot prompts are single files (`<name>.prompt.md`). Either map skills folders to prompt files (semantically awkward) or add a new `prompts` kind (8th kind, big surface). Revisit if Copilot users ask.
 - **`.github/copilot-instructions.md` alias** — Deferred from v0.7.0. Would project the project's `AGENTS.md` to this canonical Copilot location as a second symlink. Today Copilot reads `AGENTS.md` at project root, so the alias is nice-to-have, not required.
 
-## Auto-served via AGENTS.md (no setup needed)
+## Partial coverage via AGENTS.md — deep projection candidates
 
-These tools read the cross-tool `AGENTS.md` standard; csaw's instructions kind projects to project root by default. No `ToolRegistry` entry needed:
+These tools read the cross-tool `AGENTS.md` standard, so csaw's existing instructions kind gives them *some* coverage. But each has additional native rules/skills/hooks/MCP directories that csaw does NOT yet project to. Listed in rough priority order of deep-projection value (prioritize by user demand):
 
-- **GitHub Copilot** (universal coverage today; deep `.github/` projection still coming)
-- **Factory Droid** — `AGENTS.md` only
-- **Pi** — `AGENTS.md` + `CLAUDE.md` only (MCP lives in `~/.pi/agent/`, out of scope)
-- **Hermes** — reads `.cursor/rules/`, `.cursorrules`, `AGENTS.md`, `CLAUDE.md`
-- **Cline, Aider, Continue, Amp, Augment, Devin, Factory, Plandex** and ~20 others
+- **Cline** — *highest value.* Reads `.clinerules/*.md` (multi-file rules dir with YAML frontmatter `paths:` filter), `.clineignore`, `hooks`, custom commands, MCP, skills. csaw covers ~10% of Cline's surface via AGENTS.md alone. Source: [docs.cline.bot/customization/cline-rules](https://docs.cline.bot/customization/cline-rules.md).
+- **Continue** — Reads `.continue/rules/*.md`, `.continue/prompts/*.md`, `config.yaml`. csaw covers ~20%. Source: [docs.continue.dev](https://docs.continue.dev/customize/deep-dives/rules).
+- **Factory Droid** — Reads `.factory/skills/<name>/SKILL.md` (same agentskills.io standard as csaw's `skills/`), `.factory/rules/`, hooks, MCP, custom droids, plugins. Skills directory is the easiest win — exact same SKILL.md format csaw already uses. Source: [docs.factory.ai](https://docs.factory.ai/cli/configuration/skills.md).
+- **Augment** — Reads `.augment/rules/*.md` (multi-file rules with Always/Manual/Auto activation modes), plus hierarchical `AGENTS.md`/`CLAUDE.md` in subdirectories. Source: [docs.augmentcode.com/setup-augment/guidelines](https://docs.augmentcode.com/setup-augment/guidelines).
+- **Amp** — Reads `.agents/skills/<name>/SKILL.md` (csaw already covers via antigravity/StandardFallback projection!), `.agents/checks/` (review criteria, novel concept), `.amp/plugins/*.ts`. Skills projection is already free; checks would be a new kind. Source: [ampcode.com/manual](https://ampcode.com/manual).
+- **Aider** — Reads `CONVENTIONS.md` (Aider-specific equivalent of AGENTS.md), `.aider.conf.yml`, `.aiderignore`. Quick win: add `CONVENTIONS.md` to the instruction file recognition list. Source: [aider.chat/docs/usage/conventions.html](https://aider.chat/docs/usage/conventions.html).
+- **Hermes** — Reads `.cursor/rules/`, `.cursorrules`, `AGENTS.md`, `CLAUDE.md`. csaw's cursor projection covers most of this for free.
+- **Pi** — Reads `AGENTS.md` + `CLAUDE.md` only at project scope (MCP lives in `~/.pi/agent/`, out of scope). AGENTS.md is the full project surface — true "already served." (Verify quarterly.)
+
+**Quick wins to consider:**
+- Add `CONVENTIONS.md` to instruction file recognition (one-line change, covers Aider's main project file).
+- Add `factory` to `ToolRegistry` with `Dir: ".factory", SkillsSubdir: "skills"` — Factory Droid uses the same agentskills.io standard csaw already projects.
+- Add `cline` to `ToolRegistry` — but Cline's `.clinerules/` is a top-level dir (not nested under `.cline/`), so the existing `Dir` + `Subdir` shape doesn't quite fit. Either model it as `Dir: ".clinerules", RulesSubdir: ""` (semantic stretch) or add a `RulesDir` field for tools whose rules dir is at root.
+- Add `continue` to `ToolRegistry` with `Dir: ".continue", RulesSubdir: "rules"`. Continue's `.continue/prompts/` is single-file prompts — same problem as Copilot's `.github/prompts/` (deferred).
+- Add `augment` to `ToolRegistry` with `Dir: ".augment", RulesSubdir: "rules"`.
 
 ## Out of scope with current model
 

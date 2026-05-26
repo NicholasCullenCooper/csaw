@@ -346,7 +346,7 @@ Mount the starter profile for instructions, rules, agents, and skills. Then moun
 The interesting projections to predict:
 - `hooks/pre-commit.sh` → `.claude/hooks/pre-commit.sh` (only claude has `HooksSubdir` today).
 - `ignore/cursor` → `.cursorignore` (single-file alias, like MCP).
-- If you have copilot in your tools config, `rules/security.md` *also* lands at `.github/instructions/security.instructions.md` with the suffix rewritten — and is **not** hidden from git (Copilot's `.github/` paths are committed shared context, marked `CommitToGit`).
+- If you have copilot in your tools config, `rules/security.md` *also* lands at `.github/instructions/security.instructions.md` with the suffix rewritten. Like every other csaw projection, it's hidden from git by default. To make it visible for PR review (the conventional Copilot pattern), run `csaw show .github/instructions/security.instructions.md` as an explicit opt-in.
 
 ## Module 6: Multi-Source Composition
 
@@ -832,7 +832,7 @@ If you show a file under a hidden tool directory, the parent directory can
 appear in `git status` until you hide the file again. Project policy files such
 as `.csaw/policy.yml` are independent of mount visibility.
 
-**GitHub Copilot is the exception.** Tools marked `CommitToGit` in the registry skip the default hide-from-git behavior. Today only Copilot uses this: projections into `.github/instructions/` and `.github/agents/` appear in `git status` and PRs without `csaw show`. This is intentional — those paths are the GitHub-blessed location for shared team context. If you want them hidden, run `csaw hide .github/instructions/<file>` per file.
+**GitHub Copilot doesn't change the rule.** Even though `.github/instructions/` is the GitHub-blessed location for shared team context that many teams want committed to git, csaw still hides projections there by default — consistent with everything else. Opting in is an explicit team decision: run `csaw show .github/instructions/*` (or per-file) to make them visible to PR reviewers.
 
 ### Exercise
 
@@ -965,7 +965,7 @@ csaw hide <path>
 git check-ignore -v <path>
 ```
 
-If the path is under `.github/instructions/` or `.github/agents/`, this is intentional — those tools (currently only Copilot) are marked `CommitToGit` because the GitHub-blessed location for shared team context is reviewed in PRs. `csaw hide` will still work to suppress it, but reconsider whether you want to.
+If your team has run `csaw show .github/instructions/*` to make Copilot context visible for PR review, that's expected behavior — `csaw hide` will reverse it.
 
 ### Audit Says Policy Missing
 
@@ -1089,7 +1089,7 @@ Build a personal source with:
 - One ignore file (`ignore/cursor` — gitignore-style patterns excluding `node_modules/` and `dist/`).
 
 Mount it into a disposable project, inspect it, audit it, promote the
-experimental skill, and unmount cleanly. Confirm with `git status` and `.git/info/exclude` that all projected files are hidden — *unless* you have Copilot configured, in which case `.github/instructions/` and `.github/agents/` projections are visible by design (`CommitToGit`).
+experimental skill, and unmount cleanly. Confirm with `git status` and `.git/info/exclude` that all projected files are hidden by default — including any Copilot projections under `.github/`. If you want Copilot's instructions visible for team PR review, run `csaw show .github/instructions/*` as a separate, explicit step.
 
 ## Capstone 2: Team Governance
 

@@ -71,7 +71,7 @@ func Apply(projectRoot string, paths runtime.Paths, entries []SourceEntry, resol
 						return result, err
 					}
 					currentState = workspace.UpsertMountedEntry(currentState, stateEntry)
-					if !entry.KeepInGit && !workspace.IsGitIgnored(projectRoot, entry.RelativePath) {
+					if !workspace.IsGitIgnored(projectRoot, entry.RelativePath) {
 						if _, err := workspace.AddExclusion(projectRoot, entry.RelativePath); err != nil {
 							return result, err
 						}
@@ -119,9 +119,8 @@ func Apply(projectRoot string, paths runtime.Paths, entries []SourceEntry, resol
 			return result, err
 		}
 
-		// Only add git exclude if the projection isn't tagged KeepInGit (e.g.,
-		// Copilot's .github/ paths) and the path isn't already covered by .gitignore.
-		if !entry.KeepInGit && !workspace.IsGitIgnored(projectRoot, entry.RelativePath) {
+		// Only add git exclude if the path isn't already covered by .gitignore
+		if !workspace.IsGitIgnored(projectRoot, entry.RelativePath) {
 			if _, err := workspace.AddExclusion(projectRoot, entry.RelativePath); err != nil {
 				return result, err
 			}

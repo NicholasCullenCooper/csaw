@@ -174,7 +174,7 @@ Ordered by number of tools that read each path.
 
 - **Docs:** [https://code.visualstudio.com/docs/copilot/](https://code.visualstudio.com/docs/copilot/)
 - **Category:** vscode-extension-and-cli · **Status:** active
-- **Notes:** VS Code Copilot and Copilot CLI share the same .github/ paths and ~/.copilot/ user-scope agents. csaw projects rules (with .instructions.md suffix) and agents (with .agent.md suffix) into .github/, marked CommitToGit so the team can review them in PRs. Skills (.github/prompts/, single-file) and the .github/copilot-instructions.md alias not yet projected — AGENTS.md at project root covers Copilot's universal-instructions case.
+- **Notes:** VS Code Copilot and Copilot CLI share the same .github/ paths and ~/.copilot/ user-scope agents. csaw projects rules (with .instructions.md suffix) and agents (with .agent.md suffix) into .github/. Projected files are hidden from git by default like every other projection — teams who want them committed for PR review run `csaw show .github/instructions/*` as an explicit opt-in. Skills (.github/prompts/, single-file) and the .github/copilot-instructions.md alias not yet projected — AGENTS.md at project root covers Copilot's universal-instructions case.
 
 | Kind | Project paths | User paths | Confidence |
 |---|---|---|---|
