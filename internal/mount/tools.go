@@ -68,7 +68,7 @@ func isInstructionEntry(entry SourceEntry) bool {
 }
 
 // isHookEntry returns true for entries under the registry's hooks/ directory.
-// These project into per-tool hook directories (e.g., .claude/hooks/, .kiro/hooks/).
+// These project into per-tool hook directories (e.g., .claude/hooks/).
 func isHookEntry(entry SourceEntry) bool {
 	return strings.HasPrefix(entry.RelativePath, "hooks/")
 }
@@ -219,13 +219,8 @@ var ToolRegistry = map[string]ToolDir{
 	"opencode":    {Dir: ".opencode", SkillsSubdir: "skills", AgentsSubdir: "agents"},
 	"codex":       {Dir: ".codex", SkillsSubdir: "skills"}, // hooks live in config.toml [hooks] — not file-projectable
 	"cursor":      {Dir: ".cursor", RulesSubdir: "rules"},
-	"windsurf":    {Dir: ".windsurf", RulesSubdir: "rules"},
 	"antigravity": {Dir: ".agents", SkillsSubdir: "skills"}, // Replaces sunset Gemini CLI. Same path as StandardFallback.
-	"amazon-q":    {Dir: ".amazonq", RulesSubdir: "rules"},
-	"kiro":        {Dir: ".kiro", RulesSubdir: "steering", AgentsSubdir: "agents", HooksSubdir: "hooks"},
-	"codebuddy":   {Dir: ".codebuddy", RulesSubdir: "rules", AgentsSubdir: "agents"},
-	"openhands":   {Dir: ".openhands", AgentsSubdir: "microagents"},
-	"goose":       {Dir: ".goose"}, // .goosehints handled at instruction layer; recipes are user-scope.
+	"goose":       {Dir: ".goose"},                          // .goosehints handled at instruction layer; recipes are user-scope.
 }
 
 // KnownToolDirs returns all known tool directories.

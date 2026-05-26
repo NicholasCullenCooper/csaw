@@ -15,17 +15,12 @@ Planning content (recommended additions, deferred tools) lives in [`../planning/
 
 Tools with `csaw_in_code: true` (consistency-tested against `ToolRegistry`):
 
-- **`amazon-q`** — Amazon Q Developer
 - **`antigravity`** — Antigravity (Google) — unified CLI + IDE
 - **`claude`** — Claude Code
-- **`codebuddy`** — CodeBuddy (Tencent)
 - **`codex`** — OpenAI Codex CLI
 - **`cursor`** — Cursor (IDE + CLI)
 - **`goose`** — Goose (AAIF / Linux Foundation)
-- **`kiro`** — Kiro (AWS)
 - **`opencode`** — OpenCode
-- **`openhands`** — OpenHands (formerly OpenDevin)
-- **`windsurf`** — Windsurf (Codeium)
 
 ## Kinds
 
@@ -248,11 +243,11 @@ Ordered by number of tools that read each path.
 - Top-level key: `extensions`
 - Transports: stdio, sse
 
-### Kiro (AWS) (`kiro`) · `csaw_in_code: true`
+### Kiro (AWS) (`kiro`)
 
 - **Docs:** [https://kiro.dev/docs/](https://kiro.dev/docs/)
 - **Category:** ide-or-cli · **Status:** active
-- **Notes:** AWS agentic coding IDE on Bedrock. Spec-driven.
+- **Notes:** AWS agentic coding IDE on Bedrock. Spec-driven. Removed from ToolRegistry in v0.6.1 to keep projection focused; re-add on user demand.
 
 | Kind | Project paths | User paths | Confidence |
 |---|---|---|---|
@@ -315,11 +310,11 @@ Ordered by number of tools that read each path.
 - Transports: stdio (command/args), http (type: http, url)
 - Auth: env vars, input variables (VS Code Inputs)
 
-### Windsurf (Codeium) (`windsurf`) · `csaw_in_code: true`
+### Windsurf (Codeium) (`windsurf`)
 
 - **Docs:** [https://docs.windsurf.com/](https://docs.windsurf.com/)
 - **Category:** ide · **Status:** active
-- **Notes:** Cascade has workflows (skill-like).
+- **Notes:** Cascade has workflows (skill-like). Removed from ToolRegistry in v0.6.1 to keep projection focused; re-add on user demand.
 
 | Kind | Project paths | User paths | Confidence |
 |---|---|---|---|
@@ -347,11 +342,11 @@ Tools with file-based projection that are less prioritized for csaw's MVP. Promo
 | Tool | csaw_in_code | Project paths | User paths |
 |---|---|---|---|
 | Aider (`aider`) | — | `CONVENTIONS.md`, `AGENTS.md`, `.aider.conf.yml` | `~/.aider.conf.yml` |
-| Amazon Q Developer (`amazon-q`) | true | `AGENTS.md`, `.amazonq/rules/` | — |
+| Amazon Q Developer (`amazon-q`) | — | `AGENTS.md`, `.amazonq/rules/` | — |
 | Amp (Sourcegraph) (`amp`) | — | `AGENTS.md`, `AGENT.md`, `CLAUDE.md` | `$HOME/.config/amp/AGENTS.md`, `$HOME/.config/AGENTS.md` |
 | Augment Code (`augment`) | — | `.augment-guidelines`, `.augment/rules/`, `AGENTS.md`, `CLAUDE.md` | — |
 | Claw Code (ultraworkers) (`claw-code`) | — | `CLAUDE.md`, `AGENTS.md`, `.claude/agents/`, `.claude/skills/<name>/SKILL.md`, `.mcp.json` | `~/.claude/` |
-| CodeBuddy (Tencent) (`codebuddy`) | true | `.codebuddy/CODEBUDDY.md`, `.codebuddy/rules/`, `.codebuddy/agents/`, `.codebuddy/settings.json` | `~/.codebuddy/agents/` |
+| CodeBuddy (Tencent) (`codebuddy`) | — | `.codebuddy/CODEBUDDY.md`, `.codebuddy/rules/`, `.codebuddy/agents/`, `.codebuddy/settings.json` | `~/.codebuddy/agents/` |
 | Cody (Sourcegraph) (`cody`) | — | `.vscode/cody.json`, `.cody/ignore` | `~/.vscode/cody.json` |
 | Devin (Cognition) (`devin`) | — | `AGENTS.md`, `.devin/wiki.json (docs)` | — |
 | Factory CLI (Droids) (`factory`) | — | `AGENTS.md` | `~/.factory/AGENTS.md` |
@@ -361,7 +356,7 @@ Tools with file-based projection that are less prioritized for csaw's MVP. Promo
 | Kilo Code (`kilo-code`) | — | `AGENTS.md`, `AGENT.md`, `.kilo/skills/`, `.kilo/agent`, `.kilocode/rules/memory-bank/` | `~/.config/kilo/kilo.jsonc` |
 | Tongyi Lingma (Alibaba) (`lingma`) | — | `AGENTS.md (likely)`, `.tongyiignore` | `~/.lingma/` |
 | OpenClaw / OpenClaw ecosystem (`openclaw`) | — | `AGENTS.md`, `SOUL.md`, `TOOLS.md` | `~/.openclaw/workspace/skills/<skill>/SKILL.md` |
-| OpenHands (formerly OpenDevin) (`openhands`) | true | `.openhands/microagents/`, `AGENTS.md` | `~/.openhands/` |
+| OpenHands (formerly OpenDevin) (`openhands`) | — | `.openhands/microagents/`, `AGENTS.md` | `~/.openhands/` |
 | Pi (earendil-works) (`pi`) | — | `AGENTS.md`, `CLAUDE.md` | `~/.pi/agent/AGENTS.md`, `~/.pi/agent/auth.json` |
 | Plandex (`plandex`) | — | `AGENTS.md (likely)` | — |
 | Qodo Code / Qodo Merge (`qodo`) | — | `best_practices.md`, `pr-agent-settings/codebase_standards/` | — |

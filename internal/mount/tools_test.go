@@ -45,9 +45,6 @@ func TestKindOfProjectPath(t *testing.T) {
 		{"CLAUDE.md", KindInstruction},
 		{".claude/agents/code-reviewer.md", KindAgent},
 		{".opencode/agents/reviewer.md", KindAgent},
-		{".kiro/agents/specialist.md", KindAgent},
-		{".codebuddy/agents/helper.md", KindAgent},
-		{".openhands/microagents/explorer.md", KindAgent},
 		// .cursor/agents/ and .codex/agents/ are NOT recognized — Cursor's agents
 		// are runtime entities, Codex's agents are TOML inline tables.
 		{".cursor/agents/planner.md", KindOther},
@@ -55,17 +52,13 @@ func TestKindOfProjectPath(t *testing.T) {
 		{".claude/skills/code-review/SKILL.md", KindSkill},
 		{".opencode/skills/foo/SKILL.md", KindSkill},
 		{".agents/skills/foo/SKILL.md", KindSkill},
+		{".codex/skills/setup/SKILL.md", KindSkill},
 		{".claude/rules/go.md", KindRule},
 		{".cursor/rules/style.md", KindRule},
-		{".windsurf/rules/x.md", KindRule},
-		{".amazonq/rules/frontend.md", KindRule},
-		{".kiro/steering/product.md", KindRule},
-		{".codebuddy/rules/security.md", KindRule},
 		{".mcp.json", KindMCP},
 		{".cursor/mcp.json", KindMCP},
 		{".vscode/mcp.json", KindMCP},
 		{".claude/hooks/pre-commit.sh", KindHook},
-		{".kiro/hooks/on-save.json", KindHook},
 		{".cursorignore", KindIgnore},
 		{".cody/ignore", KindIgnore},
 		{".aiderignore", KindIgnore},
@@ -318,9 +311,11 @@ func TestExpandIgnoreTargetsProjectsToToolPaths(t *testing.T) {
 }
 
 func TestExpandToolTargetsProjectsHooks(t *testing.T) {
+	// Use a synthetic second tool to verify multi-tool hook expansion;
+	// claude is the only in-registry tool with HooksSubdir today.
 	toolDirs := []ToolDir{
 		{Dir: ".claude", HooksSubdir: "hooks"},
-		{Dir: ".kiro", HooksSubdir: "hooks"},
+		{Dir: ".faketool", HooksSubdir: "hooks"},
 	}
 	entries := []SourceEntry{
 		{SourceName: "reg", RelativePath: "hooks/pre-commit.sh", FullPath: "/r/hooks/pre-commit.sh"},
@@ -330,7 +325,7 @@ func TestExpandToolTargetsProjectsHooks(t *testing.T) {
 	for _, e := range expanded {
 		paths[e.RelativePath] = true
 	}
-	for _, path := range []string{".claude/hooks/pre-commit.sh", ".kiro/hooks/pre-commit.sh"} {
+	for _, path := range []string{".claude/hooks/pre-commit.sh", ".faketool/hooks/pre-commit.sh"} {
 		if !paths[path] {
 			t.Errorf("expected hook projection %q not found", path)
 		}

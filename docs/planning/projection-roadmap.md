@@ -4,24 +4,32 @@ Planning doc for what csaw projects (and doesn't) across AI coding tools. Living
 
 Source of truth for *what csaw actually projects today* is [`docs/reference/tool-projection.json`](../reference/tool-projection.json) (tools with `csaw_in_code: true`). This file is for what's *coming* or explicitly *out of scope*.
 
-## Currently in code (v0.6.0)
+## Currently in code (v0.6.1)
 
-See [`tool-projection.json`](../reference/tool-projection.json) tools with `"csaw_in_code": true`. The projection test (`internal/mount/projection_consistency_test.go`) enforces that the JSON's claims match the actual Go `ToolRegistry`.
+Six tools with `"csaw_in_code": true`: **claude, cursor, codex, opencode, antigravity, goose**. The projection test (`internal/mount/projection_consistency_test.go`) enforces that the JSON's claims match the actual Go `ToolRegistry`.
 
-## Needs structural work before adding
+## Coming up
 
-- **vscode-copilot** — Per-subdir filename suffix (`.agent.md`, `.instructions.md`, `.prompt.md`); single-file instruction target (`.github/copilot-instructions.md`); per-tool `CommitToGit` flag for `.github/` paths.
-- **copilot-cli** — Same as vscode-copilot. Should be unified `copilot` entry when the work lands.
-- **cody** — Project `.vscode/cody.json` content schema is Cody-specific (custom commands JSON).
-- **hermes** — csaw already serves via `.cursor/rules/` + AGENTS.md; could add explicit `.hermes.md`/`HERMES.md` instruction target if direct support becomes desirable.
-- **pi** — Only project paths are AGENTS.md/CLAUDE.md (already served). MCP is inside `~/.pi/agent/` — out of scope.
+- **GitHub Copilot deep support** (vscode-copilot + copilot-cli) — *next major projection feature.* Needs:
+  - Per-subdir filename suffix patterns (`.agent.md`, `.instructions.md`, `.prompt.md`)
+  - Single-file instruction target (`.github/copilot-instructions.md`)
+  - Per-tool `CommitToGit` flag for `.github/` paths (these are normally committed)
+  - Should be unified `copilot` entry covering both VS Code and CLI.
+
+## Auto-served via AGENTS.md (no setup needed)
+
+These tools read the cross-tool `AGENTS.md` standard; csaw's instructions kind projects to project root by default. No `ToolRegistry` entry needed:
+
+- **GitHub Copilot** (universal coverage today; deep `.github/` projection still coming)
+- **Factory Droid** — `AGENTS.md` only
+- **Pi** — `AGENTS.md` + `CLAUDE.md` only (MCP lives in `~/.pi/agent/`, out of scope)
+- **Hermes** — reads `.cursor/rules/`, `.cursorrules`, `AGENTS.md`, `CLAUDE.md`
+- **Cline, Aider, Continue, Amp, Augment, Devin, Factory, Plandex** and ~20 others
 
 ## Out of scope with current model
 
 - **zed** — settings.json user-scope only. Project `.rules` is single file.
-- **devin** — Cloud-first. Playbooks in Devin UI.
-- **plandex** — No dotfile-dir convention documented.
-- **factory** — AGENTS.md only — already served by csaw's instructions kind.
+- **cody** — Project `.vscode/cody.json` content schema is Cody-specific (custom commands JSON).
 - **qodo** — Code review tool; hierarchical `best_practices.md` is a different model.
 - **lingma** — Mostly IDE-internal; docs primarily Chinese.
 
@@ -37,6 +45,7 @@ See [`tool-projection.json`](../reference/tool-projection.json) tools with `"csa
 ## Removed
 
 - **gemini** (removed v0.6.0) — Google sunset 2026-06-18. Migration target: `antigravity` (`.agents/`, also csaw's StandardFallback). `GEMINI.md` is still recognized as an instruction file because Antigravity reads it.
+- **amazon-q, kiro, openhands, windsurf, codebuddy** (removed v0.6.1) — Trimmed from `ToolRegistry` to keep projection focused on the tools users actually ask about. All five remain catalogued in `tool-projection.json` (with `csaw_in_code: false`) and can be re-added in a single commit if user demand emerges.
 
 ## Watch list
 

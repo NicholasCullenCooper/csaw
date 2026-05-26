@@ -1824,12 +1824,7 @@ var toolDisplayNames = map[string]string{
 	"cursor":      "Cursor",
 	"opencode":    "OpenCode",
 	"codex":       "Codex CLI",
-	"windsurf":    "Windsurf",
 	"antigravity": "Antigravity (Google)",
-	"amazon-q":    "Amazon Q Developer",
-	"kiro":        "Kiro (AWS)",
-	"codebuddy":   "CodeBuddy (Tencent)",
-	"openhands":   "OpenHands",
 	"goose":       "Goose (AAIF / Linux Foundation)",
 }
 

@@ -11,7 +11,7 @@
     <a href="https://pypi.org/project/csaw/"><img src="https://img.shields.io/pypi/v/csaw" alt="PyPI"></a>
   </p>
   <p align="center">
-    Works with: Claude Code · Cursor · Codex · OpenCode · Windsurf · Antigravity (Google)
+    Works with: Claude Code · Cursor · Codex · OpenCode · Antigravity (Google) · Goose
   </p>
 </p>
 
@@ -259,11 +259,11 @@ csaw treats AI workspace artifacts as seven distinct kinds, each with its own co
 | Kind | Registry path | Projects to | When loaded |
 |---|---|---|---|
 | **Instructions** | `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.goosehints` | Project root | Every turn — always in context |
-| **Rules** | `rules/*.md` | `.claude/rules/`, `.cursor/rules/`, `.amazonq/rules/`, `.kiro/steering/`, `.codebuddy/rules/`, `.windsurf/rules/` | Every turn — always-on coding standards |
-| **Agents** | `agents/*.md` | `.claude/agents/`, `.opencode/agents/`, `.kiro/agents/`, `.codebuddy/agents/`, `.openhands/microagents/` | When invoked — specialized subagent personas |
+| **Rules** | `rules/*.md` | `.claude/rules/`, `.cursor/rules/` | Every turn — always-on coding standards |
+| **Agents** | `agents/*.md` | `.claude/agents/`, `.opencode/agents/` | When invoked — specialized subagent personas |
 | **Skills** | `skills/*/SKILL.md` | `.claude/skills/`, `.opencode/skills/`, `.agents/skills/` (Antigravity + fallback), `.codex/skills/` | When relevant — on-demand procedural workflows |
 | **MCP** | `mcp/*.json` | `.mcp.json`, `.cursor/mcp.json`, `.vscode/mcp.json` | Session start — tool/data connectivity |
-| **Hooks** | `hooks/*` | `.claude/hooks/`, `.kiro/hooks/` | Tool lifecycle events |
+| **Hooks** | `hooks/*` | `.claude/hooks/` | Tool lifecycle events |
 | **Ignore** | `ignore/*` | `.cursorignore`, `.cody/ignore`, `.aiderignore`, `.tongyiignore` | Always — context exclusion |
 
 > csaw does **not** project `settings` (they contain API keys/credentials) or `memory` (session-state, user-private). See [`docs/planning/projection-roadmap.md`](docs/planning/projection-roadmap.md).
@@ -298,12 +298,8 @@ If csaw can't auto-detect any tool directories in your project on first mount, i
 │  ● Cursor                                │
 │  ○ OpenCode                              │
 │  ○ Codex CLI                             │
-│  ○ Windsurf                              │
 │  ○ Antigravity (Google)                  │
-│  ○ Amazon Q Developer                    │
-│  ○ Kiro (AWS)                            │
-│  ○ CodeBuddy (Tencent)                   │
-│  ○ OpenHands                             │
+│  ○ Goose                                 │
 │                                          │
 │  space toggle · enter confirm            │
 ╰──────────────────────────────────────────╯
@@ -316,8 +312,10 @@ csaw config set tools claude,cursor
 ```
 
 > **Notes on tool coverage:**
-> - **GitHub Copilot (VS Code + CLI):** csaw serves both via the universal `AGENTS.md` convention. Direct `.github/` projection requires per-suffix filename support and per-tool git-visibility flags — tracked as future work.
+> - **Already served via `AGENTS.md`** (no setup needed): GitHub Copilot, Factory Droid, Pi, Hermes, Cline, Aider, and ~25 other tools that read the cross-tool standard. csaw projects `AGENTS.md` to your project root by default.
+> - **GitHub Copilot deep support** (`.github/instructions/`, `.github/agents/`): Tracked as future work — requires per-suffix filename patterns and a per-tool git-visibility flag (these paths are normally committed, not git-excluded).
 > - **Gemini CLI:** Removed in v0.6.0 (Google sunset 2026-06-18). Migrate to Antigravity — it uses `.agents/` (csaw's StandardFallback, served automatically) and reads `GEMINI.md`.
+> - **Trimmed in v0.6.1**: Amazon Q, Kiro, OpenHands, Windsurf, and CodeBuddy were removed from active projection to keep the supported set focused. Re-add on user demand — all remain catalogued in the JSON below.
 >
 > Full per-tool projection details — paths, fallbacks, MCP schemas, and tools we don't yet target — are catalogued in [docs/reference/tool-projection.json](docs/reference/tool-projection.json).
 

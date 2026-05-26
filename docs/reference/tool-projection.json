@@ -561,8 +561,8 @@
       "docs_homepage": "https://docs.windsurf.com/",
       "category": "ide",
       "status": "active",
-      "csaw_in_code": true,
-      "scope_notes": "Cascade has workflows (skill-like).",
+      "csaw_in_code": false,
+      "scope_notes": "Cascade has workflows (skill-like). Removed from ToolRegistry in v0.6.1 to keep projection focused; re-add on user demand.",
       "kinds": {
         "instructions": {
           "project_paths": [
@@ -991,8 +991,8 @@
       "docs_homepage": "https://kiro.dev/docs/",
       "category": "ide-or-cli",
       "status": "active",
-      "csaw_in_code": true,
-      "scope_notes": "AWS agentic coding IDE on Bedrock. Spec-driven.",
+      "csaw_in_code": false,
+      "scope_notes": "AWS agentic coding IDE on Bedrock. Spec-driven. Removed from ToolRegistry in v0.6.1 to keep projection focused; re-add on user demand.",
       "kinds": {
         "instructions": {
           "project_paths": [
@@ -1391,8 +1391,8 @@
       "codebuddy": {
         "display_name": "CodeBuddy (Tencent)",
         "status": "active",
-        "csaw_in_code": true,
-        "scope_notes": "Cleanest Claude-like structure.",
+        "csaw_in_code": false,
+        "scope_notes": "Cleanest Claude-like structure. Removed from ToolRegistry in v0.6.1 — China-focused; re-add on user demand.",
         "project_paths": [
           ".codebuddy/CODEBUDDY.md",
           ".codebuddy/rules/",
@@ -1470,8 +1470,8 @@
       "amazon-q": {
         "display_name": "Amazon Q Developer",
         "status": "active",
-        "csaw_in_code": true,
-        "scope_notes": "Clean .amazonq/rules/ with subdir support.",
+        "csaw_in_code": false,
+        "scope_notes": "Clean .amazonq/rules/ with subdir support. Removed from ToolRegistry in v0.6.1 to keep projection focused; re-add on user demand.",
         "project_paths": [
           "AGENTS.md",
           ".amazonq/rules/"
@@ -1496,8 +1496,8 @@
       "openhands": {
         "display_name": "OpenHands (formerly OpenDevin)",
         "status": "active",
-        "csaw_in_code": true,
-        "scope_notes": ".openhands/microagents/ \u2014 V0 'microagents', V1 'skills'. Same path.",
+        "csaw_in_code": false,
+        "scope_notes": ".openhands/microagents/ \u2014 V0 'microagents', V1 'skills'. Same path. Removed from ToolRegistry in v0.6.1 to keep projection focused; re-add on user demand.",
         "project_paths": [
           ".openhands/microagents/",
           "AGENTS.md"
