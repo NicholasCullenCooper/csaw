@@ -194,12 +194,26 @@ type ToolDir struct {
 	// RulesSubdir is the path under Dir where rule/instruction files are stored.
 	// Empty means this tool doesn't have a rules directory.
 	RulesSubdir string
+	// RulesSuffix, if non-empty, rewrites projected rule filenames by replacing
+	// the source extension. Used by tools like GitHub Copilot that require
+	// per-file suffixes (e.g., "security.md" → "security.instructions.md").
+	RulesSuffix string
 	// AgentsSubdir is the path under Dir where subagent definitions are stored.
 	// Empty means this tool doesn't support subagents.
 	AgentsSubdir string
+	// AgentsSuffix, if non-empty, rewrites projected agent filenames the same
+	// way as RulesSuffix (e.g., ".agent.md" for Copilot).
+	AgentsSuffix string
 	// HooksSubdir is the path under Dir where lifecycle hook scripts are stored.
 	// Empty means this tool doesn't have a file-based hooks directory.
 	HooksSubdir string
+	// HooksSuffix, if non-empty, rewrites projected hook filenames the same
+	// way as RulesSuffix.
+	HooksSuffix string
+	// CommitToGit means projected files in this tool's Dir should NOT be added
+	// to .git/info/exclude. Use for tools where the directory is the team's
+	// committed shared location (e.g., GitHub Copilot's .github/).
+	CommitToGit bool
 }
 
 // ToolRegistry maps short tool names to their directory conventions.
@@ -221,6 +235,20 @@ var ToolRegistry = map[string]ToolDir{
 	"cursor":      {Dir: ".cursor", RulesSubdir: "rules"},
 	"antigravity": {Dir: ".agents", SkillsSubdir: "skills"}, // Replaces sunset Gemini CLI. Same path as StandardFallback.
 	"goose":       {Dir: ".goose"},                          // .goosehints handled at instruction layer; recipes are user-scope.
+
+	// GitHub Copilot (VS Code + CLI share .github/ paths). Requires:
+	//   - per-file suffixes (.instructions.md, .agent.md)
+	//   - CommitToGit so .github/ projections stay visible to PRs.
+	// Single-file .github/copilot-instructions.md alias is not yet projected;
+	// AGENTS.md at project root covers Copilot's universal-instructions case.
+	"copilot": {
+		Dir:          ".github",
+		RulesSubdir:  "instructions",
+		RulesSuffix:  ".instructions.md",
+		AgentsSubdir: "agents",
+		AgentsSuffix: ".agent.md",
+		CommitToGit:  true,
+	},
 }
 
 // KnownToolDirs returns all known tool directories.
@@ -351,6 +379,7 @@ func ExpandToolTargets(entries []SourceEntry, toolDirs []ToolDir) []SourceEntry 
 					FullPath:      entry.FullPath,
 					Priority:      entry.Priority,
 					Protected:     entry.Protected,
+					KeepInGit:     tool.CommitToGit,
 				})
 			}
 			continue
@@ -358,22 +387,30 @@ func ExpandToolTargets(entries []SourceEntry, toolDirs []ToolDir) []SourceEntry 
 
 		if isAgentEntry(entry) {
 			// Mount subagent definitions into tool agent directories
-			// (e.g., agents/code-reviewer.md → .claude/agents/code-reviewer.md)
-			expanded = appendProjected(expanded, entry, toolDirs, func(t ToolDir) string { return t.AgentsSubdir })
+			// (e.g., agents/code-reviewer.md → .claude/agents/code-reviewer.md;
+			// Copilot rewrites to .github/agents/code-reviewer.agent.md)
+			expanded = appendProjected(expanded, entry, toolDirs,
+				func(t ToolDir) string { return t.AgentsSubdir },
+				func(t ToolDir) string { return t.AgentsSuffix })
 			continue
 		}
 
 		if isRuleEntry(entry) {
 			// Mount rule files into tool rule directories
-			// (e.g., rules/go-conventions.md → .claude/rules/go-conventions.md)
-			expanded = appendProjected(expanded, entry, toolDirs, func(t ToolDir) string { return t.RulesSubdir })
+			// (e.g., rules/go-conventions.md → .claude/rules/go-conventions.md;
+			// Copilot rewrites to .github/instructions/go-conventions.instructions.md)
+			expanded = appendProjected(expanded, entry, toolDirs,
+				func(t ToolDir) string { return t.RulesSubdir },
+				func(t ToolDir) string { return t.RulesSuffix })
 			continue
 		}
 
 		if isHookEntry(entry) {
 			// Mount hook scripts into tool hook directories
 			// (e.g., hooks/pre-commit.sh → .claude/hooks/pre-commit.sh)
-			expanded = appendProjected(expanded, entry, toolDirs, func(t ToolDir) string { return t.HooksSubdir })
+			expanded = appendProjected(expanded, entry, toolDirs,
+				func(t ToolDir) string { return t.HooksSubdir },
+				func(t ToolDir) string { return t.HooksSuffix })
 			continue
 		}
 
@@ -509,18 +546,24 @@ func expandMCPTargets(entries []SourceEntry) []SourceEntry {
 }
 
 // appendProjected projects a registry entry into tool-native directories using
-// the provided subdir selector. If no tool has the relevant subdir, the entry
-// is kept at its original path.
-func appendProjected(expanded []SourceEntry, entry SourceEntry, toolDirs []ToolDir, subdirFn func(ToolDir) string) []SourceEntry {
-	baseName := filepath.Base(entry.RelativePath)
+// the provided subdir and suffix selectors. If suffixFn returns a non-empty
+// suffix, the source extension is replaced (e.g., "security.md" →
+// "security.instructions.md" for Copilot). If no tool has the relevant subdir,
+// the entry is kept at its original path.
+func appendProjected(expanded []SourceEntry, entry SourceEntry, toolDirs []ToolDir, subdirFn, suffixFn func(ToolDir) string) []SourceEntry {
+	srcBase := filepath.Base(entry.RelativePath)
 	mounted := false
 	for _, tool := range toolDirs {
 		subdir := subdirFn(tool)
 		if subdir == "" {
 			continue
 		}
+		name := srcBase
+		if suffix := suffixFn(tool); suffix != "" {
+			name = strings.TrimSuffix(srcBase, filepath.Ext(srcBase)) + suffix
+		}
 		toolRelPath := filepath.ToSlash(
-			filepath.Join(tool.Dir, subdir, baseName),
+			filepath.Join(tool.Dir, subdir, name),
 		)
 		expanded = append(expanded, SourceEntry{
 			SourceName:    entry.SourceName,
@@ -529,6 +572,7 @@ func appendProjected(expanded []SourceEntry, entry SourceEntry, toolDirs []ToolD
 			FullPath:      entry.FullPath,
 			Priority:      entry.Priority,
 			Protected:     entry.Protected,
+			KeepInGit:     tool.CommitToGit,
 		})
 		mounted = true
 	}

@@ -36,6 +36,11 @@ type SourceEntry struct {
 	FullPath      string
 	Priority      int
 	Protected     bool
+	// KeepInGit is true for projections into tool directories the team expects
+	// to commit (e.g., GitHub Copilot's .github/instructions/). When set, the
+	// mount engine skips adding the projected path to .git/info/exclude so it
+	// shows up in PRs as the team intends.
+	KeepInGit bool
 }
 
 func NewPlanner() Planner {

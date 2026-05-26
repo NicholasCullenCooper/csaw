@@ -4,17 +4,14 @@ Planning doc for what csaw projects (and doesn't) across AI coding tools. Living
 
 Source of truth for *what csaw actually projects today* is [`docs/reference/tool-projection.json`](../reference/tool-projection.json) (tools with `csaw_in_code: true`). This file is for what's *coming* or explicitly *out of scope*.
 
-## Currently in code (v0.6.1)
+## Currently in code (v0.7.0)
 
-Six tools with `"csaw_in_code": true`: **claude, cursor, codex, opencode, antigravity, goose**. The projection test (`internal/mount/projection_consistency_test.go`) enforces that the JSON's claims match the actual Go `ToolRegistry`.
+Seven tools with `"csaw_in_code": true`: **claude, cursor, codex, opencode, copilot, antigravity, goose**. The projection test (`internal/mount/projection_consistency_test.go`) enforces that the JSON's claims match the actual Go `ToolRegistry`.
 
 ## Coming up
 
-- **GitHub Copilot deep support** (vscode-copilot + copilot-cli) — *next major projection feature.* Needs:
-  - Per-subdir filename suffix patterns (`.agent.md`, `.instructions.md`, `.prompt.md`)
-  - Single-file instruction target (`.github/copilot-instructions.md`)
-  - Per-tool `CommitToGit` flag for `.github/` paths (these are normally committed)
-  - Should be unified `copilot` entry covering both VS Code and CLI.
+- **`.github/prompts/` (Copilot single-file prompts)** — Deferred from v0.7.0. csaw's skills are folder-based (`<name>/SKILL.md`); Copilot prompts are single files (`<name>.prompt.md`). Either map skills folders to prompt files (semantically awkward) or add a new `prompts` kind (8th kind, big surface). Revisit if Copilot users ask.
+- **`.github/copilot-instructions.md` alias** — Deferred from v0.7.0. Would project the project's `AGENTS.md` to this canonical Copilot location as a second symlink. Today Copilot reads `AGENTS.md` at project root, so the alias is nice-to-have, not required.
 
 ## Auto-served via AGENTS.md (no setup needed)
 

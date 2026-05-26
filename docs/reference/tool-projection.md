@@ -18,6 +18,7 @@ Tools with `csaw_in_code: true` (consistency-tested against `ToolRegistry`):
 - **`antigravity`** — Antigravity (Google) — unified CLI + IDE
 - **`claude`** — Claude Code
 - **`codex`** — OpenAI Codex CLI
+- **`copilot`** — GitHub Copilot (VS Code + CLI)
 - **`cursor`** — Cursor (IDE + CLI)
 - **`goose`** — Goose (AAIF / Linux Foundation)
 - **`opencode`** — OpenCode
@@ -41,21 +42,18 @@ Ordered by number of tools that read each path.
 
 | Path | # tools | Read by |
 |---|---|---|
-| `AGENTS.md` | 23 | aider, amazon-q, amp, antigravity, augment, claude, claw-code, cline, codex, copilot-cli, cursor, devin, factory, goose, hermes, kilo-code, kiro, openclaw, opencode, openhands, pi, vscode-copilot, zed |
-| `.gitignore` | 11 | antigravity, claude, cline, codex, continue, copilot-cli, goose, kiro, opencode, vscode-copilot, windsurf |
-| `CLAUDE.md` | 7 | amp, augment, claude, claw-code, hermes, pi, vscode-copilot |
-| `.claude/agents/` | 3 | claude, claw-code, vscode-copilot |
+| `AGENTS.md` | 22 | aider, amazon-q, amp, antigravity, augment, claude, claw-code, cline, codex, copilot, cursor, devin, factory, goose, hermes, kilo-code, kiro, openclaw, opencode, openhands, pi, zed |
+| `.gitignore` | 10 | antigravity, claude, cline, codex, continue, copilot, goose, kiro, opencode, windsurf |
+| `CLAUDE.md` | 7 | amp, augment, claude, claw-code, copilot, hermes, pi |
+| `.claude/agents/` | 3 | claude, claw-code, copilot |
 | `.claude/skills/<name>/SKILL.md` | 3 | claude, claw-code, opencode |
-| `.mcp.json` | 3 | claude, claw-code, copilot-cli |
 | `.agents/skills/<name>/SKILL.md` | 2 | antigravity, opencode |
 | `.cursorrules` | 2 | cursor, hermes |
-| `.github/agents/` | 2 | copilot-cli, vscode-copilot |
-| `.github/copilot-instructions.md` | 2 | copilot-cli, vscode-copilot |
-| `.github/instructions/` | 2 | copilot-cli, vscode-copilot |
+| `.mcp.json` | 2 | claude, claw-code |
 | `.rules` | 2 | trae, zed |
 | `AGENT.md` | 2 | amp, kilo-code |
 | `AGENTS.md (likely)` | 2 | lingma, plandex |
-| `CLAUDE.local.md` | 2 | claude, vscode-copilot |
+| `CLAUDE.local.md` | 2 | claude, copilot |
 | `GEMINI.md` | 2 | antigravity, gemini |
 
 ## Deep-Modeled Tools
@@ -172,28 +170,29 @@ Ordered by number of tools that read each path.
 - Top-level key: `mcpServers`
 - Transports: stdio, sse, http
 
-### GitHub Copilot CLI (`copilot-cli`)
+### GitHub Copilot (VS Code + CLI) (`copilot`) · `csaw_in_code: true`
 
-- **Docs:** [https://docs.github.com/en/copilot/reference/copilot-cli-reference/](https://docs.github.com/en/copilot/reference/copilot-cli-reference/)
-- **Category:** native-cli · **Status:** active
-- **Notes:** Shares ~/.copilot/ with VS Code Copilot — converging Copilot surface.
+- **Docs:** [https://code.visualstudio.com/docs/copilot/](https://code.visualstudio.com/docs/copilot/)
+- **Category:** vscode-extension-and-cli · **Status:** active
+- **Notes:** VS Code Copilot and Copilot CLI share the same .github/ paths and ~/.copilot/ user-scope agents. csaw projects rules (with .instructions.md suffix) and agents (with .agent.md suffix) into .github/, marked CommitToGit so the team can review them in PRs. Skills (.github/prompts/, single-file) and the .github/copilot-instructions.md alias not yet projected — AGENTS.md at project root covers Copilot's universal-instructions case.
 
 | Kind | Project paths | User paths | Confidence |
 |---|---|---|---|
-| agents | `.github/agents/` | `~/.copilot/agents/` | verified |
-| hooks | — | `~/.copilot/hooks/` | verified |
+| agents | `.github/agents/`, `.claude/agents/` | `~/.copilot/agents/` | verified |
+| hooks | — | — | unsupported |
 | ignore | `.gitignore` | — | inferred |
-| instructions | `.github/copilot-instructions.md`, `AGENTS.md` | `~/.copilot/copilot-instructions.md` | verified |
-| mcp | `.github/mcp.json`, `.mcp.json` | `~/.copilot/mcp-config.json` | verified |
+| instructions | `.github/copilot-instructions.md`, `AGENTS.md`, `CLAUDE.md`, `.claude/CLAUDE.md`, `CLAUDE.local.md` | — | verified |
+| mcp | `.vscode/mcp.json` | — | verified |
 | memory | — | — | unsupported |
-| rules | `.github/instructions/` | `~/.copilot/instructions/` | verified |
-| settings | `.github/copilot/settings.json`, `.github/copilot/settings.local.json` | `~/.copilot/settings.json`, `~/.copilot/config.json` | verified |
-| skills | — | `~/.copilot/skills/<name>/SKILL.md` | documented |
+| rules | `.github/instructions/` | — | verified |
+| settings | `.vscode/settings.json` | `(VS Code user profile)` | documented |
+| skills | `.github/prompts/` | — | verified |
 
 **MCP schema:**
 
-- Top-level key: `mcpServers`
-- Transports: stdio, http
+- Top-level key: `servers`
+- Transports: stdio (command/args), http (type: http, url)
+- Auth: env vars, input variables (VS Code Inputs)
 
 ### Cursor (IDE + CLI) (`cursor`) · `csaw_in_code: true`
 
@@ -285,30 +284,6 @@ Ordered by number of tools that read each path.
 - Transports: local (subprocess), remote (http)
 - Auth: OAuth auto (RFC 7591 dynamic registration), static OAuth, API key headers
 - Env var substitution: {env:VAR_NAME}
-
-### GitHub Copilot in VS Code (`vscode-copilot`)
-
-- **Docs:** [https://code.visualstudio.com/docs/copilot/](https://code.visualstudio.com/docs/copilot/)
-- **Category:** vscode-extension · **Status:** active
-- **Notes:** Mandatory filename suffixes. User-scope agents at ~/.copilot/agents/ SHARED with Copilot CLI.
-
-| Kind | Project paths | User paths | Confidence |
-|---|---|---|---|
-| agents | `.github/agents/`, `.claude/agents/` | `~/.copilot/agents/` | verified |
-| hooks | — | — | unsupported |
-| ignore | `.gitignore` | — | inferred |
-| instructions | `.github/copilot-instructions.md`, `AGENTS.md`, `CLAUDE.md`, `.claude/CLAUDE.md`, `CLAUDE.local.md` | — | verified |
-| mcp | `.vscode/mcp.json` | — | verified |
-| memory | — | — | unsupported |
-| rules | `.github/instructions/` | — | verified |
-| settings | `.vscode/settings.json` | `(VS Code user profile)` | documented |
-| skills | `.github/prompts/` | — | verified |
-
-**MCP schema:**
-
-- Top-level key: `servers`
-- Transports: stdio (command/args), http (type: http, url)
-- Auth: env vars, input variables (VS Code Inputs)
 
 ### Windsurf (Codeium) (`windsurf`)
 

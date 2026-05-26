@@ -20,10 +20,10 @@
     "agents": "Subagent / persona / mode definitions. [csaw projects: YES]",
     "skills": "On-demand procedural workflows (SKILL.md folders, slash commands, prompts, recipes). [csaw projects: YES]",
     "mcp": "MCP server configs. Per-tool schema varies widely. [csaw projects: YES (via per-tool registry files)]",
-    "hooks": "Lifecycle scripts triggered by tool events. [csaw projects: YES \u2014 planned v0.6.0]",
-    "ignore": "Context exclusion patterns (.cody/ignore, .cursorignore, .tongyiignore). [csaw projects: YES \u2014 planned v0.6.0]",
-    "memory": "Persistent context across sessions. [csaw projects: NEVER for now \u2014 most memory is session state or user-private. Revisit if a portable memory standard emerges.]",
-    "settings": "General tool config that may contain multiple kinds. [csaw projects: NEVER \u2014 settings files contain API keys and personal credentials; mounting them to a team source would leak secrets. Documented as reference only.]"
+    "hooks": "Lifecycle scripts triggered by tool events. [csaw projects: YES — planned v0.6.0]",
+    "ignore": "Context exclusion patterns (.cody/ignore, .cursorignore, .tongyiignore). [csaw projects: YES — planned v0.6.0]",
+    "memory": "Persistent context across sessions. [csaw projects: NEVER for now — most memory is session state or user-private. Revisit if a portable memory standard emerges.]",
+    "settings": "General tool config that may contain multiple kinds. [csaw projects: NEVER — settings files contain API keys and personal credentials; mounting them to a team source would leak secrets. Documented as reference only.]"
   },
   "tools": {
     "claude": {
@@ -123,7 +123,7 @@
             "headers",
             "env vars via --env flag"
           ],
-          "scope_hierarchy": "local \u2192 project \u2192 user (same-name resolution)",
+          "scope_hierarchy": "local → project → user (same-name resolution)",
           "env_var_substitution": [
             "${VAR}",
             "${VAR:-default}",
@@ -421,7 +421,7 @@
       "category": "native-cli",
       "status": "active",
       "csaw_in_code": true,
-      "scope_notes": "OSS leader (150K+ stars). EXPLICIT cross-tool compat \u2014 reads .claude/ and .agents/ as skill fallbacks.",
+      "scope_notes": "OSS leader (150K+ stars). EXPLICIT cross-tool compat — reads .claude/ and .agents/ as skill fallbacks.",
       "kinds": {
         "instructions": {
           "project_paths": [
@@ -481,7 +481,7 @@
             "name",
             "description"
           ],
-          "notes": "SIX paths. csaw projects .claude/skills/ and .agents/skills/ \u2192 free OpenCode coverage.",
+          "notes": "SIX paths. csaw projects .claude/skills/ and .agents/skills/ → free OpenCode coverage.",
           "confidence": "verified",
           "sources": [
             "https://opencode.ai/docs/skills/"
@@ -638,7 +638,7 @@
             "~/.codeium/windsurf/memories/"
           ],
           "format": "markdown",
-          "notes": "Cascade memories \u2014 manage via 'Manage memories' UI.",
+          "notes": "Cascade memories — manage via 'Manage memories' UI.",
           "confidence": "verified"
         },
         "ignore": {
@@ -653,13 +653,13 @@
         }
       }
     },
-    "vscode-copilot": {
-      "display_name": "GitHub Copilot in VS Code",
+    "copilot": {
+      "display_name": "GitHub Copilot (VS Code + CLI)",
       "docs_homepage": "https://code.visualstudio.com/docs/copilot/",
-      "category": "vscode-extension",
+      "category": "vscode-extension-and-cli",
       "status": "active",
-      "csaw_in_code": false,
-      "scope_notes": "Mandatory filename suffixes. User-scope agents at ~/.copilot/agents/ SHARED with Copilot CLI.",
+      "csaw_in_code": true,
+      "scope_notes": "VS Code Copilot and Copilot CLI share the same .github/ paths and ~/.copilot/ user-scope agents. csaw projects rules (with .instructions.md suffix) and agents (with .agent.md suffix) into .github/, marked CommitToGit so the team can review them in PRs. Skills (.github/prompts/, single-file) and the .github/copilot-instructions.md alias not yet projected — AGENTS.md at project root covers Copilot's universal-instructions case.",
       "kinds": {
         "instructions": {
           "project_paths": [
@@ -790,121 +790,13 @@
         }
       }
     },
-    "copilot-cli": {
-      "display_name": "GitHub Copilot CLI",
-      "docs_homepage": "https://docs.github.com/en/copilot/reference/copilot-cli-reference/",
-      "category": "native-cli",
-      "status": "active",
-      "csaw_in_code": false,
-      "scope_notes": "Shares ~/.copilot/ with VS Code Copilot \u2014 converging Copilot surface.",
-      "kinds": {
-        "instructions": {
-          "project_paths": [
-            ".github/copilot-instructions.md",
-            "AGENTS.md"
-          ],
-          "user_paths": [
-            "~/.copilot/copilot-instructions.md"
-          ],
-          "format": "markdown",
-          "confidence": "verified",
-          "sources": [
-            "https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-config-dir-reference"
-          ]
-        },
-        "rules": {
-          "project_paths": [
-            ".github/instructions/"
-          ],
-          "user_paths": [
-            "~/.copilot/instructions/"
-          ],
-          "format": "markdown",
-          "file_pattern": "*.instructions.md (suffix mandatory)",
-          "frontmatter_required": [
-            "applyTo"
-          ],
-          "confidence": "verified"
-        },
-        "agents": {
-          "project_paths": [
-            ".github/agents/"
-          ],
-          "user_paths": [
-            "~/.copilot/agents/"
-          ],
-          "format": "markdown",
-          "file_pattern": "*.agent.md (suffix mandatory)",
-          "notes": "SAME ~/.copilot/agents/ as VS Code Copilot.",
-          "confidence": "verified"
-        },
-        "skills": {
-          "user_paths": [
-            "~/.copilot/skills/<name>/SKILL.md"
-          ],
-          "format": "markdown",
-          "file_pattern": "folder containing SKILL.md",
-          "frontmatter_required": [
-            "description"
-          ],
-          "notes": "User-scope only.",
-          "confidence": "documented"
-        },
-        "mcp": {
-          "project_paths": [
-            ".github/mcp.json",
-            ".mcp.json"
-          ],
-          "user_paths": [
-            "~/.copilot/mcp-config.json"
-          ],
-          "format": "json",
-          "schema_top_level_key": "mcpServers",
-          "transports": [
-            "stdio",
-            "http"
-          ],
-          "notes": "Repo-level CAN be .mcp.json (Claude-compatible) OR .github/mcp.json.",
-          "confidence": "verified"
-        },
-        "hooks": {
-          "user_paths": [
-            "~/.copilot/hooks/"
-          ],
-          "format": "scripts",
-          "confidence": "verified"
-        },
-        "memory": {
-          "confidence": "unsupported"
-        },
-        "ignore": {
-          "project_paths": [
-            ".gitignore"
-          ],
-          "confidence": "inferred"
-        },
-        "settings": {
-          "project_paths": [
-            ".github/copilot/settings.json",
-            ".github/copilot/settings.local.json"
-          ],
-          "user_paths": [
-            "~/.copilot/settings.json",
-            "~/.copilot/config.json"
-          ],
-          "format": "json",
-          "notes": "settings.json = primary; config.json = internal state (auth).",
-          "confidence": "verified"
-        }
-      }
-    },
     "antigravity": {
-      "display_name": "Antigravity (Google) \u2014 unified CLI + IDE",
+      "display_name": "Antigravity (Google) — unified CLI + IDE",
       "docs_homepage": "https://antigravity.google/docs/",
       "category": "ide-or-cli",
       "status": "active",
       "csaw_in_code": true,
-      "scope_notes": "Gemini CLI's successor (Gemini sunset 2026-06-18). Built in Go. Uses .agents/ (plural) \u2014 same as csaw's StandardFallback.",
+      "scope_notes": "Gemini CLI's successor (Gemini sunset 2026-06-18). Built in Go. Uses .agents/ (plural) — same as csaw's StandardFallback.",
       "kinds": {
         "instructions": {
           "project_paths": [
@@ -1041,7 +933,7 @@
             ".kiro/specs/"
           ],
           "format": "markdown",
-          "notes": "Kiro 'specs' (Requirements/Design/Tasks in EARS notation) \u2014 different from Claude skills semantically.",
+          "notes": "Kiro 'specs' (Requirements/Design/Tasks in EARS notation) — different from Claude skills semantically.",
           "confidence": "documented"
         },
         "mcp": {
@@ -1078,7 +970,7 @@
       "category": "vscode-extension",
       "status": "active",
       "csaw_in_code": false,
-      "scope_notes": "Has .continue/rules/ (project) and ~/.continue/rules/ (user) \u2014 file-based, NOT all nested in config.",
+      "scope_notes": "Has .continue/rules/ (project) and ~/.continue/rules/ (user) — file-based, NOT all nested in config.",
       "kinds": {
         "instructions": {
           "project_paths": [
@@ -1133,7 +1025,7 @@
             "sse",
             "http"
           ],
-          "notes": "Nested in config \u2014 not file-projectable separately.",
+          "notes": "Nested in config — not file-projectable separately.",
           "confidence": "verified"
         },
         "hooks": {
@@ -1275,7 +1167,7 @@
             "sub_recipes",
             "response_schema"
           ],
-          "notes": "Discovery: current dir \u2192 GOOSE_RECIPE_PATH env \u2192 ~/.config/goose/recipes/ \u2192 .goose/recipes/ \u2192 GitHub via GOOSE_RECIPE_GITHUB_REPO env.",
+          "notes": "Discovery: current dir → GOOSE_RECIPE_PATH env → ~/.config/goose/recipes/ → .goose/recipes/ → GitHub via GOOSE_RECIPE_GITHUB_REPO env.",
           "confidence": "verified",
           "sources": [
             "https://goose-docs.ai/docs/guides/recipes/storing-recipes/"
@@ -1423,7 +1315,7 @@
         "display_name": "Kilo Code",
         "status": "active",
         "csaw_in_code": false,
-        "scope_notes": "Reads .claude/ and .agents/ \u2014 csaw's projection serves Kilo for free.",
+        "scope_notes": "Reads .claude/ and .agents/ — csaw's projection serves Kilo for free.",
         "project_paths": [
           "AGENTS.md",
           "AGENT.md",
@@ -1497,7 +1389,7 @@
         "display_name": "OpenHands (formerly OpenDevin)",
         "status": "active",
         "csaw_in_code": false,
-        "scope_notes": ".openhands/microagents/ \u2014 V0 'microagents', V1 'skills'. Same path. Removed from ToolRegistry in v0.6.1 to keep projection focused; re-add on user demand.",
+        "scope_notes": ".openhands/microagents/ — V0 'microagents', V1 'skills'. Same path. Removed from ToolRegistry in v0.6.1 to keep projection focused; re-add on user demand.",
         "project_paths": [
           ".openhands/microagents/",
           "AGENTS.md"
@@ -1555,7 +1447,7 @@
         "display_name": "Hermes Agent (Nous Research)",
         "status": "active",
         "csaw_in_code": false,
-        "scope_notes": "CROSS-TOOL READER. Already served by csaw projecting AGENTS.md, CLAUDE.md, and .cursor/rules/ \u2014 Hermes reads all of those. Adding explicit .hermes.md/HERMES.md projection would require a dedicated entry but is not necessary for csaw to be useful to Hermes users today.",
+        "scope_notes": "CROSS-TOOL READER. Already served by csaw projecting AGENTS.md, CLAUDE.md, and .cursor/rules/ — Hermes reads all of those. Adding explicit .hermes.md/HERMES.md projection would require a dedicated entry but is not necessary for csaw to be useful to Hermes users today.",
         "project_paths": [
           ".hermes.md",
           "HERMES.md",
@@ -1575,7 +1467,7 @@
         "display_name": "Claw Code (ultraworkers)",
         "status": "active",
         "csaw_in_code": false,
-        "scope_notes": "Clean-room rewrite of Claude Code. Reuses .claude/ \u2014 csaw projection serves automatically.",
+        "scope_notes": "Clean-room rewrite of Claude Code. Reuses .claude/ — csaw projection serves automatically.",
         "project_paths": [
           "CLAUDE.md",
           "AGENTS.md",
@@ -1604,7 +1496,7 @@
         "display_name": "Factory CLI (Droids)",
         "status": "active",
         "csaw_in_code": false,
-        "scope_notes": "AGENTS.md only \u2014 already served.",
+        "scope_notes": "AGENTS.md only — already served.",
         "project_paths": [
           "AGENTS.md"
         ],
@@ -1715,7 +1607,7 @@
       "Warp",
       "Droid",
       "FetchCoder",
-      "Junie CLI (JetBrains \u2014 out of scope)",
+      "Junie CLI (JetBrains — out of scope)",
       "Cortex Code CLI (Snowflake)",
       "Tabnine CLI",
       "Mentat CLI",

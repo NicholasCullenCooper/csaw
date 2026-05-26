@@ -128,8 +128,8 @@ csaw update                             # repair broken links
 | Kind | Registry path | Projects to |
 |---|---|---|
 | Instructions | `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.goosehints` | Project root |
-| Rules | `rules/*.md` | `.claude/rules/`, `.cursor/rules/` |
-| Agents | `agents/*.md` | `.claude/agents/`, `.opencode/agents/` |
+| Rules | `rules/*.md` | `.claude/rules/`, `.cursor/rules/`, `.github/instructions/*.instructions.md` (Copilot, suffix auto-applied) |
+| Agents | `agents/*.md` | `.claude/agents/`, `.opencode/agents/`, `.github/agents/*.agent.md` (Copilot, suffix auto-applied) |
 | Skills | `skills/*/SKILL.md` | `.claude/skills/`, `.opencode/skills/`, `.codex/skills/`, `.agents/skills/` |
 | MCP | `mcp/*.json` | `.mcp.json`, `.cursor/mcp.json`, `.vscode/mcp.json` |
 | Hooks | `hooks/*` | `.claude/hooks/` |
@@ -138,6 +138,8 @@ csaw update                             # repair broken links
 `.agents/skills/` is always created as a fallback. Other tool directories are used only if they already exist in the project or are configured via `csaw config set tools claude,cursor`.
 
 Files at unrecognized registry paths are mounted at the same path in the project (no per-tool projection).
+
+**GitHub Copilot is the exception** to csaw's hide-from-git default: `.github/` paths are marked `CommitToGit`, so projected Copilot files appear in `git status` and PRs as the team expects. Suffix rewriting is automatic — you write `rules/security.md` in your registry; Copilot sees `.github/instructions/security.instructions.md`.
 
 ## Profile Format (`csaw.yml`)
 

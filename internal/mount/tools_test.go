@@ -336,6 +336,66 @@ func TestExpandToolTargetsProjectsHooks(t *testing.T) {
 	}
 }
 
+// TestExpandToolTargetsAppliesCopilotSuffixes verifies that the per-subdir
+// suffix fields (RulesSuffix, AgentsSuffix) rewrite the projected filename
+// while leaving the source registry path untouched. GitHub Copilot is the
+// driving use case: rules/security.md → .github/instructions/security.instructions.md.
+func TestExpandToolTargetsAppliesCopilotSuffixes(t *testing.T) {
+	toolDirs := []ToolDir{ToolRegistry["copilot"]}
+	entries := []SourceEntry{
+		{SourceName: "reg", RelativePath: "rules/security.md", FullPath: "/r/rules/security.md"},
+		{SourceName: "reg", RelativePath: "agents/reviewer.md", FullPath: "/r/agents/reviewer.md"},
+	}
+	expanded := ExpandToolTargets(entries, toolDirs)
+	paths := make(map[string]bool)
+	for _, e := range expanded {
+		paths[e.RelativePath] = true
+	}
+	for _, want := range []string{
+		".github/instructions/security.instructions.md",
+		".github/agents/reviewer.agent.md",
+	} {
+		if !paths[want] {
+			t.Errorf("expected suffix-rewritten projection %q not found in %v", want, paths)
+		}
+	}
+	// Source paths should NOT survive when projected through Copilot
+	for _, gone := range []string{
+		".github/instructions/security.md",
+		".github/agents/reviewer.md",
+	} {
+		if paths[gone] {
+			t.Errorf("unrewritten path %q should not be present", gone)
+		}
+	}
+}
+
+// TestExpandToolTargetsPropagatesKeepInGit verifies that projections through
+// a CommitToGit tool (Copilot) carry KeepInGit:true, while projections
+// through default tools (Claude) carry KeepInGit:false. The mount engine
+// uses this flag to decide whether to add the projection to .git/info/exclude.
+func TestExpandToolTargetsPropagatesKeepInGit(t *testing.T) {
+	toolDirs := []ToolDir{
+		ToolRegistry["claude"],
+		ToolRegistry["copilot"],
+	}
+	entries := []SourceEntry{
+		{SourceName: "reg", RelativePath: "rules/style.md", FullPath: "/r/rules/style.md"},
+	}
+	expanded := ExpandToolTargets(entries, toolDirs)
+
+	got := make(map[string]bool)
+	for _, e := range expanded {
+		got[e.RelativePath] = e.KeepInGit
+	}
+	if keep, ok := got[".claude/rules/style.md"]; !ok || keep {
+		t.Errorf(".claude/rules/style.md: want KeepInGit=false, got present=%v keep=%v", ok, keep)
+	}
+	if keep, ok := got[".github/instructions/style.instructions.md"]; !ok || !keep {
+		t.Errorf(".github/instructions/style.instructions.md: want KeepInGit=true, got present=%v keep=%v", ok, keep)
+	}
+}
+
 func TestExpandMCPTargetsProjectsToToolPaths(t *testing.T) {
 	entries := []SourceEntry{
 		{

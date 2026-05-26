@@ -11,7 +11,7 @@
     <a href="https://pypi.org/project/csaw/"><img src="https://img.shields.io/pypi/v/csaw" alt="PyPI"></a>
   </p>
   <p align="center">
-    Works with: Claude Code · Cursor · Codex · OpenCode · Antigravity (Google) · Goose
+    Works with: Claude Code · Cursor · Codex · OpenCode · GitHub Copilot · Antigravity (Google) · Goose
   </p>
 </p>
 
@@ -259,8 +259,8 @@ csaw treats AI workspace artifacts as seven distinct kinds, each with its own co
 | Kind | Registry path | Projects to | When loaded |
 |---|---|---|---|
 | **Instructions** | `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.goosehints` | Project root | Every turn — always in context |
-| **Rules** | `rules/*.md` | `.claude/rules/`, `.cursor/rules/` | Every turn — always-on coding standards |
-| **Agents** | `agents/*.md` | `.claude/agents/`, `.opencode/agents/` | When invoked — specialized subagent personas |
+| **Rules** | `rules/*.md` | `.claude/rules/`, `.cursor/rules/`, `.github/instructions/` (Copilot, suffixed `.instructions.md`) | Every turn — always-on coding standards |
+| **Agents** | `agents/*.md` | `.claude/agents/`, `.opencode/agents/`, `.github/agents/` (Copilot, suffixed `.agent.md`) | When invoked — specialized subagent personas |
 | **Skills** | `skills/*/SKILL.md` | `.claude/skills/`, `.opencode/skills/`, `.agents/skills/` (Antigravity + fallback), `.codex/skills/` | When relevant — on-demand procedural workflows |
 | **MCP** | `mcp/*.json` | `.mcp.json`, `.cursor/mcp.json`, `.vscode/mcp.json` | Session start — tool/data connectivity |
 | **Hooks** | `hooks/*` | `.claude/hooks/` | Tool lifecycle events |
@@ -298,6 +298,7 @@ If csaw can't auto-detect any tool directories in your project on first mount, i
 │  ● Cursor                                │
 │  ○ OpenCode                              │
 │  ○ Codex CLI                             │
+│  ○ GitHub Copilot (VS Code + CLI)        │
 │  ○ Antigravity (Google)                  │
 │  ○ Goose                                 │
 │                                          │
@@ -312,8 +313,8 @@ csaw config set tools claude,cursor
 ```
 
 > **Notes on tool coverage:**
-> - **Already served via `AGENTS.md`** (no setup needed): GitHub Copilot, Factory Droid, Pi, Hermes, Cline, Aider, and ~25 other tools that read the cross-tool standard. csaw projects `AGENTS.md` to your project root by default.
-> - **GitHub Copilot deep support** (`.github/instructions/`, `.github/agents/`): Tracked as future work — requires per-suffix filename patterns and a per-tool git-visibility flag (these paths are normally committed, not git-excluded).
+> - **GitHub Copilot (v0.7.0+):** Deep support landed. csaw projects rules to `.github/instructions/<name>.instructions.md` and agents to `.github/agents/<name>.agent.md` (suffix rewriting is automatic — you still write `rules/security.md` in your registry). Copilot's `.github/` paths are marked `CommitToGit`, so they appear in `git status` and PRs for team review — unlike other projections, csaw does *not* add them to `.git/info/exclude`. The single-file `.github/copilot-instructions.md` alias is not yet projected; `AGENTS.md` at project root covers Copilot's universal instructions.
+> - **Already served via `AGENTS.md`** (no setup needed): Factory Droid, Pi, Hermes, Cline, Aider, Continue, Amp, Augment, and ~20 others that read the cross-tool standard. csaw projects `AGENTS.md` to your project root by default.
 > - **Gemini CLI:** Removed in v0.6.0 (Google sunset 2026-06-18). Migrate to Antigravity — it uses `.agents/` (csaw's StandardFallback, served automatically) and reads `GEMINI.md`.
 > - **Trimmed in v0.6.1**: Amazon Q, Kiro, OpenHands, Windsurf, and CodeBuddy were removed from active projection to keep the supported set focused. Re-add on user demand — all remain catalogued in the JSON below.
 >

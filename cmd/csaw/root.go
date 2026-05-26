@@ -1826,6 +1826,7 @@ var toolDisplayNames = map[string]string{
 	"codex":       "Codex CLI",
 	"antigravity": "Antigravity (Google)",
 	"goose":       "Goose (AAIF / Linux Foundation)",
+	"copilot":     "GitHub Copilot (VS Code + CLI)",
 }
 
 func toolDisplayName(key string) string {
