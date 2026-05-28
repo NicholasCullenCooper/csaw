@@ -8,15 +8,11 @@ For strategic/vision direction see [`../product/roadmap.md`](../product/roadmap.
 
 ## Tier 1 — current focus (post-v0.7.2)
 
-### 1. "Minimal intrusion" framing in README
+### ~~1. "Minimal intrusion" framing in README~~ ✅ Shipped
 
 **What:** Lead the README pitch with the cleanup story — csaw symlinks mean `csaw unmount` leaves nothing behind, and uninstalling csaw entirely doesn't break any tool that was reading mounted files. Adopted from cc-switch's [positioning](https://github.com/farion1231/cc-switch) ("even if you uninstall the app, your CLI tools will continue to work normally") but csaw's claim is stronger because symlinks are inherent, not engineered.
 
-**Why first:** Smallest scope (pure copywriting, ~20 min), sets the framing all other features inherit from, no design decisions to debate.
-
-**Success:** README opening paragraphs mention reversibility/cleanup. A new reader scanning the top of the README understands within 30 seconds that csaw isn't a lock-in tool.
-
-**Status:** Not started.
+**Shipped as:** New `## Reversible by design` section in README, placed between the centered intro and `## Who csaw is for` so the framing lands before the problem statement and feature tour.
 
 ---
 

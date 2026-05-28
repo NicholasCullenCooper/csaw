@@ -17,6 +17,16 @@
 
 ---
 
+## Reversible by design
+
+csaw isn't a daemon, a database, or a wrapper around your AI tools. It's a mount tool: every file csaw creates in your project is a symlink to a file in one of your source repos. `csaw unmount` removes every symlink and restores any originals that were displaced. There's no state to clean up, no migration to undo, no runtime that has to keep working.
+
+Concretely: uninstall csaw entirely and your AI tools keep reading the symlinks until you delete them. Delete the symlinks and you're back to the project's original state. The cost of trying csaw is the cost of running `csaw mount` once and `csaw unmount` once.
+
+This is the core promise — csaw fails open. If you stop trusting it, get out without paying a price.
+
+---
+
 ## Who csaw is for
 
 You have **more than one source of AI configuration**:
