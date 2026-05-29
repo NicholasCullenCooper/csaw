@@ -36,7 +36,7 @@ Deferred: `consulting` preset (structurally different — about policy, not sour
 - Doc updated to lead with `--preset` examples for the canonical persona (SWE in dept-of-teams).
 - All four presets ship as tests verifying the scaffolded source passes `csaw audit`.
 
-**Status:** Not started. Implementation site: `internal/registry/presets/` (new) + new flag handling in `cmd/csaw/root.go` source-init command.
+**Status:** Shipped v0.8.0. Implementation at `internal/registry/presets.go` + `--preset` / `--list-presets` flags in `cmd/csaw/root.go`. `consulting` preset deferred per scope cut.
 
 ---
 
@@ -51,7 +51,7 @@ Deferred: `consulting` preset (structurally different — about policy, not sour
 - `csaw source add gh:org/repo#tag` works at the CLI.
 - Both syntaxes round-trip through sources.yml.
 
-**Status:** Next up.
+**Status:** Shipped v0.8.1. Parser at `internal/sources/shorthand.go`; `Source.Ref` field added for source-level default ref tracking.
 
 ### ~~3b. `csaw://` URL scheme~~ — Dropped from Tier 1, moved to Tier 3
 
@@ -72,17 +72,19 @@ Bad ROI for a CLI tool. See Tier 3.
 - Documentation explains the recommended workflow (`csaw push` or `csaw fork` based on intent).
 - Tests cover the modified-target detection path.
 
-**Status:** Next up.
+**Status:** Shipped v0.8.2. Implementation: `sources.Manager.DirtyFiles()` + new `csaw status` output section.
 
-### 4b. Cross-platform packaging audit
+### ~~4b. Cross-platform packaging audit~~ ✅ Done (docs-only)
+
+Landscape mapped in [`packaging-audit.md`](packaging-audit.md). **Nothing added to GoReleaser** in this pass — adding channels speculatively because cc-switch ships them is feature parity, not user-driven product work. The audit documents what's cheap to add (nfpms, winget, AUR), what needs significant demand (Snap, Chocolatey, hosted apt/yum repos), what defers to community (Flatpak), and what's never (Docker, Homebrew formula). Decisions are pre-staged so the response to a real user report is "one PR adds it" rather than "let me figure out the landscape."
 
 **What:** csaw ships via Homebrew, Scoop, PyPI today. cc-switch ships via DEB, RPM, AppImage, Arch, Flatpak in addition. Audit `.goreleaser.yaml` to identify which channels GoReleaser supports cheaply without manual ongoing maintenance. Output is a decision per channel (ship now / defer / never), captured in a planning doc.
 
 **Why fourth:** Research/ops pass, not product work. Worth doing for cross-platform reach but doesn't ship user-visible value until decisions land.
 
-**Success:** Decision documented per channel in `docs/planning/packaging-audit.md`. Any "ship now" channels actually added to GoReleaser config in a follow-up commit.
+**Success:** Decision documented per channel in `docs/planning/packaging-audit.md`. Channels added only when a real user reports install friction — not speculatively.
 
-**Status:** After 4a.
+**Status:** Done (docs-only commit, no version tag). Audit at `docs/planning/packaging-audit.md`. No GoReleaser changes — adding channels because a competing tool ships them is feature parity, not product work.
 
 ---
 
@@ -94,7 +96,8 @@ Items that came out of recent work but aren't queued yet. Promote to Tier 1 when
 - **Honest "auto-served" deep projection** — Per [`projection-roadmap.md`](projection-roadmap.md): Cline, Continue, Factory Droid, Augment, Amp, Aider all have native dirs csaw doesn't reach. Quick wins available (CONVENTIONS.md for Aider, factory entry for skills). Prioritize on user demand.
 - **`.github/copilot-instructions.md` alias** — Project AGENTS.md to this Copilot-canonical location as second symlink. Nice-to-have.
 - **`.github/prompts/` for Copilot** — Single-file prompts. Either map skills folders awkwardly or add new `prompts` kind. Revisit if Copilot users ask.
-- **Refresh `docs/product/roadmap.md`** — Strategic doc is significantly stale: header says "current state: v0.4.0" (actual v0.8.1) and the v0.5–v0.9 sections describe planned work that has mostly shipped (v0.5 client isolation, v0.6 hooks/ignore, v0.7 Copilot, v0.8 presets+shorthand) or been replaced. Not just a version bump — needs a real rewrite of "Current State" and either pruning the per-version sections or replacing them with a 1-year horizon view. Promote to Tier 1 when Tier 1 #4 ships.
+- **Refresh `docs/product/roadmap.md`** — Strategic doc is significantly stale: header says "current state: v0.4.0" (actual v0.8.3) and the v0.5–v0.9 sections describe planned work that has mostly shipped (v0.5 client isolation, v0.6 hooks/ignore, v0.7 Copilot, v0.8 presets+shorthand+packaging) or been replaced. Not just a version bump — needs a real rewrite of "Current State" and either pruning the per-version sections or replacing them with a 1-year horizon view. **Now that Tier 1 is done, this is the natural next promotion to Tier 1.**
+- **Native package channels (nfpms / winget / AUR)** — All pre-staged in [`packaging-audit.md`](packaging-audit.md). Each is ~5 lines of GoReleaser config. Add WHEN a real user reports install friction on that platform, not before. PyPI already covers cross-platform Linux today.
 
 ## Tier 3 — deferred
 
@@ -113,3 +116,4 @@ Documented for visibility; not on near-term horizon.
 - This file gets updated as items ship, get reprioritized, or get scrapped. Don't let it rot — if a Tier 1 item sits unfinished for >2 weeks, demote or kill.
 - New strategic ideas land in [`../product/roadmap.md`](../product/roadmap.md) (the idea map). New tactical items land here.
 - Research that informs a decision goes in a separate `docs/planning/<topic>.md` (precedent: [`package-manager-lessons.md`](package-manager-lessons.md), [`projection-roadmap.md`](projection-roadmap.md)). Don't bury research inside next-up.
+- **User-driven over parity-driven.** When studying a competing tool (cc-switch, ECC, APM, etc.), the deliverable is *understanding the landscape*, not a checklist of features to add. Add a feature when a real csaw user reports the friction it would relieve — not because another tool has it. Articulated after the v0.8.3 packaging audit, where the GoReleaser nfpms block was almost shipped because cc-switch ships DEB/RPM/APK, even though PyPI already covers cross-platform Linux install today and no user had reported friction.
