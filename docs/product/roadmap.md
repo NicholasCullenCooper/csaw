@@ -8,47 +8,85 @@ Repos remain the source of truth for project-owned context. csaw is for context 
 
 The core product question is: why not just keep the context in the relevant repo? The answer should stay narrow. If a file belongs to exactly one project and is safe to commit there, it should live in that repo. csaw earns its place when the context must be private, composed from multiple owners, reused across repos, switched by engagement, projected into multiple AI tools, pinned independently of app code, or audited as active local state.
 
-## Current State
+## Current State (v0.8.3)
 
-`v0.4.0` establishes the core governance direction:
+csaw today is a working tool for the canonical persona — a software engineer in a department of teams in a company with engineering standards. The four-tier source stack (company/department/team/personal) composes via priority and protection; mounted files are symlinks to git-tracked source files; nothing csaw produces survives `csaw unmount`.
 
-- multi-source mounting from personal, team, client, and community sources
-- priority-based composition and protected files
-- first-class artifact kinds: instructions, rules, agents, skills, and MCP
-- per-tool projection for Claude Code, Cursor, Codex, OpenCode, Windsurf, and shared fallback directories
-- per-project source pinning
-- fork and promote workflows
-- `csaw inspect`, `check`, `status`, and `diff`
-- `csaw audit` with `.csaw/policy.yml`, required sources, blocked sources, required kinds, strict mode, and JSON output
-- distribution through GitHub Releases, Homebrew, Scoop, and PyPI
+### What's in code today
 
-Current `main` after `v0.4.0` also includes:
+**Mount + composition:** Multi-source mounting with priority-based composition, protected files (SHA-256 verified at check/audit time), per-project source pinning (and source-level default `Ref` set via shorthand). Fork and promote workflows. `csaw inspect`, `check`, `status`, `diff`. `csaw status` surfaces uncommitted edits in source checkouts so the silent-edit-via-symlink problem is visible.
 
-- `csaw audit --init`
-- documented audit JSON finding contract
-- required source URL and project pin checks
-- protected-file SHA-256 verification in `check` and `audit`
-- blocked kind and blocked mounted path audit checks
+**Artifact kinds (7):** instructions, rules, agents, skills, MCP, hooks, ignore. Settings and memory are deliberately *not* projected (privacy / out of scope; documented in [`projection-roadmap.md`](../planning/projection-roadmap.md)).
 
-Beta readiness is tracked in [`beta-acceptance.md`](beta-acceptance.md).
+**Tool projection (7 in-code):** Claude Code, Cursor, Codex, OpenCode, GitHub Copilot (with mandatory-suffix rewriting and CommitToGit revert per the no-hidden-defaults principle), Antigravity, Goose. JSON↔code consistency test guards against drift. Codegen renders `tool-projection.md` from JSON; CI enforces.
+
+**Source-add ergonomics:** Long-form URLs (`csaw source add team https://...`), local paths, and pnpm-style host shorthand (`csaw source add team gh:org/repo#v1.2.0`). `csaw init --preset {solo-engineer,team-go,team-frontend}` scaffolds curated starters.
+
+**Conventions:** `experimental/` as a built-in convention (any path segment hides files by default; `--include-experimental` to mount). `.csawignore` for custom hide patterns. Project-level policy via `.csaw/policy.yml` with required sources/kinds, blocked sources/kinds/paths, strict mode, JSON output. `csaw audit --init` scaffolds.
+
+**Distribution:** GitHub Releases (tar.gz/zip), Homebrew cask, Scoop, PyPI. Per the [packaging audit](../planning/packaging-audit.md), additional Linux/Windows channels are *pre-staged but not added* — they wait for real user-reported install friction.
+
+### What shipped vs. what was planned
+
+The detailed per-version planning from the original v0.4.0 roadmap didn't survive contact with reality. The themes that actually emerged through v0.5–v0.8:
+
+- **Tool surface honesty** dominated v0.5–v0.7: adding tools, removing sunset ones (Gemini CLI), trimming speculative entries, building codegen for the projection map, catching and reverting feature parity (Copilot CommitToGit), and being honest about "auto-served via AGENTS.md" only covers ~20% of each tool's surface.
+- **Convention promotion** (v0.6–v0.7.2): hooks and ignore became first-class kinds; `experimental/` became a built-in convention.
+- **Source ergonomics** (v0.8.x): `--preset`, shorthand, edit-while-mounted visibility — friction reducers driven by real first-install and shareable-link use cases.
+
+Things from the original v0.5–v0.9 plan that did *not* ship and aren't immediate priorities: the "context" vocabulary refactor (`csaw context status/use/leave`), `csaw enter` project onboarding summary, pause/resume/handoff, a context ledger, source metadata/validation, scanner protocol, npm distribution. These weren't wrong ideas — they weren't user-demanded yet.
+
+Beta readiness still tracked in [`beta-acceptance.md`](beta-acceptance.md) (note: that doc may itself need a refresh pass).
+
+## Tactical queue
+
+Current near-term work lives in [`../planning/next-up.md`](../planning/next-up.md) as a three-tier prioritized queue (current focus / known follow-ups / explicitly deferred). This roadmap stays directional; the tactical queue stays operational. Don't duplicate them — when promoting something from queue to roadmap, write it as a theme, not a version slot.
+
+## Themes (12-month directional)
+
+Not version-pinned. Each theme is a question csaw might answer better, with current status. Promotion to active work happens when a real user surfaces friction — not by date or by competitor parity.
+
+### Tool surface coverage (active)
+
+The status: csaw projects to 7 tools in-code today. AGENTS.md serves another ~20 indirectly. But each of those ~20 has native dirs (`.clinerules/`, `.continue/rules/`, `.factory/skills/`, `.augment/rules/`, etc.) csaw doesn't reach, captured honestly in [`projection-roadmap.md`](../planning/projection-roadmap.md) with quick-win candidates ranked by deep-projection value. Adds happen on user demand, not on competitor parity.
+
+### Mount UX polish (active)
+
+The pattern so far: when a real friction surfaces (silent edits via symlinks; first-install boilerplate; share-friendly source-add), csaw absorbs it into the existing model rather than building a new subsystem. Future moves: surface "N experimental files hidden" at mount time (FilterExperimental already returns the count), explainability ("why was this file mounted? from which source? what lost?"), better collision UX. All Tier 2 in `next-up.md`.
+
+### Context vocabulary (deferred — wait for user demand)
+
+Original v0.6 plan was a vocabulary refactor: `csaw context status/use/leave` replacing source/profile language. Hasn't happened. The current vocabulary (`csaw use <source>/<profile>`) works; no user has reported confusion that would justify the breaking-change cost. Revisit if a real user trips over it.
+
+### Continuity (deferred — wait for user demand)
+
+Pause/resume/handoff/context-ledger from the original v0.7 plan haven't shipped. The use cases (contractors switching engagements, async handoffs) are real but no current csaw user has hit the friction. Wait for the request.
+
+### Risk surface (deferred — wait for user demand)
+
+The original v0.9 "scanner protocol" and MCP risk reporting are interesting research directions, but `csaw audit`'s blocked-sources/kinds/paths already covers the highest-risk client-isolation gaps. External scanner integration is the right shape *if* a team builds one and asks.
+
+### Source ecosystem (longer horizon)
+
+If csaw grows past one-source-per-org usage, source discovery/validation/metadata become real questions. Today's shorthand + presets reduce add-friction; the next layer (source quality gates, metadata, agent bundle conventions) requires either (a) a real csaw user community publishing sources, or (b) an explicit decision to seed one. Not active.
 
 ## Idea Map
 
-The brainstormed product directions all fit somewhere, but they should not all become equal product bets.
+The original brainstorm of product directions. Updated treatment column to reflect what's shipped vs. deferred vs. dropped.
 
-| Idea | Roadmap treatment | Product question it answers |
+| Idea | Treatment | Product question it answers |
 |---|---|---|
-| Current csaw mount/composition/governance | Core product | How do I compose AI workspace files from personal, team, client, and community sources without committing them into every repo? |
-| AI Context Switcher | Core vocabulary in v0.6 | How do I see and change the active AI context across tools without thinking in source/profile internals? |
-| Client Isolation Workbench | Primary wedge for v0.5-v0.6 | How do I prove Client A context is active and Client B context is absent before I work? |
-| Context Firewall | Assurance now, enforcement research later | How do I detect forbidden sources, kinds, paths, or MCP config without pretending local files are a sandbox? |
-| Developer Mode Switcher | Adjacent integration, not core | How much of `direnv`, `mise`, devcontainers, shells, browsers, and task runners should csaw coordinate? |
-| Team Memory Router | v0.8 product track | How do staff engineers and platform teams route durable rules, decisions, review checklists, and skills into many repos? |
-| Agent Package Manager | v0.8 plus research | How do reusable agents, skills, rules, and MCP bundles get installed, pinned, validated, forked, and promoted? |
-| Context Ledger | v0.7 infrastructure | What was active when this work happened, and what changed since then? |
-| Work Handoff Tool | v0.7 workflow | How do I pause, resume, or hand work to someone else without polluting the repo with local state? |
-| AI Project Onboarding Tool | v0.6-v0.7 UX | How do I enter an unfamiliar repo and quickly learn the stack, commands, policy, and active AI context? |
-| Personal Operating System For Work Modes | Research track | Can technical work modes grow from context switching, audit, ledger, pause/resume, and handoff before broad productivity automation? |
+| Multi-source mount/composition/governance | **Core product (shipped through v0.8.x)** | How do I compose AI workspace files from personal, team, client, community sources without committing them into every repo? |
+| AI Context Switcher (rename to "context") | **Deferred — current vocab works** | How do I see and change the active AI context across tools? |
+| Client Isolation Workbench | **Largely shipped via audit + protected files + blocked policies** | How do I prove Client A context is active and Client B context is absent before I work? |
+| Context Firewall | **Local assurance shipped; hard enforcement remains research** | How do I detect forbidden sources/kinds/paths/MCP without sandboxing? |
+| Developer Mode Switcher | **Out of scope (use direnv/mise/devcontainers)** | How much of dev environment should csaw coordinate? |
+| Team Memory Router | **Partially shipped via presets + protected files; full vision deferred** | How do staff engineers route durable rules/decisions/skills into many repos? |
+| Agent Package Manager | **Deliberately not chasing — APM is a different product** | How do agent/skill bundles get installed/pinned/validated/promoted? |
+| Context Ledger | **Deferred — wait for user demand** | What was active when this work happened? |
+| Work Handoff Tool | **Deferred — wait for user demand** | How do I pause/resume/handoff work without polluting the repo? |
+| AI Project Onboarding (`csaw enter`) | **Deferred — wait for user demand** | How do I learn an unfamiliar repo quickly? |
+| Personal OS for Work Modes | **Research only; never the product** | Can technical work modes precede broad productivity automation? |
 
 ## Roadmap Principles
 
@@ -59,144 +97,60 @@ The brainstormed product directions all fit somewhere, but they should not all b
 - Make provenance obvious before adding more automation.
 - Prefer stable files and JSON schemas over hidden state.
 - Keep every new public behavior documented and tested.
-
-## Immediate Follow-Up: v0.4.x
-
-Goal: make the new audit surface practical and trustworthy without expanding the product too far.
-
-| Work | Why | Acceptance |
-|---|---|---|
-| Document audit JSON schema | Teams need stable CI/reporting integration | `docs/reference/audit-json.md` defines report fields, severities, finding IDs, and exit behavior |
-| Add `csaw audit --init` | Users need an easy way to adopt project policy | Command writes a minimal `.csaw/policy.yml` or refuses to overwrite without `--force` |
-| Verify required source URL/ref | Policy currently checks active source names only | `required_sources` with `url` and `ref` emits findings when active context does not match |
-| Add policy examples | Make team/client use cases concrete | README and cheat sheet include client isolation and team policy examples |
-| Clean up local toolchain guidance | Avoid ad hoc local setup files | Decide whether to commit a pinned `mise.toml` or keep it out of repo |
-
-## v0.5: Client Isolation And Context Assurance
-
-Goal: make `csaw audit --strict` the reliable answer to “am I in the right AI workspace, and is the wrong client/team context absent?”
-
-| Work | Why | Acceptance |
-|---|---|---|
-| Client isolation policy template | The strongest use case is switching between sensitive engagements | `csaw audit --init --template client` creates required/blocked source, kind, and MCP policy examples |
-| Protected-file hash verification | Protected files are currently advisory within csaw | Mount records hashes for protected entries; audit/check detects replacement or content drift |
-| Required pins | Clients may require an exact source ref | Policy can require a source branch/tag/SHA; audit reports mismatch |
-| Blocked path/kind checks | Some projects may forbid MCP or personal agents entirely | Done on current `main`: policy supports blocked kinds and blocked mounted project paths |
-| Layered provenance in inspect | Users need to know not just what won, but why | Inspect shows winning source, losing candidates, priority/protection reason, and pin state |
-| Better collision UX | Fail-fast conflicts are correct but rough | Conflicts explain candidate sources, priorities, protection, and suggested fixes |
-
-## v0.6: Context UX And Onboarding
-
-Goal: make the user-facing vocabulary match the product: contexts and project entry, not just sources and profiles.
-
-| Work | Why | Acceptance |
-|---|---|---|
-| `csaw context status` | Users need one command for “what mode am I in?” | Shows active sources, profile, policy, pins, audit summary, mounted kinds |
-| `csaw context use <name>` | Profiles are implementation detail | Context command resolves to source/profile policy without breaking existing mount behavior |
-| `csaw context leave` | Context switching needs a clean exit | Equivalent to safe unmount plus policy-aware summary |
-| Context aliases | Client/team names should be ergonomic | Config supports named aliases that point to source/profile combinations |
-| Explain mode | Make magic debuggable | `--explain` shows why each file was mounted or skipped |
-| `csaw enter` project summary | AI project onboarding is a natural extension of context status | Detects repo root, active branch, known docs, likely build/test commands, mounted kinds, and audit state |
-| Onboarding handoff notes | New contributors need durable orientation without committed local state | `csaw enter --format markdown/json` emits a sanitized project entry summary |
-
-## v0.7: Continuity And Handoff
-
-Goal: preserve enough state that users can pause and resume work without polluting repos.
-
-| Work | Why | Acceptance |
-|---|---|---|
-| `csaw pause` | Context switching is expensive | Captures active mount state, git branch, dirty summary, pins, audit result, and notes |
-| `csaw resume` | Returning should be explicit and verifiable | Restores/remounts the recorded context and reports drift since pause |
-| Local context ledger | Audit and handoff need history | Append-only local records of context switches and audit summaries |
-| Handoff bundle | Contractors and teams need transfer artifacts | Generates a sanitized markdown/json handoff with active context and next steps |
-
-## v0.8: Team Memory And Agent Ecosystem
-
-Goal: make team memory and reusable AI workspace artifacts easier to distribute without inventing a central registry too early.
-
-| Work | Why | Acceptance |
-|---|---|---|
-| `csaw install <git-url>` alias | Installing sources should feel natural | Adds source, pulls, lists profiles, and suggests mount/context commands |
-| Source metadata | Users need to evaluate trust and purpose | Optional metadata file supports description, owner, license, supported tools, and kinds |
-| Source validation | Shared sources need quality gates | `csaw source validate` checks profile syntax, paths, kinds, protected entries, and metadata |
-| Team memory routing examples | Teams need to understand what belongs in csaw versus repos | Docs show how to route review checklists, engineering standards, architecture notes, incident runbooks, and agent skills |
-| Agent bundle conventions | Agents need package-like metadata before any registry exists | Metadata can describe agent purpose, required MCP, supported tools, trust notes, and promotion status |
-| Publish workflow polish | Teams need contribution loops | Existing push/fork/promote flows gain clearer status and docs |
-
-## v0.9: Risk Scanning And Integrations
-
-Goal: extend audit without turning csaw into a bespoke security scanner.
-
-| Work | Why | Acceptance |
-|---|---|---|
-| Scanner protocol | Content/risk checks should be delegated | External scanners can emit normalized findings consumed by `csaw audit` |
-| MCP risk summary | MCP is the highest-risk context surface | Audit reports command/env/path risk from known MCP config files |
-| CI examples | Teams need enforcement points | Docs include GitHub Actions examples for `csaw audit --strict --json` |
-| Optional npm distribution | Meet frontend users where they are | npm wrapper installs platform-specific binaries without postinstall scripts |
+- **No hidden defaults.** Conventions are named, documented, and surfaced at the point of use; flags do what their name says; tools opt in to behavior changes.
+- **User-driven over parity-driven.** When studying a competing tool (cc-switch, APM, ECC, etc.), the deliverable is *understanding the landscape*, not a feature checklist. Add a feature when a real user reports the friction it would relieve — not because a competitor ships it.
 
 ## v1.0 Criteria
 
 `v1.0` should mean csaw is boringly reliable for real team/client use:
 
-- stable `csaw.yml` profile behavior
-- stable `.csaw/policy.yml` schema
-- stable audit JSON schema and finding IDs
-- cross-platform mount/unmount/restore confidence on Linux, macOS, and Windows
-- clear context/provenance UX
-- release channels working consistently
-- no known data-loss bugs in stash/restore or unmount flows
-- docs explain when to use repo-local context instead of csaw
+- ✅ stable `csaw.yml` profile behavior (no breaking changes since v0.5)
+- ✅ stable `.csaw/policy.yml` schema (no breaking changes since v0.5)
+- ✅ stable audit JSON schema and finding IDs (documented since v0.4.x)
+- ⏳ cross-platform mount/unmount/restore confidence on Linux, macOS, and Windows (mac+linux solid; windows less battle-tested in the wild)
+- ⏳ clear context/provenance UX (today's inspect is good; layered provenance — "which candidates lost and why" — is the open gap)
+- ✅ release channels working consistently (Homebrew/Scoop/PyPI green every release)
+- ⏳ no known data-loss bugs in stash/restore or unmount flows (no known bugs; needs more in-the-wild testing)
+- ✅ docs explain when to use repo-local context instead of csaw (`README.md`, `curriculum.md`)
+
+The honest gating items for v1.0: Windows confidence (real users on Windows, not just CI passing), layered provenance in inspect, and broader in-the-wild stash/unmount validation.
 
 ## Research Tracks
 
-These are intentionally not the next implementation steps.
+Intentionally not the next implementation steps — captured so they don't get re-derived if someone asks.
 
 ### Personal Operating System For Work Modes
 
-The broad idea is compelling: `client-acme`, `deep-work`, `incident-response`, and `writing` modes that switch tools, browser profiles, AI context, notes, tasks, and reminders.
+Compelling vision: `client-acme`, `deep-work`, `incident-response`, `writing` modes that switch tools, browser profiles, AI context, notes, tasks, and reminders. csaw should not chase that directly. The credible path is to win at AI-assisted technical work modes first — `client-acme` (required source active, others blocked, exact pin verified) is already half-shipped via audit. If technical modes prove valuable using just source composition + audit + status, broader productivity automation can be reconsidered. Until then, generic app/browser/calendar switching is integration territory, not csaw's surface.
 
-csaw should not chase that directly yet. The credible path is to first win at AI-assisted technical work modes:
+### Context Firewall (hard enforcement)
 
-- `client-acme`: required client source active, other client sources blocked, exact pin verified, MCP risk visible.
-- `deep-work`: personal agents/skills active, notification tooling out of scope, context ledger records the session.
-- `incident-response`: incident runbooks, production-safe MCP config, strict audit, pause/resume and handoff artifacts.
-- `writing`: writing rules and review agents active, without trying to manage every notes app or calendar.
-
-If these work modes become valuable using only source composition, audit, context status, pause/resume, and handoff, broader productivity automation can be reconsidered. Until then, generic app/browser/calendar switching should remain integration territory.
-
-### Context Firewall
-
-Hard prevention would require shell wrappers, IDE hooks, agent runtime integration, OS users, containers, or endpoint control. csaw should keep building local assurance and policy drift detection before claiming enforcement.
+Hard prevention would require shell wrappers, IDE hooks, agent runtime integration, OS users, containers, or endpoint control. csaw should keep building local assurance and policy drift detection before claiming enforcement. The audit JSON is already a contract external enforcement systems can consume.
 
 ### Agent Package Manager
 
-Agent/skill distribution needs trust, metadata, provenance, and network effects. csaw can grow toward this through git-backed source install and validation before attempting a registry ecosystem.
+Agent/skill distribution needs trust, metadata, provenance, and network effects. csaw can grow toward this through git-backed source install and validation (presets + shorthand are early steps) before attempting a registry ecosystem. Per the [packaging audit](../planning/packaging-audit.md) and [package-manager lessons](../planning/package-manager-lessons.md), built-in templates + git-deps are the right pattern; community marketplace requires a trust model and is a real product decision worth deferring.
 
 ### Developer Mode Switcher
 
-This is useful only where development environment state intersects AI context. csaw should not compete with `direnv`, `mise`, Nix, devcontainers, shell profiles, or task runners. The right boundary is to read or reference those systems during onboarding, audit, and handoff, while keeping csaw responsible for AI workspace context and provenance.
+Useful only where development environment state intersects AI context. csaw should not compete with `direnv`, `mise`, Nix, devcontainers, shell profiles, or task runners. The right boundary is to read or reference those systems during onboarding, audit, and handoff — while keeping csaw responsible for AI workspace context and provenance.
 
 ## Product Assumptions To Revisit
 
-- Client isolation is the best near-term wedge because it turns the abstract “why not just use git?” objection into a concrete user risk.
-- “Context” should mean AI workspace context first, not the whole developer environment.
+- Client isolation is the best near-term wedge because it turns the abstract "why not just use git?" objection into a concrete user risk.
+- "Context" should mean AI workspace context first, not the whole developer environment.
 - Git-backed sources are enough for installation, sharing, and provenance until source metadata and validation show the limits.
 - Local audit and drift detection should prove useful before csaw claims stronger enforcement.
 - Personal work modes should graduate only if technical modes create value without broad OS/browser/calendar automation.
+- The 4-tier source stack (company/department/team/personal) is the canonical structure; other shapes (horizontal client/community sources) layer in by responsibility, not by tier position.
 
 ## Not Now
 
 - SaaS control plane
-- central hosted registry
-- hard sandboxing
-- custom prompt-injection scanner built into core
-- generic dev environment management that competes with `direnv`, `mise`, Nix, or devcontainers
-- broad consumer productivity mode switching
-
-## Next Best Issue
-
-The highest-leverage next implementation issue is:
-
-**Improve layered provenance in `csaw inspect`.**
-
-Blocked kind and blocked path checks now cover the highest-risk client isolation gap. The next composition risk is explainability: users should see not only which source won, but also which candidates lost and whether priority or protection decided the result.
+- Central hosted registry
+- Hard sandboxing
+- Custom prompt-injection scanner built into core
+- Generic dev environment management that competes with `direnv`, `mise`, Nix, or devcontainers
+- Broad consumer productivity mode switching
+- Desktop GUI wrapper (CLI-first identity until clear CLI PMF; cc-switch's 81k stars are for a different problem)
+- Feature parity with adjacent tools where csaw users haven't reported friction
