@@ -443,7 +443,7 @@ inside `personal`, while `team/backend` resolves inside the `team` source.
 | `csaw config set key value` | Set config (tools, default_fork_target). |
 | `csaw config list` | Show configuration. |
 | `csaw show / hide path` | Control git visibility of mounted files. |
-| `csaw status` | Quick summary. |
+| `csaw status` | Quick summary + flags uncommitted edits in source checkouts (so editing a mounted symlink target doesn't go silent). |
 
 ### Key Flags
 

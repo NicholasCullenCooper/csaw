@@ -1464,9 +1464,64 @@ func newStatusCommand() *cobra.Command {
 			}
 			output.Label("mounted:", mountedSummary)
 
+			// Surface uncommitted edits in source repos so users see the
+			// edit-while-mounted state without having to run `pull` and
+			// hit DirtySourceError.
+			type dirtyReport struct {
+				name  string
+				files []sources.DirtyFile
+			}
+			var dirty []dirtyReport
+			ctx := context.Background()
+			for _, name := range names {
+				files, err := manager.DirtyFiles(ctx, name)
+				if err != nil {
+					continue
+				}
+				if len(files) > 0 {
+					dirty = append(dirty, dirtyReport{name: name, files: files})
+				}
+			}
+
+			if len(dirty) > 0 {
+				fmt.Println()
+				output.Header("uncommitted edits in source checkouts")
+				fmt.Println()
+				for _, d := range dirty {
+					fmt.Fprintf(cmd.OutOrStdout(), "  %s %s %s\n",
+						output.Faint("•"),
+						d.name,
+						output.Faint(fmt.Sprintf("(%d %s)", len(d.files), pluralize("file", len(d.files)))),
+					)
+					// Show up to 5 file paths to give a sense of what changed
+					// without flooding the terminal.
+					const maxShown = 5
+					for i, f := range d.files {
+						if i >= maxShown {
+							fmt.Fprintf(cmd.OutOrStdout(), "      %s\n",
+								output.Faint(fmt.Sprintf("... +%d more", len(d.files)-maxShown)))
+							break
+						}
+						fmt.Fprintf(cmd.OutOrStdout(), "      %s %s\n", output.Faint(f.Status), f.Path)
+					}
+				}
+				fmt.Println()
+				fmt.Fprintf(cmd.OutOrStdout(), "  %s\n", tui.HintLine(
+					"Next:",
+					"csaw push <source> -m \"...\"  to share, or  csaw fork <path> --into personal  to keep private",
+				))
+			}
+
 			return nil
 		},
 	}
+}
+
+func pluralize(word string, count int) string {
+	if count == 1 {
+		return word
+	}
+	return word + "s"
 }
 
 func newPinCommand() *cobra.Command {

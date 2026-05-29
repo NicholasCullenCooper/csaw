@@ -53,31 +53,36 @@ Deferred: `consulting` preset (structurally different — about policy, not sour
 
 **Status:** Next up.
 
-### 3b. `csaw://` URL scheme (deferred, coordinates with #4)
+### ~~3b. `csaw://` URL scheme~~ — Dropped from Tier 1, moved to Tier 3
 
-**What:** `csaw://add-source/team@gh:co/team-source#main` — paste in Slack, click → csaw opens a confirmation TUI → runs `csaw source add`. Same shorthand grammar as #3a, just URL-encoded.
+Cost-vs-value analysis after v0.8.1 shipped: shorthand (`gh:co/team-source#v1`) already covers the shareable-text use case at zero packaging cost. The marginal value of a *clickable* `csaw://` URL is saving 2 seconds of copy-paste. The cost is per-channel OS-level protocol registration — Info.plist+CFBundleURLTypes on macOS (csaw is a CLI, not a `.app` — non-trivial), `.desktop` files on Linux (deb/rpm only; Homebrew can't), HKCR registry entries on Windows (Scoop can). Plus brittle cross-platform testing.
 
-**Why deferred:** Needs OS-level protocol-handler registration (`.desktop` file on Linux, plist on macOS, registry on Windows) that lives in the packaging layer. Better to bundle with #4's GoReleaser packaging audit so the registration is decided per-channel (Homebrew formula, Scoop manifest, etc.) rather than retrofitted.
-
-**Success criteria + design:** Re-define when implementation begins; the protocol-registration approach changes the URL grammar tradeoffs.
+Bad ROI for a CLI tool. See Tier 3.
 
 ---
 
-### 4. Edit-while-mounted UX + cross-platform packaging audit
+### ~~4a. Edit-while-mounted UX~~ ✅ Shipped (v0.8.2)
 
-**Combined two related concerns:**
+**What:** When a user edits a mounted symlink target (e.g., `.claude/rules/security.md` which points at `team-source/rules/security.md`), today the edit silently flows to the source repo working tree. No prompt, no warning. cc-switch handles this with "backfill from live when editing active provider" — more deliberate write-back. csaw's equivalent should be `csaw status` clearly surfacing modified source-repo files with a recommended-next-step hint (`csaw push` to share, `csaw fork` to keep private).
 
-**4a. Edit-while-mounted UX:** Today, when a user edits a mounted symlink target (e.g., `.claude/rules/security.md` which points at `team-source/rules/security.md`), the edit silently flows to the source repo working tree. No prompt, no warning. cc-switch handles this with "backfill from live when editing active provider" — more deliberate write-back. csaw's equivalent should be a `csaw status` improvement that detects modified source-repo files and surfaces them (probably already partially done — verify).
-
-**4b. Packaging audit:** csaw ships via Homebrew, Scoop, PyPI today. cc-switch ships via DEB, RPM, AppImage, Arch, Flatpak in addition. Audit which channels GoReleaser can add cheaply for csaw without manual ongoing maintenance.
-
-**Why fourth:** Lower marginal impact per hour than #1–#3. 4a is an existing-feature polish; 4b is ops work, not product. Worth doing but not blocking.
+**Why ahead of 4b:** Real product value users see immediately; bounded code work (~2 hours).
 
 **Success:**
-- 4a: `csaw status` clearly shows when a mounted symlink target has been modified in its source repo. Documentation explains the recommended workflow (`csaw push` or `csaw fork` based on intent).
-- 4b: Decision documented per channel: ship via GoReleaser, defer, or never. New channels added live in subsequent release; gaps documented in roadmap.
+- `csaw status` clearly shows when a mounted symlink target has been modified in its source repo.
+- Documentation explains the recommended workflow (`csaw push` or `csaw fork` based on intent).
+- Tests cover the modified-target detection path.
 
-**Status:** Not started.
+**Status:** Next up.
+
+### 4b. Cross-platform packaging audit
+
+**What:** csaw ships via Homebrew, Scoop, PyPI today. cc-switch ships via DEB, RPM, AppImage, Arch, Flatpak in addition. Audit `.goreleaser.yaml` to identify which channels GoReleaser supports cheaply without manual ongoing maintenance. Output is a decision per channel (ship now / defer / never), captured in a planning doc.
+
+**Why fourth:** Research/ops pass, not product work. Worth doing for cross-platform reach but doesn't ship user-visible value until decisions land.
+
+**Success:** Decision documented per channel in `docs/planning/packaging-audit.md`. Any "ship now" channels actually added to GoReleaser config in a follow-up commit.
+
+**Status:** After 4a.
 
 ---
 
@@ -95,6 +100,7 @@ Items that came out of recent work but aren't queued yet. Promote to Tier 1 when
 
 Documented for visibility; not on near-term horizon.
 
+- **`csaw://` URL scheme for one-click source add** (moved from Tier 1 #3b post v0.8.1) — Pattern designed in [`package-manager-lessons.md`](package-manager-lessons.md). Demoted because the shorthand we shipped in v0.8.1 already handles the shareable-text case for ~5% of the cost. Per-channel OS protocol registration (macOS Info.plist, Linux .desktop, Windows registry) is brittle for a CLI tool, and the marginal win over "paste shorthand, run it" is small. Revisit if (a) a real user reports the friction, or (b) csaw ever ships a desktop wrapper where protocol registration is natural.
 - **Aggregate `csaw.lock` for multi-source reproducibility** — Per [`package-manager-lessons.md`](package-manager-lessons.md), cargo's model is the right shape when demand emerges. Today's per-source `csaw pin` covers the common case.
 - **Subdirectory selection inside monorepo sources** — uv's `#subdirectory=` / pnpm's `&path:` pattern. Real but niche.
 - **GUI / TUI for `csaw inspect`** — cc-switch's GUI adoption signals desire; csaw's CLI-first identity should stay until CLI PMF is clear.

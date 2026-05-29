@@ -255,6 +255,68 @@ func (e *DivergedSourceError) Error() string {
 		e.Source, e.Ahead, e.Behind, e.Path)
 }
 
+// DirtyFile describes an uncommitted change in a source's git working tree.
+// Used to surface "you've edited a mounted symlink target" proactively in
+// `csaw status` so users see the edit-while-mounted state without having to
+// run `pull` and hit the DirtySourceError path.
+type DirtyFile struct {
+	// Path is the file path relative to the source's checkout root.
+	Path string
+	// Status is the git status code from `git status --porcelain` (e.g.,
+	// "M" for modified, "??" for untracked, "A" for added).
+	Status string
+}
+
+// DirtyFiles returns uncommitted changes in the given source's git working
+// tree. Returns nil if the source isn't cloned yet (remote not pulled).
+// Works for both local and remote sources — both are git repos.
+func (m Manager) DirtyFiles(ctx context.Context, name string) ([]DirtyFile, error) {
+	source, err := m.Get(name)
+	if err != nil {
+		return nil, err
+	}
+
+	checkout := source.CheckoutPath(m.Paths)
+	if _, err := os.Stat(checkout); errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	} else if err != nil {
+		return nil, err
+	}
+
+	// Verify it's a git repo before running git status; some local sources
+	// might point at a directory that isn't tracked.
+	if _, err := os.Stat(filepath.Join(checkout, ".git")); errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+
+	status, err := m.Git.Run(ctx, checkout, "status", "--porcelain")
+	if err != nil {
+		return nil, err
+	}
+	return parseDirtyFiles(status), nil
+}
+
+func parseDirtyFiles(porcelain string) []DirtyFile {
+	if strings.TrimSpace(porcelain) == "" {
+		return nil
+	}
+	// Don't trim the porcelain string itself — git status --porcelain uses
+	// fixed offsets (cols 0-1 = status, col 2 = space, col 3+ = path) and
+	// trimming would shift the first line's offsets.
+	var files []DirtyFile
+	for _, line := range strings.Split(porcelain, "\n") {
+		if len(line) < 4 {
+			continue
+		}
+		// Format: "XY <path>" where X = index status, Y = worktree status.
+		// TrimSpace the status to collapse "M " / " M" / "MM" sensibly.
+		code := strings.TrimSpace(line[:2])
+		path := strings.TrimRight(line[3:], "\r")
+		files = append(files, DirtyFile{Path: path, Status: code})
+	}
+	return files
+}
+
 func (m Manager) Pull(ctx context.Context, name string, stash bool) error {
 	source, err := m.Get(name)
 	if err != nil {

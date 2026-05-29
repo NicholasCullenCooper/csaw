@@ -371,7 +371,18 @@ MCP files, rerun the profile activation to add those new symlinks.
 
 ### What if I edited a mounted file?
 
-If you edited `AGENTS.md` in your project, you actually edited the team registry (through the symlink). Now `csaw pull` detects uncommitted changes:
+If you edited `AGENTS.md` in your project, you actually edited the team registry (through the symlink). `csaw status` flags this proactively so you see the edit before you try to pull:
+
+```
+uncommitted edits in source checkouts
+
+  • team (1 file)
+      M AGENTS.md
+
+  Next: csaw push <source> -m "..."  to share, or  csaw fork <path> --into personal  to keep private
+```
+
+If you try `csaw pull` without committing or stashing first:
 
 ```
 ! team has uncommitted changes
