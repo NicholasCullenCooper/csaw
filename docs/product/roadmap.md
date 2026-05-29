@@ -36,7 +36,7 @@ The detailed per-version planning from the original v0.4.0 roadmap didn't surviv
 
 Things from the original v0.5–v0.9 plan that did *not* ship and aren't immediate priorities: the "context" vocabulary refactor (`csaw context status/use/leave`), `csaw enter` project onboarding summary, pause/resume/handoff, a context ledger, source metadata/validation, scanner protocol, npm distribution. These weren't wrong ideas — they weren't user-demanded yet.
 
-Beta readiness still tracked in [`beta-acceptance.md`](beta-acceptance.md) (note: that doc may itself need a refresh pass).
+Granular v1.0 readiness (per-feature matrix + workflow passes) tracked in [`v1.0-readiness.md`](v1.0-readiness.md), which is the operational companion to the v1.0 Criteria section below.
 
 ## Tactical queue
 
