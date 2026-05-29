@@ -415,7 +415,7 @@ inside `personal`, while `team/backend` resolves inside the `team` source.
 | Command | What it does |
 |---|---|
 | `csaw init [dir]` | Scaffold a new registry. `--adopt` imports from existing project; `--preset <name>` uses a curated starter (run `--list-presets`). |
-| `csaw source add name url` | Add a source (auto-clones remote). `--priority n` for conflicts. |
+| `csaw source add name url` | Add a source (auto-clones remote). Accepts full git URL, local path, or host shorthand `gh:org/repo[#ref]` (also `gl:`, `bb:`). `--priority n` for conflicts. |
 | `csaw source remove name` | Remove a source. |
 | `csaw source clone name dir` | Clone remote source locally for contributing. |
 | `csaw source list` | List configured sources. |

@@ -40,23 +40,26 @@ Deferred: `consulting` preset (structurally different — about policy, not sour
 
 ---
 
-### 3. Source-add shorthand + `csaw://` URL scheme
+### ~~3a. Source-add shorthand parser~~ ✅ Shipped (v0.8.1)
 
-**What:** Two surfaces for low-friction source addition:
-1. **CLI shorthand:** `csaw source add team gh:co/team-source#main` (pnpm-style host prefix), supplementing the existing long form `csaw source add team https://... --branch main`.
-2. **Deep-link URL:** `csaw://add-source/team@gh:co/team-source#main` — paste in Slack, click → csaw opens a confirmation TUI → runs `csaw source add`.
+**What:** pnpm-style host shorthand for `csaw source add`. `csaw source add team gh:co/team-source#main` works alongside the existing long form `csaw source add team https://... --branch main`. Host prefixes: `gh:`, `gl:`, `bb:`. Under the hood, canonical `(url, refKind, refValue)` tuple regardless of input syntax.
 
-Under the hood: canonical `(url, refKind, refValue)` tuple regardless of input syntax. Host prefixes supported: `gh:`, `gl:`, `bb:`. Skip pnpm's `#semver:^X` — too clever for csaw.
-
-**Why third:** Adoption multiplier (low-friction sharing accelerates org rollout) but requires real design + implementation work. Per [`package-manager-lessons.md`](package-manager-lessons.md), the shorthand parser is straightforward; the URL scheme has an OS-protocol-registration concern that needs packaging coordination.
+**Why split from #3b:** Bounded engineering scope (parser + tests + a couple CLI integration points). Ships independently and is the higher-leverage half.
 
 **Success:**
 - Shorthand parser exists in `internal/sources/` with full test coverage (gh/gl/bb prefixes, ref kinds, errors on garbage).
 - `csaw source add gh:org/repo#tag` works at the CLI.
-- `csaw://add-source/...` URL parses correctly; OS-level handler registration documented per platform (Homebrew formula, Scoop manifest, etc.).
-- Confirmation TUI matches existing `csaw use` interactive pattern.
+- Both syntaxes round-trip through sources.yml.
 
-**Status:** Not started. Coordinates with the packaging audit (#4) for the protocol-registration step.
+**Status:** Next up.
+
+### 3b. `csaw://` URL scheme (deferred, coordinates with #4)
+
+**What:** `csaw://add-source/team@gh:co/team-source#main` — paste in Slack, click → csaw opens a confirmation TUI → runs `csaw source add`. Same shorthand grammar as #3a, just URL-encoded.
+
+**Why deferred:** Needs OS-level protocol-handler registration (`.desktop` file on Linux, plist on macOS, registry on Windows) that lives in the packaging layer. Better to bundle with #4's GoReleaser packaging audit so the registration is decided per-channel (Homebrew formula, Scoop manifest, etc.) rather than retrofitted.
+
+**Success criteria + design:** Re-define when implementation begins; the protocol-registration approach changes the URL grammar tradeoffs.
 
 ---
 

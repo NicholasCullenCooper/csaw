@@ -26,6 +26,11 @@ type Source struct {
 	URL      string `yaml:"url,omitempty"`
 	Path     string `yaml:"path,omitempty"`
 	Priority int    `yaml:"priority,omitempty"`
+	// Ref, when set, is the git ref this remote source tracks by default
+	// (branch, tag, or commit). Empty means default branch. Per-project
+	// pins (`csaw pin source@ref`) take precedence over Source.Ref.
+	// Only meaningful when Kind == KindRemote.
+	Ref string `yaml:"ref,omitempty"`
 }
 
 type Config struct {
@@ -64,6 +69,15 @@ func NewSource(name string, location string) (Source, error) {
 			return Source{}, err
 		}
 		return Source{Name: name, Kind: KindLocal, Path: abs}, nil
+	}
+
+	// Expand host shorthand (gh:org/repo[#ref]) before treating as URL.
+	if IsShorthand(location) {
+		parsed, err := ParseShorthand(location)
+		if err != nil {
+			return Source{}, err
+		}
+		return Source{Name: name, Kind: KindRemote, URL: parsed.URL, Ref: parsed.Ref}, nil
 	}
 
 	return Source{Name: name, Kind: KindRemote, URL: location}, nil
@@ -255,6 +269,14 @@ func (m Manager) Pull(ctx context.Context, name string, stash bool) error {
 	if _, err := os.Stat(checkout); errors.Is(err, os.ErrNotExist) {
 		if _, err := m.Git.Run(ctx, m.Paths.Sources, "clone", source.URL, checkout); err != nil {
 			return err
+		}
+		// If the source declares a default ref (set via shorthand like
+		// gh:org/repo#v1.2.0), check it out after clone. The clone itself
+		// pulls all branches/tags so the ref is always available.
+		if source.Ref != "" {
+			if _, err := m.Git.Run(ctx, checkout, "checkout", source.Ref); err != nil {
+				return fmt.Errorf("clone succeeded but checkout of ref %q failed: %w", source.Ref, err)
+			}
 		}
 		return nil
 	} else if err != nil {

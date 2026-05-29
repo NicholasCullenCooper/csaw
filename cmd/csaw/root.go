@@ -319,7 +319,18 @@ func newSourceCommand() *cobra.Command {
 	addCmd := &cobra.Command{
 		Use:   "add <name> <url-or-path>",
 		Short: "Register a source in ~/.csaw/config.yml",
-		Args:  cobra.ExactArgs(2),
+		Long: `Register a source. Accepts:
+  - A local path (./team-config, ~/configs/team)
+  - A full git URL (https://github.com/co/team-source.git, git@github.com:co/team.git)
+  - Host shorthand: gh:org/repo, gl:org/repo, bb:org/repo (with optional #ref)
+
+Examples:
+  csaw source add team ./team-config
+  csaw source add team https://github.com/co/team-source.git
+  csaw source add team gh:co/team-source
+  csaw source add team gh:co/team-source#main
+  csaw source add team gh:co/team-source#v1.2.0`,
+		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			manager, err := newSourcesManager()
 			if err != nil {
