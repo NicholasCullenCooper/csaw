@@ -94,11 +94,13 @@ You want company standards, team conventions, and your personal preferences comp
 Adding a source only makes it available. It does not activate that source in a project. The active context is whatever `csaw use` last mounted, and you can verify it with `csaw inspect` or `csaw audit`.
 
 ```bash
-csaw source add company git@github.com:your-org/eng-standards.git --priority 100
-csaw source add team git@github.com:your-team/ai-config.git --priority 50
-csaw init ~/my-ai-config
+csaw source add company gh:your-org/eng-standards --priority 100   # shorthand
+csaw source add team    gh:your-team/ai-config#v2 --priority 50    # pin team to v2
+csaw init ~/my-ai-config --preset solo-engineer                    # curated personal scaffold
 csaw source add personal ~/my-ai-config --priority 10
 ```
+
+Shorthand (`gh:org/repo[#ref]`, also `gl:` and `bb:`) is interchangeable with the long form. The `#ref` suffix pins the source's default ref across all projects — per-project pins (`csaw pin team@feature`) still take precedence when you need a single project on a different branch.
 
 Activate one source's profile and only that gets mounted:
 

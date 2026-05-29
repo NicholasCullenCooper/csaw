@@ -171,11 +171,12 @@ From studying all three:
 
 ## 6. Recommendations summary
 
-For the four upcoming v0.8 quick wins:
+For the four v0.8 quick wins:
 
-| Win | Lessons applied |
-|---|---|
-| "Minimal intrusion" framing in README | None directly — pure copywriting from cc-switch research |
-| `--preset` for starter sources | uv-style built-in templates, flag parameterization; skip community-template marketplace for now |
-| URL scheme for one-click source add | pnpm-style `gh:org/repo#ref` shorthand + `csaw://add-source/...` deep link; canonical (url, refKind, refValue) under the hood |
-| Edit-while-mounted UX + packaging audit | Mostly orthogonal; lockfile pattern noted as future work if reproducibility friction appears |
+| Win | Status | Lessons applied |
+|---|---|---|
+| "Minimal intrusion" framing in README | ✅ Shipped (v0.7.x docs commit) | None directly — pure copywriting from cc-switch research |
+| `--preset` for starter sources | ✅ Shipped (v0.8.0) | uv-style built-in templates, flag parameterization; skip community-template marketplace for now |
+| Shorthand parser (gh:/gl:/bb: + #ref) | ✅ Shipped (v0.8.1) | pnpm-style host shorthand; canonical (url, ref) under the hood |
+| `csaw://` URL scheme | ⏸ Deferred — coordinates with packaging audit (Tier 1 #4 in next-up.md) | Pattern designed but OS protocol registration needs packaging coordination |
+| Edit-while-mounted UX + packaging audit | ⏸ Not started (Tier 1 #4) | Mostly orthogonal; lockfile pattern noted as future work if reproducibility friction appears |

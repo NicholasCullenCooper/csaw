@@ -4,7 +4,7 @@ Planning doc for what csaw projects (and doesn't) across AI coding tools. Living
 
 Source of truth for *what csaw actually projects today* is [`docs/reference/tool-projection.json`](../reference/tool-projection.json) (tools with `csaw_in_code: true`). This file is for what's *coming* or explicitly *out of scope*.
 
-## Currently in code (v0.7.1)
+## Currently in code (v0.8.1)
 
 Seven tools with `"csaw_in_code": true`: **claude, cursor, codex, opencode, copilot, antigravity, goose**. The projection test (`internal/mount/projection_consistency_test.go`) enforces that the JSON's claims match the actual Go `ToolRegistry`.
 

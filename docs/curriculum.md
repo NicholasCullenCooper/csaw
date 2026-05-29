@@ -146,6 +146,8 @@ Explain what each does.
 
 ## Module 3: Registry Anatomy
 
+You can scaffold a registry from scratch (`csaw init <dir>`) or from a curated preset (`csaw init <dir> --preset <name>`; run `csaw init --list-presets` to see options). The default scaffold and the presets all produce the same shape — preset choice affects content (which rules, which agents) rather than structure.
+
 A csaw source is a normal file tree:
 
 ```text
@@ -682,6 +684,15 @@ csaw inspect
 
 In real use, replace `main` with the branch or tag the project should consume.
 csaw uses a project-specific detached worktree for the pinned ref.
+
+### Pin vs. Source.Ref
+
+There are two ways to lock a source to a ref:
+
+- **Per-project pin** (`csaw pin team@v1.2.0`) — only this project tracks the ref. Other projects using the same source see whatever ref they pinned (or the default).
+- **Source-level default ref** — set when the source is added via shorthand: `csaw source add team gh:org/team-source#v1.2.0`. Every project that uses this source clones at `v1.2.0` by default. Per-project pins still override it.
+
+Use shorthand-with-ref when the team has decided "everyone tracks v1.2.0 until further notice." Use per-project pin when you want one project on a feature branch while others stay on stable.
 
 Unpin:
 

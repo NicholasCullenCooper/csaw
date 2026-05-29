@@ -6,7 +6,7 @@ For strategic/vision direction see [`../product/roadmap.md`](../product/roadmap.
 
 ---
 
-## Tier 1 — current focus (post-v0.7.2)
+## Tier 1 — current focus (post-v0.8.1)
 
 ### ~~1. "Minimal intrusion" framing in README~~ ✅ Shipped
 
@@ -89,7 +89,7 @@ Items that came out of recent work but aren't queued yet. Promote to Tier 1 when
 - **Honest "auto-served" deep projection** — Per [`projection-roadmap.md`](projection-roadmap.md): Cline, Continue, Factory Droid, Augment, Amp, Aider all have native dirs csaw doesn't reach. Quick wins available (CONVENTIONS.md for Aider, factory entry for skills). Prioritize on user demand.
 - **`.github/copilot-instructions.md` alias** — Project AGENTS.md to this Copilot-canonical location as second symlink. Nice-to-have.
 - **`.github/prompts/` for Copilot** — Single-file prompts. Either map skills folders awkwardly or add new `prompts` kind. Revisit if Copilot users ask.
-- **Refresh `docs/product/roadmap.md`** — Strategic doc is stale (says v0.4.0 current state, actual is v0.7.2). One-pass refresh after Tier 1 work lands.
+- **Refresh `docs/product/roadmap.md`** — Strategic doc is significantly stale: header says "current state: v0.4.0" (actual v0.8.1) and the v0.5–v0.9 sections describe planned work that has mostly shipped (v0.5 client isolation, v0.6 hooks/ignore, v0.7 Copilot, v0.8 presets+shorthand) or been replaced. Not just a version bump — needs a real rewrite of "Current State" and either pruning the per-version sections or replacing them with a 1-year horizon view. Promote to Tier 1 when Tier 1 #4 ships.
 
 ## Tier 3 — deferred
 

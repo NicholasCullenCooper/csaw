@@ -8,10 +8,13 @@ uv tool install csaw
 
 # Add a team source (auto-clones)
 csaw source add team git@github.com:org/ai-config.git
+csaw source add team gh:org/ai-config            # shorthand
+csaw source add team gh:org/ai-config#v1.2.0     # shorthand + pin
 csaw profile list
 
 # Or create your own registry
-csaw init ~/my-ai-config
+csaw init ~/my-ai-config                              # default scaffold
+csaw init ~/my-ai-config --preset team-go             # curated starter (see --list-presets)
 csaw source add personal ~/my-ai-config --priority 10
 ```
 
@@ -69,6 +72,8 @@ csaw hide AGENTS.md                     # hide from git again
 ```bash
 csaw source list                        # show configured sources
 csaw source add name url-or-path        # add a source (auto-clones remote)
+csaw source add team gh:org/repo        # host shorthand (gh, gl, bb)
+csaw source add team gh:org/repo#v1     # shorthand + default ref (Source.Ref)
 csaw source remove name                 # remove a source
 csaw source clone team ~/Developer/team # clone remote locally to contribute
 csaw pull                               # update all remote sources
@@ -77,13 +82,15 @@ csaw push team -m "updated rules"       # push source changes
 csaw push                               # auto-detect dirty source and push
 ```
 
-## Pin a Branch
+`Source.Ref` (set via shorthand `#ref`) is the source's default ref across all projects. Per-project pins (`csaw pin team@ref`) still take precedence.
+
+## Pin a Branch (Per-Project)
 
 ```bash
-csaw pin team@feature/new-rules         # pin this project to a branch
+csaw pin team@feature/new-rules         # pin THIS project to a branch
 csaw pull team                          # pulls that branch
 csaw use team/backend                   # mounts from the branch
-csaw unpin team                         # back to default branch
+csaw unpin team                         # back to source default (Source.Ref or main)
 ```
 
 ## Fork a File
@@ -114,9 +121,16 @@ csaw source add team git@github.com:org/config.git   # priority 0 (default)
 ## Create a Registry
 
 ```bash
-csaw init ~/my-ai-config                # scaffold with csaw.yml, agents/, skills/
-csaw init ~/my-ai-config --name myteam  # custom name
+csaw init ~/my-ai-config                          # default scaffold (csaw.yml, agents/, skills/)
+csaw init ~/my-ai-config --name myteam            # custom name
+csaw init ~/my-ai-config --preset solo-engineer   # curated personal scaffold
+csaw init ~/team-config  --preset team-go         # protected AGENTS.md + Go rules + code-review agent
+csaw init ~/team-config  --preset team-frontend   # protected AGENTS.md + TS/React rules + a11y
+csaw init --list-presets                          # show available presets + descriptions
+csaw init ~/my-ai-config --adopt                  # import existing AI config from current project
 ```
+
+`--preset` and `--adopt` are mutually exclusive.
 
 ## Repair
 
