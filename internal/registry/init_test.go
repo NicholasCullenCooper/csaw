@@ -23,7 +23,7 @@ func TestInit(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "my-config")
 	g := &recordingGit{}
 
-	result, err := Init(context.Background(), g, dir, "")
+	result, err := Init(context.Background(), g, dir, "", "")
 	if err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
@@ -167,7 +167,7 @@ func TestInitExistingDir(t *testing.T) {
 	}
 
 	g := &recordingGit{}
-	_, err := Init(context.Background(), g, dir, "custom-name")
+	_, err := Init(context.Background(), g, dir, "custom-name", "")
 	if err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}

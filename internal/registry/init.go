@@ -85,7 +85,14 @@ When writing commit messages:
 - Reference issues and PRs where relevant
 `
 
-func Init(ctx context.Context, g git.Git, dir string, name string) (InitResult, error) {
+// Init scaffolds a new csaw registry directory. If preset is empty, writes
+// the default (solo-style) starter set. If preset names a registered preset
+// (see presets.go), writes that preset's file set instead. Returns an error
+// if a non-empty preset name doesn't match any built-in.
+//
+// Existing files in the target directory are never overwritten — Init only
+// creates files that don't already exist. Safe to run on a populated dir.
+func Init(ctx context.Context, g git.Git, dir string, name string, preset string) (InitResult, error) {
 	absDir, err := filepath.Abs(dir)
 	if err != nil {
 		return InitResult{}, err
@@ -99,30 +106,33 @@ func Init(ctx context.Context, g git.Git, dir string, name string) (InitResult, 
 		return InitResult{}, err
 	}
 
-	for _, sub := range []string{"rules", "agents", "skills/code-review", "skills/commit-message", "skills/experimental"} {
-		if err := os.MkdirAll(filepath.Join(absDir, sub), 0o755); err != nil {
+	files := defaultStarterFiles()
+	if preset != "" {
+		p, ok := GetPreset(preset)
+		if !ok {
+			return InitResult{}, fmt.Errorf("unknown preset %q (run `csaw init --list-presets` to see options)", preset)
+		}
+		files = p.Files
+	}
+
+	for path, content := range files {
+		fullPath := filepath.Join(absDir, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
 			return InitResult{}, err
+		}
+		if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+			if err := os.WriteFile(fullPath, []byte(content), 0o644); err != nil {
+				return InitResult{}, err
+			}
 		}
 	}
 
-	// Write starter files only if they don't exist
-	starters := []struct {
-		path    string
-		content string
-	}{
-		{"csaw.yml", starterProfile},
-		{".csawignore", starterIgnore},
-		{"AGENTS.md", starterAgents},
-		{"skills/code-review/SKILL.md", starterSkillCodeReview},
-		{"skills/commit-message/SKILL.md", starterSkillCommitMsg},
-	}
-
-	for _, s := range starters {
-		fullPath := filepath.Join(absDir, s.path)
-		if _, err := os.Stat(fullPath); os.IsNotExist(err) {
-			if err := os.WriteFile(fullPath, []byte(s.content), 0o644); err != nil {
-				return InitResult{}, err
-			}
+	// Always ensure the historical convention dirs exist even if the preset
+	// didn't seed files in them — keeps `csaw inspect` and `--kind` filters
+	// behaving as users expect on a freshly-created source.
+	for _, sub := range []string{"rules", "agents", "skills"} {
+		if err := os.MkdirAll(filepath.Join(absDir, sub), 0o755); err != nil {
+			return InitResult{}, err
 		}
 	}
 
@@ -134,6 +144,19 @@ func Init(ctx context.Context, g git.Git, dir string, name string) (InitResult, 
 	}
 
 	return InitResult{Path: absDir, Name: name}, nil
+}
+
+// defaultStarterFiles is the file set used when `csaw init` is run with no
+// `--preset` flag. Preserves the historical scaffold (csaw.yml, .csawignore,
+// AGENTS.md, code-review + commit-message skills).
+func defaultStarterFiles() map[string]string {
+	return map[string]string{
+		"csaw.yml":                       starterProfile,
+		".csawignore":                    starterIgnore,
+		"AGENTS.md":                      starterAgents,
+		"skills/code-review/SKILL.md":    starterSkillCodeReview,
+		"skills/commit-message/SKILL.md": starterSkillCommitMsg,
+	}
 }
 
 // AdoptResult extends InitResult with the list of files adopted from a project.
@@ -162,7 +185,7 @@ func InitWithAdopt(ctx context.Context, g git.Git, dir string, name string, proj
 		}
 	}
 
-	initResult, err := Init(ctx, g, dir, name)
+	initResult, err := Init(ctx, g, dir, name, "")
 	if err != nil {
 		return AdoptResult{}, err
 	}

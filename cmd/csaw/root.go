@@ -78,12 +78,28 @@ func newVersionCommand() *cobra.Command {
 func newInitCommand() *cobra.Command {
 	var name string
 	var adopt bool
+	var preset string
+	var listPresets bool
 
 	cmd := &cobra.Command{
 		Use:   "init [dir]",
 		Short: "Scaffold a new csaw registry",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if listPresets {
+				fmt.Fprintln(cmd.OutOrStdout(), "Available presets:")
+				fmt.Fprintln(cmd.OutOrStdout())
+				for _, p := range registry.ListPresets() {
+					fmt.Fprintf(cmd.OutOrStdout(), "  %s\n      %s\n\n", p.Name, p.Description)
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "Use: csaw init --preset <name>\n")
+				return nil
+			}
+
+			if adopt && preset != "" {
+				return fmt.Errorf("--adopt and --preset are mutually exclusive (adopt copies existing project files; preset writes curated starters)")
+			}
+
 			dir := "."
 			if len(args) == 1 {
 				dir = args[0]
@@ -105,7 +121,7 @@ func newInitCommand() *cobra.Command {
 				adoptedFiles = adoptResult.AdoptedFiles
 			} else {
 				var err error
-				initResult, err = registry.Init(context.Background(), git.ExecGit{}, dir, name)
+				initResult, err = registry.Init(context.Background(), git.ExecGit{}, dir, name, preset)
 				if err != nil {
 					return err
 				}
@@ -166,6 +182,8 @@ func newInitCommand() *cobra.Command {
 
 	cmd.Flags().StringVar(&name, "name", "", "registry name (defaults to directory name)")
 	cmd.Flags().BoolVar(&adopt, "adopt", false, "adopt existing AI config files from the current project")
+	cmd.Flags().StringVar(&preset, "preset", "", "scaffold from a curated preset (run --list-presets to see options)")
+	cmd.Flags().BoolVar(&listPresets, "list-presets", false, "list available presets and exit")
 	return cmd
 }
 

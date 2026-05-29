@@ -183,6 +183,14 @@ You have a brand new repo with no AI config. Create a personal registry:
 csaw init ~/my-ai-config
 ```
 
+Or scaffold from a curated preset (see `csaw init --list-presets`):
+
+```bash
+csaw init ~/team-config --preset team-go        # protected AGENTS.md, Go conventions, code-review agent
+csaw init ~/team-config --preset team-frontend  # TS/React conventions, accessibility, code-review agent
+csaw init ~/my-config   --preset solo-engineer  # personal scaffold
+```
+
 ```
 ✔ initialized registry "my-ai-config"
 
@@ -406,7 +414,7 @@ inside `personal`, while `team/backend` resolves inside the `team` source.
 
 | Command | What it does |
 |---|---|
-| `csaw init [dir]` | Scaffold a new registry. `--adopt` imports from existing project. |
+| `csaw init [dir]` | Scaffold a new registry. `--adopt` imports from existing project; `--preset <name>` uses a curated starter (run `--list-presets`). |
 | `csaw source add name url` | Add a source (auto-clones remote). `--priority n` for conflicts. |
 | `csaw source remove name` | Remove a source. |
 | `csaw source clone name dir` | Clone remote source locally for contributing. |

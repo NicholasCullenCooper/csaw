@@ -16,17 +16,18 @@ For strategic/vision direction see [`../product/roadmap.md`](../product/roadmap.
 
 ---
 
-### 2. `csaw source init --preset <name>` with built-in starters
+### ~~2. `csaw init --preset <name>` with built-in starters~~ ✅ Shipped (v0.8.0)
 
 **What:** Pre-curated source shapes that scaffold a known-good registry in one command. Per [`package-manager-lessons.md`](package-manager-lessons.md): built-in templates only, no community marketplace; flag parameterization for the common knobs; uv-style discrete named shapes.
 
-**Initial presets (curated, embedded in binary):**
-- `solo-engineer` — Personal source: AGENTS.md + a few starter rules + one example skill
+**Initial presets (v0.8.0, curated, embedded in binary):**
+- `solo-engineer` — Personal source: AGENTS.md + a starter rule + one example skill
 - `team-go` — Team source: protected AGENTS.md, Go-specific rules, code-review agent, commit-message skill
-- `team-frontend` — Team source: TypeScript/React rules, perf-review agent, PR-template skill
-- `consulting` — Horizontal/client source shape: client-isolation policy starter, blocked_paths examples
+- `team-frontend` — Team source: TypeScript/React rules, frontend-focused code-review agent, commit-message skill
 
-**Flags:** `--name`, `--description`, `--protected-files` (comma list), `--include-mcp`. `csaw source init --list-presets` shows what's available.
+Deferred: `consulting` preset (structurally different — about policy, not source content). Revisit after a real consulting user hits the friction.
+
+**Flags (v0.8.0 MVP):** `--preset <name>` and `--list-presets`. Other customization flags (`--description`, `--protected-files`, `--include-mcp`) deferred — users can edit the generated files. The existing `--name` flag still applies.
 
 **Why second:** Highest product impact. Biggest friction-reduction from first-install to first-value. Real product work; needs implementation + content curation.
 
