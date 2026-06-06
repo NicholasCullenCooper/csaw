@@ -33,6 +33,21 @@ These tools read the cross-tool `AGENTS.md` standard, so csaw's existing instruc
 - Add `continue` to `ToolRegistry` with `Dir: ".continue", RulesSubdir: "rules"`. Continue's `.continue/prompts/` is single-file prompts — same problem as Copilot's `.github/prompts/` (deferred).
 - Add `augment` to `ToolRegistry` with `Dir: ".augment", RulesSubdir: "rules"`.
 
+## Merged-config tools — MCP lives inside shared files
+
+A separate class of gap: tools whose MCP config is a *section* of a larger file that also contains user-owned content (auth, model prefs, sandbox config, OAuth state). csaw's symlink projection can't handle these — symlinking the whole file would overwrite user settings; not symlinking leaves MCP unprojected.
+
+| Tool | MCP file | Format | Scope options |
+|---|---|---|---|
+| Codex CLI | `[mcp_servers.*]` tables | TOML | `.codex/config.toml` (project) or `~/.codex/config.toml` (user) |
+| OpenCode | `mcp` object | JSON/JSONC | `opencode.json` (project) or `~/.config/opencode/opencode.json` (user) |
+| Copilot CLI | `mcpServers` object | JSON | `~/.copilot/mcp-config.json` (user only) |
+| VS Code workspace (older) | `mcp.servers` keys | JSON | `.vscode/settings.json` (project) — note: the newer dedicated `.vscode/mcp.json` is already symlink-projected |
+
+Three of the four have project-scope file options, so csaw's project-scope identity stays intact for them. Copilot CLI is the user-scope outlier.
+
+**Status: explicitly not built.** Design groundwork in [`mcp-merge-design.md`](mcp-merge-design.md) covers the architectural questions (round-trip formatting preservation, state tracking for unmount, conflict resolution, secret-safe patterns, audit). Wait for a real user to report friction before implementing.
+
 ## Out of scope with current model
 
 - **zed** — settings.json user-scope only. Project `.rules` is single file.
