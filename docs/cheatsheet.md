@@ -99,6 +99,18 @@ csaw unpin team                         # back to source default (Source.Ref or 
 csaw fork team/agents/base.md --into personal  # copy for personal editing
 ```
 
+## Merge MCP Into a Shared-Config Tool (Codex)
+
+For tools whose MCP lives inside a shared file (Codex's `.codex/config.toml`, where user owns model preferences, providers, etc.), csaw appends a bounded section instead of symlinking.
+
+```bash
+csaw mcp sync codex --from team           # dry-run: show what would change
+csaw mcp sync codex --from team --apply   # write the merge
+csaw mcp sync codex --remove              # roll back (refuses if you edited inside the section)
+```
+
+Source fragment lives at `<source>/mcp/codex.toml` — a TOML file containing `[mcp_servers.<name>]` tables. csaw refuses literal secrets in sensitive-named fields; use Codex's `env_vars = ["VAR"]` pattern.
+
 ## Promote an Experimental Skill
 
 ```bash

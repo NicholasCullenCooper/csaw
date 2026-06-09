@@ -1,8 +1,10 @@
 # Merged-Config MCP Projection: Design Notes
 
-Pre-staged research for a possible future csaw feature: projecting MCP server configurations into target files that csaw does not fully own (Codex `config.toml`, OpenCode `opencode.json`, GitHub Copilot CLI `mcp-config.json`, VS Code workspace `settings.json`). Captured 2026-05-26.
+Architecture and design rationale for projecting MCP server configurations into target files csaw does not fully own (Codex `config.toml`, OpenCode `opencode.json`, GitHub Copilot CLI `mcp-config.json`, VS Code workspace `settings.json`). Captured 2026-05-26; updated when v0.9.0 shipped Codex support.
 
-**This document does not commit csaw to building merged-config projection.** Per the working norm captured in [`next-up.md`](next-up.md) ("user-driven over parity-driven"), the actual feature waits for a real user to report friction. The doc exists so when that happens, the answer is one designed swing rather than re-deriving the landscape under pressure.
+**Status (v0.9.0):**
+- **Codex shipped** — `csaw mcp sync codex` works end-to-end with bounded-section approach, schema-based secret validation, conflict reporting, SHA-based drift detection on rollback. See `internal/mcpmerge/` and [`docs/walkthrough.md`](../walkthrough.md#sharing-mcp-with-codex-csaw-mcp-sync).
+- **OpenCode / Copilot CLI / VS Code workspace** — pre-staged in this design but not yet wired. The bounded-section architecture applies to all of them; each needs a `MergeTarget` entry, format-specific marker bytes (`//` for JSONC, sentinel keys for plain JSON), and conflict-detection parsing. ~1 day per target when a real user reports friction.
 
 ## What problem this would solve
 
@@ -25,17 +27,39 @@ The key architectural observation: **three of four targets have project-scope fi
 
 Even confined to project-scope files, the merge problem has five hard sub-problems:
 
-### 1. Round-trip formatting preservation
+### 1. Round-trip formatting preservation — **resolved via bounded sections, not AST round-trip**
 
 If csaw parses a file with library X, modifies it, and writes it back, library X almost certainly drops comments, reorders keys, and reformats whitespace. Bad round-trip turns a user's hand-formatted config into machine-formatted noise — users will hate csaw.
 
-**Go libraries that preserve formatting reasonably well:**
+**Validated 2026-06-07 with a 30-line spike:** `pelletier/go-toml/v2` round-trip on a typical Codex config drops all comments, reorders keys alphabetically within tables, normalizes string quoting (`"x"` → `'x'`), and reflows table headers. Confirmed unusable for the user's existing content.
 
-- **TOML:** [`pelletier/go-toml/v2`](https://github.com/pelletier/go-toml) — has marshal/unmarshal with formatting; comment preservation is limited but better than `BurntSushi/toml`. Real audit needed before committing.
-- **JSON (surgical edits):** [`tidwall/sjson`](https://github.com/tidwall/sjson) is the right primitive. It sets values at JSON paths without reformatting the surrounding document. Crucially, it preserves whitespace and key order outside the touched paths. This avoids the parse-modify-serialize roundtrip entirely.
-- **JSONC:** [`tailscale/hujson`](https://github.com/tailscale/hujson) parses JSON with comments and trailing commas; preserves comments on round-trip. Can be combined with sjson-style path edits if we write a small helper.
+**The right pattern is bounded sections + text manipulation, not AST round-trip:**
 
-The cleanest implementation pattern: use sjson/hujson-style **surgical edits** rather than full parse-modify-serialize. Set the exact paths csaw owns; touch nothing else.
+1. csaw appends (or replaces) a clearly-marked region at the end of the target file:
+   ```toml
+   # === csaw managed start (do not edit; use: csaw mcp sync codex --remove) ===
+   [mcp_servers.csaw_github]
+   command = "npx"
+   args = ["-y", "@modelcontextprotocol/server-github"]
+   env_vars = ["GITHUB_PERSONAL_ACCESS_TOKEN"]
+   # === csaw managed end ===
+   ```
+
+2. User content is preserved **byte-for-byte** outside that region. Comments, formatting, key order, quoting — all untouched.
+
+3. csaw parses the file **read-only** (using `pelletier/go-toml/v2`) only to detect conflicts: walk `mcp_servers.*` and check whether any name csaw wants to add already exists outside the managed section. If so, skip and report.
+
+4. Rollback (`--remove`) is text manipulation: find the markers, delete everything between them (and the markers themselves, plus one preceding blank line).
+
+5. TOML semantics let `[mcp_servers.foo]` tables appear anywhere in a file — user's `[mcp_servers.user_thing]` early in the file and csaw's `[mcp_servers.csaw_github]` at the end coexist correctly when Codex reads the file.
+
+**For JSON/JSONC targets** the same pattern applies but with different marker syntax. JSON doesn't support comments natively, so the marker is itself a syntactic placeholder — e.g., a top-level key `"_csaw_managed": { "...": "remove this block via csaw mcp sync <tool> --remove" }` flanking the merged entries. JSONC (OpenCode) can use `//` comments natively.
+
+**Library use is narrow:**
+- `pelletier/go-toml/v2` — read-only parsing for conflict detection (TOML target files).
+- `tailscale/hujson` — JSONC parsing for conflict detection (OpenCode target files).
+- Stdlib `encoding/json` — JSON parsing for conflict detection (Copilot CLI, VS Code settings.json target files).
+- No library is used for **writing** — csaw renders its managed section as plain text. This sidesteps every round-trip preservation hazard.
 
 ### 2. State tracking for unmount
 

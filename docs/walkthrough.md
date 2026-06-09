@@ -14,6 +14,7 @@ Scenario-based guide for csaw beyond the [README](../README.md) quick start. Eac
 - [Testing a Branch](#testing-a-branch) — pin a project to a feature branch
 - [Forking a Team File](#forking-a-team-file) — customize without breaking the upstream
 - [Switching Profiles](#switching-profiles) — change active work mode
+- [Sharing MCP With Codex (`csaw mcp sync`)](#sharing-mcp-with-codex-csaw-mcp-sync) — merge team MCP into a shared-config tool file
 - [Clean Removal](#clean-removal) — unmount everything cleanly
 
 ---
@@ -582,6 +583,71 @@ Two things to notice:
 2. **These paths are hidden from git like every other projection.** csaw treats the projected `.github/instructions/security.instructions.md` exactly the way it treats `.claude/rules/security.md` — added to `.git/info/exclude` by default. If your team wants Copilot's `.github/` context committed for PR review (the conventional GitHub pattern), opt in with `csaw show .github/instructions/*` or per-file `csaw show .github/instructions/security.instructions.md`. This is an explicit decision — not a hidden default — and you can codify it in your onboarding script.
 
 If you also have claude configured, `rules/security.md` lands in two places: `.claude/rules/security.md` and `.github/instructions/security.instructions.md`. Both hidden by default; both shown via `csaw show` if you want.
+
+---
+
+## Sharing MCP With Codex (`csaw mcp sync`)
+
+Codex's MCP servers live inside `.codex/config.toml` — a file that also holds your model preferences, providers, sandbox settings, and other personal config. csaw can't symlink that file (it would overwrite your settings) and can't ignore the MCP entries (then your team's MCP servers go unprojected). The solution is **merged-config projection**: csaw writes its MCP entries into a clearly-marked bounded section at the end of the file, leaving the rest byte-for-byte untouched.
+
+Your team source has a Codex MCP fragment:
+
+```
+team/
+└── mcp/
+    └── codex.toml          # [mcp_servers.github], [mcp_servers.linear], ...
+```
+
+In a project with a personal `.codex/config.toml`:
+
+```bash
+csaw mcp sync codex --from team           # dry-run: show what would change
+csaw mcp sync codex --from team --apply   # write the merge
+```
+
+After `--apply`, your file looks like:
+
+```toml
+# Your existing user-managed Codex config
+model = "gpt-4o"
+
+[mcp_servers.user_thing]
+command = "echo"
+args = ["hello"]
+
+[providers.openai]
+base_url = "https://api.openai.com/v1"
+
+# === csaw managed start (do not edit; use: csaw mcp sync codex --remove) ===
+# Source: team · 2 server(s) · regenerate: csaw mcp sync codex --apply · remove: csaw mcp sync codex --remove
+
+[mcp_servers.github]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-github"]
+env_vars = ["GITHUB_PERSONAL_ACCESS_TOKEN"]
+
+[mcp_servers.linear]
+command = "npx"
+args = ["-y", "@tacticiq/linear-mcp"]
+env_vars = ["LINEAR_API_KEY"]
+# === csaw managed end ===
+```
+
+Notice three things:
+
+1. **Your user content above the marker is byte-for-byte unchanged.** csaw never parses-and-re-emits the whole file — it appends a bounded section. Comments, key order, quoting all preserved.
+2. **Secrets stay out of git.** The fragment uses Codex's `env_vars = ["VAR_NAME"]` pattern, which forwards the env var by *name*; the actual token value never appears in the file. csaw refuses to write fragments with literal secrets in sensitive-named fields (`token`, `password`, `api_key`, etc.) — schema enforcement, not entropy-guessing.
+3. **Conflicts are reported, not silently overwritten.** If your `.codex/config.toml` already had `[mcp_servers.github]`, csaw's `github` server would be skipped with a warning. You decide whether to rename, remove the user one, or override.
+
+**Roll back:**
+
+```bash
+csaw mcp sync codex --remove
+```
+
+csaw verifies the bounded section's SHA matches what it last wrote (drift detection — if you edited inside the markers, it refuses), then deletes the section + restores the file to its pre-merge state.
+
+Today this works for Codex only. OpenCode, Copilot CLI, and VS Code settings.json have the same merge problem and the same design works for them — they're pre-staged in [`docs/planning/mcp-merge-design.md`](planning/mcp-merge-design.md) but unimplemented until a real user reports friction.
 
 ---
 

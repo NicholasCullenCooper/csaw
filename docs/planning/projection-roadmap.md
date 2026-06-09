@@ -46,7 +46,7 @@ A separate class of gap: tools whose MCP config is a *section* of a larger file 
 
 Three of the four have project-scope file options, so csaw's project-scope identity stays intact for them. Copilot CLI is the user-scope outlier.
 
-**Status: explicitly not built.** Design groundwork in [`mcp-merge-design.md`](mcp-merge-design.md) covers the architectural questions (round-trip formatting preservation, state tracking for unmount, conflict resolution, secret-safe patterns, audit). Wait for a real user to report friction before implementing.
+**Status: Codex shipped v0.9.0; others pre-staged.** `csaw mcp sync codex --from <source>` merges via a bounded section (user content byte-for-byte preserved; rollback drops the section; drift detected via SHA). OpenCode / Copilot CLI / VS Code workspace use the same architecture documented in [`mcp-merge-design.md`](mcp-merge-design.md) and can be wired in ~1 day each when a real user reports friction on that specific tool.
 
 ## Out of scope with current model
 

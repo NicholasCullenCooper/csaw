@@ -444,6 +444,7 @@ inside `personal`, while `team/backend` resolves inside the `team` source.
 | `csaw config list` | Show configuration. |
 | `csaw show / hide path` | Control git visibility of mounted files. |
 | `csaw status` | Quick summary + flags uncommitted edits in source checkouts (so editing a mounted symlink target doesn't go silent). |
+| `csaw mcp sync <target> --from <source>` | Merge MCP entries from a source into a tool's shared-config file (e.g., Codex's `.codex/config.toml`) using a bounded section. Dry-run by default; `--apply` to write; `--remove` to roll back. See [csaw mcp sync](docs/walkthrough.md#sharing-mcp-with-codex-csaw-mcp-sync) walkthrough. |
 
 ### Key Flags
 
