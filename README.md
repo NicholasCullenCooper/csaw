@@ -42,6 +42,22 @@ For team or org use, csaw needs one person to **maintain** each shared source �
 
 Want the full learning path? See the [csaw curriculum](docs/curriculum.md).
 
+## csaw vs. package-manager tools (APM, skills.sh, etc.)
+
+There's a separate class of tool — Microsoft's [APM](https://microsoft.github.io/apm/), [skills.sh](https://skills.sh), various agent-package CLIs — that treats AI primitives as **published packages**: declare in a manifest, resolve from a registry, install with a lockfile. That's a real and useful model when the work is "consume a public/shared catalog."
+
+csaw makes a different bet. It's a **federation and projection layer** for AI workspace files that you and your org already own, organized by the canonical 4-tier source stack (company → department → team → personal). Different stakes:
+
+| | Package-manager tools (APM, skills.sh) | csaw |
+|---|---|---|
+| Distribution | Named packages from a central registry | Federated git repos (your sources, your URLs) |
+| Authoring | Publish step, version bump, lockfile resolve | Just commit to your source repo |
+| Composition | Linear dependency tree | 4-tier priority stack with protected files |
+| Trust model | Trust the registry + transitive policy | Trust the source repos you control |
+| Cleanup | Uninstall semantics vary by ecosystem | `csaw unmount` removes every symlink |
+
+The two bets aren't mutually exclusive. **Since v0.10.0, csaw can safely *consume* from any of those ecosystems via the [`csaw vendor`](docs/walkthrough.md#vendoring-external-catalogs-safely-csaw-vendor) command** — vendor an APM package, a skills.sh skill, an awesome-copilot fork, or any git repo into a hash-locked `vendor/` area, audit drift across three dimensions, then promote selected files into your own source registry. csaw doesn't replace package managers; it makes any ecosystem safely composable into your federated stack.
+
 ## The problem
 
 Multi-stakeholder AI config is a governance problem:
