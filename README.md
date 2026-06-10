@@ -445,6 +445,7 @@ inside `personal`, while `team/backend` resolves inside the `team` source.
 | `csaw show / hide path` | Control git visibility of mounted files. |
 | `csaw status` | Quick summary + flags uncommitted edits in source checkouts (so editing a mounted symlink target doesn't go silent). |
 | `csaw mcp sync <target> --from <source>` | Merge MCP entries from a source into a tool's shared-config file (e.g., Codex's `.codex/config.toml`) using a bounded section. Dry-run by default; `--apply` to write; `--remove` to roll back. See [csaw mcp sync](docs/walkthrough.md#sharing-mcp-with-codex-csaw-mcp-sync) walkthrough. |
+| `csaw vendor add/sync/list/audit/promote/remove` | Safely consume external agent-context catalogs (skills.sh, APM packages, awesome-copilot, any git repo). Fetches upstream into a hash-locked `vendor/` area; nothing under `vendor/` ever projects until explicitly promoted into a real kind directory. Three drift detectors: vendor-local, upstream, promotion. See [`csaw vendor`](docs/walkthrough.md#vendoring-external-catalogs-safely-csaw-vendor) walkthrough and [`docs/planning/vendors-design.md`](docs/planning/vendors-design.md). |
 
 ### Key Flags
 

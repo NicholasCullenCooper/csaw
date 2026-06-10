@@ -99,6 +99,21 @@ csaw unpin team                         # back to source default (Source.Ref or 
 csaw fork team/agents/base.md --into personal  # copy for personal editing
 ```
 
+## Vendor External Catalogs Safely
+
+For consuming external agent-context catalogs (skills.sh, APM packages, awesome-copilot, internal bundles, any git repo) without letting upstream layouts become active mounted context.
+
+```bash
+csaw vendor add awesome-copilot gh:github/awesome-copilot --include "agents/**"
+csaw vendor sync                              # fetch declared vendors into vendor/<name>/ with hashes
+csaw vendor list                              # show declared vendors + sync state
+csaw vendor audit                             # detect drift: vendor-local, upstream, promotion
+csaw vendor promote awesome-copilot/agents/reviewer.md --into agents/reviewer.md
+csaw vendor remove awesome-copilot
+```
+
+Nothing under `vendor/` ever projects to mounted context. Only files copied into real kind directories (`skills/`, `agents/`, `rules/`, etc.) via `promote` (or by hand authoring) will mount. The bounded `vendor/` area is git-tracked; `vendor.lock.yaml` records per-file SHAs and promotion lineage.
+
 ## Merge MCP Into a Shared-Config Tool (Codex)
 
 For tools whose MCP lives inside a shared file (Codex's `.codex/config.toml`, where user owns model preferences, providers, etc.), csaw appends a bounded section instead of symlinking.

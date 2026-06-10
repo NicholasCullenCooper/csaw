@@ -15,6 +15,7 @@ Scenario-based guide for csaw beyond the [README](../README.md) quick start. Eac
 - [Forking a Team File](#forking-a-team-file) — customize without breaking the upstream
 - [Switching Profiles](#switching-profiles) — change active work mode
 - [Sharing MCP With Codex (`csaw mcp sync`)](#sharing-mcp-with-codex-csaw-mcp-sync) — merge team MCP into a shared-config tool file
+- [Vendoring External Catalogs Safely (`csaw vendor`)](#vendoring-external-catalogs-safely-csaw-vendor) — consume skills.sh / APM / awesome-copilot without trusting upstream blindly
 - [Clean Removal](#clean-removal) — unmount everything cleanly
 
 ---
@@ -648,6 +649,82 @@ csaw mcp sync codex --remove
 csaw verifies the bounded section's SHA matches what it last wrote (drift detection — if you edited inside the markers, it refuses), then deletes the section + restores the file to its pre-merge state.
 
 Today this works for Codex only. OpenCode, Copilot CLI, and VS Code settings.json have the same merge problem and the same design works for them — they're pre-staged in [`docs/planning/mcp-merge-design.md`](planning/mcp-merge-design.md) but unimplemented until a real user reports friction.
+
+---
+
+## Vendoring External Catalogs Safely (`csaw vendor`)
+
+You want to use skills from a popular community repo (say, [awesome-copilot](https://github.com/github/awesome-copilot)) or consume a few skills from an APM package — without running their opaque installer, manually copying files, or letting upstream's layout become your active mounted context. csaw's vendor feature is the safe primitive for this.
+
+The workflow has four steps: **declare → sync → review → promote.** Vendored content lives under your source registry's `vendor/` directory, is git-tracked, and *never* projects to mounted projects until you explicitly promote selected files into a real kind directory.
+
+### Declare
+
+In your source registry:
+
+```bash
+csaw vendor add awesome-copilot gh:github/awesome-copilot --include "agents/**" --include "skills/**"
+```
+
+This writes to your registry's `csaw.yml` under a new `vendors:` block. Glob filters keep the vendored area focused on what you care about. Shorthand (`gh:`, `gl:`, `bb:`) is accepted; an embedded `#ref` becomes the tracked ref.
+
+### Sync
+
+```bash
+csaw vendor sync           # all declared vendors
+csaw vendor sync awesome-copilot   # one specific
+```
+
+csaw clones the upstream into a per-URL cache under `~/.csaw/state/vendor-cache/`, resolves the ref to an exact SHA, copies filtered files into `<registry>/vendor/awesome-copilot/`, and writes the SHA-pinned inventory into `<registry>/vendor.lock.yaml`. Subsequent syncs reuse the cache and only re-copy if upstream content changed.
+
+After sync your registry looks like:
+
+```
+my-registry/
+├── csaw.yml                          # declares vendors:
+├── vendor.lock.yaml                  # per-file SHAs, promotion log
+├── vendor/
+│   └── awesome-copilot/
+│       ├── .csaw-vendor-meta.yaml
+│       ├── agents/
+│       │   └── code-reviewer.md
+│       └── skills/
+│           └── pr-checklist/
+│               └── SKILL.md
+├── agents/                           # hand-authored or promoted from vendor/
+├── rules/
+└── skills/
+```
+
+Both `vendor/` and `vendor.lock.yaml` are git-tracked. Consumers of your registry get the exact vendored state you reviewed.
+
+### Review (audit drift, three kinds)
+
+```bash
+csaw vendor audit
+```
+
+Reports three drift types:
+
+1. **Vendor-local drift** — someone hand-edited a file inside `vendor/<name>/`. Either a mistake (run `csaw vendor sync --force` to restore) or an intentional one-off (move the edit out of `vendor/` into a real kind dir).
+2. **Upstream drift** — `git ls-remote` shows upstream has new commits. Refresh with `csaw vendor sync` if you want to track them.
+3. **Promotion drift** — a promoted file diverged from its vendor origin (either the vendor moved since promote, or you intentionally customized the promoted copy). Surfaces the choice instead of silently letting them desync.
+
+Use `--no-network` to skip the upstream check in offline / CI environments.
+
+### Promote
+
+```bash
+csaw vendor promote awesome-copilot/agents/code-reviewer.md --into agents/code-reviewer.md
+```
+
+Copies `vendor/awesome-copilot/agents/code-reviewer.md` to `agents/code-reviewer.md` in your registry and records the lineage (vendor name, vendor path, SHA at promote time) in `vendor.lock.yaml`. The vendored copy stays in place as the immutable upstream record; the promoted copy enters your normal kind directory and projects via existing csaw mount/profile flows. Refuses to overwrite an existing file without `--force`.
+
+### Why this exists
+
+External catalogs (skills.sh, APM packages, awesome-copilot, internal bundles) ship in shapes designed for browsing or for their own installer's runtime — not for csaw's mount layout. Directly mounting them would be messy (junk files everywhere) and unsafe (no SHA pinning, no review step, no rollback). Vendor adds a third state for content: *fetched, hash-locked, never projects, requires explicit promote.* That makes csaw a safe consumer of any external catalog, regardless of ecosystem.
+
+The vendored content can't accidentally become active context — it's explicitly excluded from source enumeration. Mounting only sees the files you've promoted into real kind directories.
 
 ---
 

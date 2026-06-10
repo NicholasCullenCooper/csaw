@@ -180,6 +180,17 @@ func EnumerateSourceEntries(source sources.CatalogSource) ([]SourceEntry, error)
 			}
 			return nil
 		}
+		// The vendor/ tree under a source registry holds upstream content
+		// staged for review by `csaw vendor sync`. It MUST NEVER project
+		// to a mounted project — vendored files become active only when
+		// explicitly copied into a real kind directory via
+		// `csaw vendor promote`. See docs/planning/vendors-design.md.
+		if d.IsDir() && name == "vendor" {
+			rel, err := filepath.Rel(source.Root, path)
+			if err == nil && rel == "vendor" {
+				return filepath.SkipDir
+			}
+		}
 		if d.IsDir() {
 			return nil
 		}
@@ -193,7 +204,8 @@ func EnumerateSourceEntries(source sources.CatalogSource) ([]SourceEntry, error)
 			return err
 		}
 		relativePath = runtime.NormalizeRegistryPath(relativePath)
-		if relativePath == runtime.ProfilesFile || relativePath == runtime.IgnoreFile {
+		// vendor.lock.yaml lives at the registry root; never mount it.
+		if relativePath == runtime.ProfilesFile || relativePath == runtime.IgnoreFile || relativePath == "vendor.lock.yaml" {
 			return nil
 		}
 
