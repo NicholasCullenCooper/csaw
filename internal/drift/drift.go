@@ -16,6 +16,7 @@ const (
 	IssueReplacedLink            = "replaced-link"
 	IssueProtectedContentDrift   = "protected-content-drift"
 	IssueProtectedHashUnreadable = "protected-hash-unreadable"
+	IssueGeneratedModified       = "generated-modified"
 )
 
 type Status struct {
@@ -30,6 +31,41 @@ type Status struct {
 	Protected      bool
 	ExpectedHash   string
 	ActualHash     string
+	// Generated marks a file csaw wrote from content rather than linked.
+	Generated bool
+}
+
+// inspectGenerated classifies a generated file: missing, replaced by a
+// non-regular file, modified by the user, or healthy.
+func inspectGenerated(status Status, fullPath string, expectedHash string) Status {
+	status.ExpectedHash = expectedHash
+	info, err := os.Lstat(fullPath)
+	if err != nil {
+		status.Healthy = false
+		if os.IsNotExist(err) {
+			status.Issue = IssueMissingLink
+		} else {
+			status.Issue = IssueReplacedLink
+		}
+		return status
+	}
+	if !info.Mode().IsRegular() {
+		status.Healthy = false
+		status.Issue = IssueReplacedLink
+		return status
+	}
+	actualHash, err := workspace.FileSHA256(fullPath)
+	if err != nil {
+		status.Healthy = false
+		status.Issue = IssueProtectedHashUnreadable
+		return status
+	}
+	status.ActualHash = actualHash
+	if actualHash != expectedHash {
+		status.Healthy = false
+		status.Issue = IssueGeneratedModified
+	}
+	return status
 }
 
 func InspectLinks(links []workspace.MountedLink) []Status {
@@ -65,6 +101,12 @@ func InspectMountState(projectRoot string, state workspace.MountState, lm linkmo
 			ExpectedSource: entry.SourcePath,
 			Protected:      entry.Protected,
 			ExpectedHash:   entry.SourceSHA256,
+			Generated:      entry.Generated,
+		}
+
+		if entry.Generated {
+			statuses = append(statuses, inspectGenerated(status, fullPath, entry.ContentSHA256))
+			continue
 		}
 
 		if _, err := os.Stat(entry.SourcePath); err != nil {

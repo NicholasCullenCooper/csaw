@@ -18,7 +18,7 @@ csaw today is a working tool for the canonical persona — a software engineer i
 
 **Artifact kinds (7):** instructions, rules, agents, skills, MCP, hooks, ignore. Settings and memory are deliberately *not* projected (privacy / out of scope; documented in [`projection-roadmap.md`](../planning/projection-roadmap.md)).
 
-**Tool projection (7 in-code):** Claude Code, Cursor, Codex, OpenCode, GitHub Copilot (with mandatory-suffix rewriting and CommitToGit revert per the no-hidden-defaults principle), Antigravity, Goose. JSON↔code consistency test guards against drift. Codegen renders `tool-projection.md` from JSON; CI enforces.
+**Tool projection (Claude Code and Codex, reworked v0.11.0):** csaw supports exactly two tools. Each declares the directories it reads and csaw writes each kind into the smallest set that serves the configured tools. A generated `CLAUDE.md` bridge imports `AGENTS.md`; skills project as whole directories. Codegen renders the "what csaw writes" table from the Go registry and the research table from JSON; tests check every Go path is documented and log stale `checked_at` dates. Six other tools researched in 2026 remain catalogued in the JSON with `csaw_in_code: false`.
 
 **Source-add ergonomics:** Long-form URLs (`csaw source add team https://...`), local paths, and pnpm-style host shorthand (`csaw source add team gh:org/repo#v1.2.0`). `csaw init --preset {solo-engineer,team-go,team-frontend}` scaffolds curated starters.
 
@@ -38,6 +38,14 @@ Things from the original v0.5–v0.9 plan that did *not* ship and aren't immedia
 
 Granular v1.0 readiness (per-feature matrix + workflow passes) tracked in [`v1.0-readiness.md`](v1.0-readiness.md), which is the operational companion to the v1.0 Criteria section below.
 
+## Relaunch (September 2026)
+
+An audit against current vendor docs found the projection layer had drifted: Claude Code never read the mounted instructions (it reads `CLAUDE.md`, not `AGENTS.md`), rule symlinks pointing outside the working directory do not load in Claude Code, hook scripts were never wired, and skill supporting files landed in the wrong place. The four-phase plan in [`../exec-plans/active/relaunch-2026-09.md`](../exec-plans/active/relaunch-2026-09.md) fixes projection first (v0.11.0), then makes copy the default mount mode with ownership hashes and a lockfile (v0.12.0), generalizes merge projection so hooks become a real kind (v0.13.0), and exports registries to vendor marketplaces with content checks on vendored files (v0.14.0).
+
+Positioning shifts with it. Tencent's `teamai-cli` now owns "one team repo auto-synced into every engineer's tools" with auto-injected hooks and telemetry. csaw's defensible ground is the explicit, daemon-free, multi-source case: contractors, staff engineers, and anyone composing several owners' context with priority, protection, pins, and a CI-checkable audit, and consuming other ecosystems' catalogs without running their installers.
+
+Retired in the same pass: the `csaw://` scheme, a GUI, the context vocabulary refactor, continuity and handoff, and the community preset marketplace.
+
 ## Tactical queue
 
 Current near-term work lives in [`../planning/next-up.md`](../planning/next-up.md) as a three-tier prioritized queue (current focus / known follow-ups / explicitly deferred). This roadmap stays directional; the tactical queue stays operational. Don't duplicate them — when promoting something from queue to roadmap, write it as a theme, not a version slot.
@@ -48,7 +56,7 @@ Not version-pinned. Each theme is a question csaw might answer better, with curr
 
 ### Tool surface coverage (active)
 
-The status: csaw projects to 7 tools in-code today. AGENTS.md serves another ~20 indirectly. But each of those ~20 has native dirs (`.clinerules/`, `.continue/rules/`, `.factory/skills/`, `.augment/rules/`, etc.) csaw doesn't reach, captured honestly in [`projection-roadmap.md`](../planning/projection-roadmap.md) with quick-win candidates ranked by deep-projection value. Adds happen on user demand, not on competitor parity.
+The status: since September 2026 csaw projects for Claude Code and Codex only. The 2026 research on Cursor, Copilot, OpenCode, Gemini CLI, Antigravity, goose, and others is kept in [`tool-projection.json`](../reference/tool-projection.json) with `csaw_in_code: false`, and the reads-table model makes re-adding a tool one registry entry. `AGENTS.md` and `.agents/skills/` already give most agents the universal floor. Scope widens only when the maintainer needs another tool, not for parity.
 
 ### Mount UX polish (active)
 

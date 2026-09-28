@@ -98,7 +98,7 @@ func preflightAutoUnmountConflicts(projectRoot string, entries []mount.SourceEnt
 		if mountedEntry, ok := mounted[relPath]; ok {
 			targetPath := filepath.Join(projectRoot, filepath.FromSlash(relPath))
 			if _, err := os.Lstat(targetPath); err == nil {
-				if !linkmode.IsLink(lm, targetPath, mountedEntry.SourcePath) {
+				if !mountedEntryIntact(lm, targetPath, mountedEntry) {
 					conflicts[relPath] = true
 					continue
 				}
@@ -129,6 +129,18 @@ func preflightAutoUnmountConflicts(projectRoot string, entries []mount.SourceEnt
 	}
 	sort.Strings(paths)
 	return fmt.Errorf("conflict requires interaction for %s; rerun with --force or --skip-conflicts", strings.Join(paths, ", "))
+}
+
+// mountedEntryIntact reports whether a previously mounted path still holds
+// what csaw put there: the expected link, or for generated files the same
+// bytes. A generated file the user edited is preserved by unmount rather
+// than treated as a conflict.
+func mountedEntryIntact(lm linkmode.Mode, targetPath string, entry workspace.MountedStateEntry) bool {
+	if !entry.Generated {
+		return linkmode.IsLink(lm, targetPath, entry.SourcePath)
+	}
+	info, err := os.Lstat(targetPath)
+	return err == nil && info.Mode().IsRegular()
 }
 
 func collectMountEntries(manager sources.Manager, paths runtime.Paths, selection mount.Selection) ([]mount.SourceEntry, error) {

@@ -130,3 +130,42 @@ func canCreateSymlink() (bool, string) {
 	}
 	return true, ""
 }
+
+func TestInspectMountStateClassifiesGeneratedFiles(t *testing.T) {
+	project := t.TempDir()
+	target := filepath.Join(project, "CLAUDE.md")
+	content := []byte("@AGENTS.md\n")
+	if err := os.WriteFile(target, content, 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	entry := workspace.MountedStateEntry{
+		RelativePath:  "CLAUDE.md",
+		SourceName:    "team",
+		SourcePath:    filepath.Join(project, "does-not-matter", "AGENTS.md"),
+		Generated:     true,
+		Content:       string(content),
+		ContentSHA256: workspace.ContentSHA256(content),
+	}
+	state := workspace.MountState{Entries: []workspace.MountedStateEntry{entry}}
+
+	statuses := InspectMountState(project, state, linkmode.Symlink)
+	if len(statuses) != 1 || !statuses[0].Healthy || !statuses[0].Generated {
+		t.Fatalf("intact generated file should be healthy: %#v", statuses)
+	}
+
+	if err := os.WriteFile(target, []byte("@AGENTS.md\nextra\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	statuses = InspectMountState(project, state, linkmode.Symlink)
+	if statuses[0].Healthy || statuses[0].Issue != IssueGeneratedModified {
+		t.Fatalf("edited generated file should report %s: %#v", IssueGeneratedModified, statuses[0])
+	}
+
+	if err := os.Remove(target); err != nil {
+		t.Fatalf("Remove() error = %v", err)
+	}
+	statuses = InspectMountState(project, state, linkmode.Symlink)
+	if statuses[0].Healthy || statuses[0].Issue != IssueMissingLink {
+		t.Fatalf("missing generated file should report %s: %#v", IssueMissingLink, statuses[0])
+	}
+}

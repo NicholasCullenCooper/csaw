@@ -5,9 +5,9 @@ Edit docs/reference/tool-projection.json and run: go generate ./internal/mount/.
 
 # Tool Projection Reference
 
-**Schema version:** 7  ·  **Updated:** 2026-05-24
+**Schema version:** 8  ·  **Updated:** 2026-09-28
 
-Per-tool projection map: filesystem paths each AI coding tool reads, by kind, at project and user scope. Source of truth for csaw's ToolRegistry (tools with csaw_in_code: true). Planning/roadmap content (recommended additions, deferred tools, deprecation timelines) lives in docs/planning/projection-roadmap.md.
+Per-tool projection map: filesystem paths each AI coding tool reads, by kind, at project and user scope. csaw projects for Claude Code and Codex only (scope decision 2026-09-28); every other tool here is research kept for reference and marked csaw_in_code: false. This file documents what tools READ. What csaw WRITES is decided by the Go ToolRegistry in internal/mount/tools.go and rendered into tool-projection.md by cmd/tools-gen; a test asserts every directory csaw reads or writes for a supported tool is documented here. Per-tool checked_at records when the research was last verified.
 
 Planning content (recommended additions, deferred tools) lives in [`../planning/projection-roadmap.md`](../planning/projection-roadmap.md).
 
@@ -15,25 +15,42 @@ Planning content (recommended additions, deferred tools) lives in [`../planning/
 
 Tools with `csaw_in_code: true` (consistency-tested against `ToolRegistry`):
 
-- **`antigravity`** — Antigravity (Google) — unified CLI + IDE
 - **`claude`** — Claude Code
 - **`codex`** — OpenAI Codex CLI
-- **`copilot`** — GitHub Copilot (VS Code + CLI)
-- **`cursor`** — Cursor (IDE + CLI)
-- **`goose`** — Goose (AAIF / Linux Foundation)
-- **`opencode`** — OpenCode
+
+## What csaw Writes
+
+csaw projects for **Claude Code and Codex**. Derived from the Go `ToolRegistry` (`internal/mount/tools.go`): for each kind, csaw writes into the smallest set of directories that every configured tool reads. Instruction bridges are generated files that import `AGENTS.md` for tools that do not read it.
+
+| Tool | Kind | csaw writes (when needed) | Tool reads |
+|---|---|---|---|
+| `claude` | instructions | `CLAUDE.md` (generated, imports `AGENTS.md`) | `CLAUDE.md` |
+| `claude` | skills | `.claude/skills/` | `.claude/skills` |
+| `claude` | agents | `.claude/agents/` | `.claude/agents` |
+| `claude` | rules | `.claude/rules/` | `.claude/rules` |
+| `claude` | hooks | `.claude/hooks/` (scripts only; declare them in the tool's settings) | `.claude/hooks` |
+| `codex` | instructions | `AGENTS.md` | `AGENTS.md` |
+| `codex` | skills | `.agents/skills/` | `.agents/skills` |
+
+Codex keeps MCP servers inside `.codex/config.toml`; `csaw mcp sync codex` merges them there. Codex has no rules, agents, or hooks directory, so those kinds reach Codex only through `AGENTS.md` and, for hooks, the planned `.codex/hooks.json` merge. With no tool configured or detected, skills go to the neutral `.agents/skills/` directory.
+
+Examples of the minimal-set rule:
+
+- `claude`: skills → `.claude/skills/`; agents → `.claude/agents/`; rules → `.claude/rules/`; hooks → `.claude/hooks/`
+- `codex`: skills → `.agents/skills/`
+- `claude,codex`: skills → `.agents/skills/`, `.claude/skills/`; agents → `.claude/agents/`; rules → `.claude/rules/`; hooks → `.claude/hooks/`
 
 ## Kinds
 
 - **agents** — Subagent / persona / mode definitions. [csaw projects: YES]
-- **hooks** — Lifecycle scripts triggered by tool events. [csaw projects: YES — planned v0.6.0]
+- **hooks** — Lifecycle scripts triggered by tool events. Tools run hooks declared in their settings files (settings.json, hooks.json); none scans a directory. [csaw projects: scripts only, into .claude/hooks/; declaring them is manual until the hooks kind is reworked]
 - **ignore** — Context exclusion patterns (.cody/ignore, .cursorignore, .tongyiignore). [csaw projects: YES — planned v0.6.0]
-- **instructions** — Always-on project guidance. AGENTS.md, CLAUDE.md, GEMINI.md, .hermes.md, .goosehints. [csaw projects: YES]
+- **instructions** — Always-on project guidance. AGENTS.md is the cross-tool file; CLAUDE.md, GEMINI.md, .hermes.md, .goosehints are tool-specific. [csaw projects: YES; generates CLAUDE.md and GEMINI.md bridges that import AGENTS.md when the registry has none]
 - **mcp** — MCP server configs. Per-tool schema varies widely. [csaw projects: YES (via per-tool registry files)]
 - **memory** — Persistent context across sessions. [csaw projects: NEVER for now — most memory is session state or user-private. Revisit if a portable memory standard emerges.]
 - **rules** — Always-on coding/style rules. [csaw projects: YES]
 - **settings** — General tool config that may contain multiple kinds. [csaw projects: NEVER — settings files contain API keys and personal credentials; mounting them to a team source would leak secrets. Documented as reference only.]
-- **skills** — On-demand procedural workflows (SKILL.md folders, slash commands, prompts, recipes). [csaw projects: YES]
+- **skills** — On-demand procedural workflows: SKILL.md folders including their references/, scripts/, and assets/ (Agent Skills standard). [csaw projects: YES, whole directory]
 
 ## Universal Paths (Derived)
 
@@ -42,14 +59,16 @@ Ordered by number of tools that read each path.
 
 | Path | # tools | Read by |
 |---|---|---|
-| `AGENTS.md` | 22 | aider, amazon-q, amp, antigravity, augment, claude, claw-code, cline, codex, copilot, cursor, devin, factory, goose, hermes, kilo-code, kiro, openclaw, opencode, openhands, pi, zed |
-| `.gitignore` | 10 | antigravity, claude, cline, codex, continue, copilot, goose, kiro, opencode, windsurf |
+| `AGENTS.md` | 22 | amazon-q, amp, antigravity, augment, claw-code, cline, codex, copilot, cursor, devin, devin-cli, factory, goose, hermes, kilo-code, kiro, openclaw, opencode, openhands, pi, windsurf, zed |
+| `.gitignore` | 9 | antigravity, claude, cline, codex, continue, copilot, goose, kiro, opencode |
+| `.agents/skills/<name>/SKILL.md` | 8 | antigravity, codex, copilot, cursor, gemini, goose, opencode, windsurf |
 | `CLAUDE.md` | 7 | amp, augment, claude, claw-code, copilot, hermes, pi |
-| `.claude/agents/` | 3 | claude, claw-code, copilot |
-| `.claude/skills/<name>/SKILL.md` | 3 | claude, claw-code, opencode |
-| `.agents/skills/<name>/SKILL.md` | 2 | antigravity, opencode |
+| `.claude/skills/<name>/SKILL.md` | 6 | claude, claw-code, copilot, cursor, goose, opencode |
+| `.claude/agents/` | 5 | claude, claw-code, copilot, cursor, goose |
+| `.mcp.json` | 3 | claude, claw-code, copilot |
+| `.agents/agents/` | 2 | antigravity, goose |
+| `.claude/CLAUDE.md` | 2 | claude, copilot |
 | `.cursorrules` | 2 | cursor, hermes |
-| `.mcp.json` | 2 | claude, claw-code |
 | `.rules` | 2 | trae, zed |
 | `AGENT.md` | 2 | amp, kilo-code |
 | `AGENTS.md (likely)` | 2 | lingma, plandex |
@@ -58,23 +77,23 @@ Ordered by number of tools that read each path.
 
 ## Deep-Modeled Tools
 
-### Antigravity (Google) — unified CLI + IDE (`antigravity`) · `csaw_in_code: true`
+### Antigravity (Google) — unified CLI + IDE (`antigravity`)
 
 - **Docs:** [https://antigravity.google/docs/](https://antigravity.google/docs/)
-- **Category:** ide-or-cli · **Status:** active
-- **Notes:** Gemini CLI's successor (Gemini sunset 2026-06-18). Built in Go. Uses .agents/ (plural) — same as csaw's StandardFallback.
+- **Category:** ide-or-cli · **Status:** active · **Research verified:** 2026-09-14
+- **Notes:** Not projected by csaw (Claude Code and Codex only, since 2026-09-28). Google's agentic CLI + IDE. Successor for Gemini CLI consumer accounts (Gemini CLI itself continues for API-key and enterprise users). Uses the neutral .agents/ layout: rules, agents, skills.
 
 | Kind | Project paths | User paths | Confidence |
 |---|---|---|---|
-| agents | `.agents/agents.md` | — | documented |
-| hooks | — | — | documented |
+| agents | `.agents/agents/` | — | verified |
+| hooks | `.agents/hooks.json` | `~/.gemini/config/hooks.json` | documented |
 | ignore | `.gitignore` | — | inferred |
 | instructions | `GEMINI.md`, `AGENTS.md` | — | verified |
 | mcp | — | `~/.gemini/antigravity-cli/settings.json` | documented |
 | memory | — | `~/.gemini/antigravity/brain/` | inferred |
-| rules | `.agents/` | — | documented |
+| rules | `.agents/rules/` | — | verified |
 | settings | — | `~/.gemini/antigravity-cli/settings.json` | documented |
-| skills | `.agents/skills/<name>/SKILL.md`, `.agents/skills.md` | `~/.gemini/antigravity/skills/` | verified |
+| skills | `.agents/skills/<name>/SKILL.md` | `~/.gemini/antigravity-cli/skills/` | verified |
 
 **MCP schema:**
 
@@ -83,18 +102,18 @@ Ordered by number of tools that read each path.
 ### Claude Code (`claude`) · `csaw_in_code: true`
 
 - **Docs:** [https://code.claude.com/docs/](https://code.claude.com/docs/)
-- **Category:** native-cli · **Status:** active
+- **Category:** native-cli · **Status:** active · **Research verified:** 2026-09-14
 - **Notes:** Anthropic's official CLI. Originator of .claude/agents/ and SKILL.md folder patterns (now agentskills.io open standard).
 
 | Kind | Project paths | User paths | Confidence |
 |---|---|---|---|
 | agents | `.claude/agents/` | `~/.claude/agents/` | verified |
-| hooks | `.claude/hooks/` | `~/.claude/hooks/` | documented |
+| hooks | `.claude/hooks/`, `.claude/settings.json`, `.claude/settings.local.json` | `~/.claude/settings.json` | verified |
 | ignore | `.gitignore` | — | inferred |
-| instructions | `AGENTS.md`, `CLAUDE.md`, `CLAUDE.local.md` | `~/.claude/CLAUDE.md` | verified |
+| instructions | `CLAUDE.md`, `.claude/CLAUDE.md`, `CLAUDE.local.md` | `~/.claude/CLAUDE.md` | verified |
 | mcp | `.mcp.json` | `~/.claude.json`, `~/.claude/settings.json` | verified |
 | memory | `.claude/agent-memory/<name>/`, `.claude/agent-memory-local/<name>/` | `~/.claude/agent-memory/<name>/` | verified |
-| rules | — | — | unsupported |
+| rules | `.claude/rules/` | `~/.claude/rules/` | verified |
 | settings | `.claude/settings.json`, `.claude/settings.local.json` | `~/.claude/settings.json` | verified |
 | skills | `.claude/skills/<name>/SKILL.md` | `~/.claude/skills/<name>/SKILL.md` | verified |
 
@@ -109,7 +128,7 @@ Ordered by number of tools that read each path.
 
 - **Docs:** [https://docs.cline.bot/](https://docs.cline.bot/)
 - **Category:** vscode-extension · **Status:** active
-- **Notes:** Formerly Claude Dev. VS Code + JetBrains + CLI. Roo Code is popular fork.
+- **Notes:** Not projected by csaw (Claude Code and Codex only, since 2026-09-28). Formerly Claude Dev. VS Code + JetBrains + CLI. Roo Code is popular fork.
 
 | Kind | Project paths | User paths | Confidence |
 |---|---|---|---|
@@ -125,21 +144,21 @@ Ordered by number of tools that read each path.
 
 ### OpenAI Codex CLI (`codex`) · `csaw_in_code: true`
 
-- **Docs:** [https://developers.openai.com/codex/](https://developers.openai.com/codex/)
-- **Category:** native-cli · **Status:** active
-- **Notes:** TOML-driven. Almost no per-kind directories.
+- **Docs:** [https://learn.chatgpt.com/docs/](https://learn.chatgpt.com/docs/)
+- **Category:** native-cli · **Status:** active · **Research verified:** 2026-09-15
+- **Notes:** TOML-driven config. Skills follow the Agent Skills standard under the neutral .agents/skills; docs moved from developers.openai.com to learn.chatgpt.com.
 
 | Kind | Project paths | User paths | Confidence |
 |---|---|---|---|
 | agents | `.codex/config.toml` | `~/.codex/config.toml` | verified |
-| hooks | `.codex/hooks.json` | `~/.codex/hooks.json` | documented |
+| hooks | `.codex/hooks.json` | `~/.codex/hooks.json` | verified |
 | ignore | `.gitignore` | — | inferred |
 | instructions | `AGENTS.md` | `~/.codex/AGENTS.md`, `~/.codex/AGENTS.override.md` | verified |
 | mcp | `.codex/config.toml` | `~/.codex/config.toml` | verified |
 | memory | — | — | unsupported |
 | rules | — | — | unsupported |
 | settings | `.codex/config.toml` | `~/.codex/config.toml` | verified |
-| skills | — | — | unsupported |
+| skills | `.agents/skills/<name>/SKILL.md` | `~/.agents/skills/`, `/etc/codex/skills/` | verified |
 
 **MCP schema:**
 
@@ -151,7 +170,7 @@ Ordered by number of tools that read each path.
 
 - **Docs:** [https://docs.continue.dev/](https://docs.continue.dev/)
 - **Category:** vscode-extension · **Status:** active
-- **Notes:** Has .continue/rules/ (project) and ~/.continue/rules/ (user) — file-based, NOT all nested in config.
+- **Notes:** Not projected by csaw (Claude Code and Codex only, since 2026-09-28). Has .continue/rules/ (project) and ~/.continue/rules/ (user) — file-based, NOT all nested in config.
 
 | Kind | Project paths | User paths | Confidence |
 |---|---|---|---|
@@ -170,23 +189,23 @@ Ordered by number of tools that read each path.
 - Top-level key: `mcpServers`
 - Transports: stdio, sse, http
 
-### GitHub Copilot (VS Code + CLI) (`copilot`) · `csaw_in_code: true`
+### GitHub Copilot (VS Code + CLI) (`copilot`)
 
 - **Docs:** [https://code.visualstudio.com/docs/copilot/](https://code.visualstudio.com/docs/copilot/)
-- **Category:** vscode-extension-and-cli · **Status:** active
-- **Notes:** VS Code Copilot and Copilot CLI share the same .github/ paths and ~/.copilot/ user-scope agents. csaw projects rules (with .instructions.md suffix) and agents (with .agent.md suffix) into .github/. Projected files are hidden from git by default like every other projection — teams who want them committed for PR review run `csaw show .github/instructions/*` as an explicit opt-in. Skills (.github/prompts/, single-file) and the .github/copilot-instructions.md alias not yet projected — AGENTS.md at project root covers Copilot's universal-instructions case.
+- **Category:** vscode-extension-and-cli · **Status:** active · **Research verified:** 2026-09-15
+- **Notes:** Not projected by csaw (Claude Code and Codex only, since 2026-09-28). VS Code Copilot and Copilot CLI share the same .github/ paths and ~/.copilot/ user-scope agents. csaw projects rules (with .instructions.md suffix) and agents (with .agent.md suffix) into .github/. Projected files are hidden from git by default like every other projection — teams who want them committed for PR review run `csaw show .github/instructions/*` as an explicit opt-in. Skills (.github/prompts/, single-file) and the .github/copilot-instructions.md alias not yet projected — AGENTS.md at project root covers Copilot's universal-instructions case.
 
 | Kind | Project paths | User paths | Confidence |
 |---|---|---|---|
 | agents | `.github/agents/`, `.claude/agents/` | `~/.copilot/agents/` | verified |
-| hooks | — | — | unsupported |
+| hooks | `.github/hooks/` | `~/.copilot/hooks/` | verified |
 | ignore | `.gitignore` | — | inferred |
 | instructions | `.github/copilot-instructions.md`, `AGENTS.md`, `CLAUDE.md`, `.claude/CLAUDE.md`, `CLAUDE.local.md` | — | verified |
-| mcp | `.vscode/mcp.json` | — | verified |
+| mcp | `.vscode/mcp.json`, `.mcp.json`, `.github/mcp.json` | — | verified |
 | memory | — | — | unsupported |
 | rules | `.github/instructions/` | — | verified |
 | settings | `.vscode/settings.json` | `(VS Code user profile)` | documented |
-| skills | `.github/prompts/` | — | verified |
+| skills | `.github/skills/<name>/SKILL.md`, `.claude/skills/<name>/SKILL.md`, `.agents/skills/<name>/SKILL.md` | `~/.copilot/skills/`, `~/.agents/skills/` | verified |
 
 **MCP schema:**
 
@@ -194,23 +213,23 @@ Ordered by number of tools that read each path.
 - Transports: stdio (command/args), http (type: http, url)
 - Auth: env vars, input variables (VS Code Inputs)
 
-### Cursor (IDE + CLI) (`cursor`) · `csaw_in_code: true`
+### Cursor (IDE + CLI) (`cursor`)
 
 - **Docs:** [https://cursor.com/docs/](https://cursor.com/docs/)
-- **Category:** ide-or-cli · **Status:** active
-- **Notes:** Cursor CLI (Jan 2026) shares config with desktop.
+- **Category:** ide-or-cli · **Status:** active · **Research verified:** 2026-09-15
+- **Notes:** Not projected by csaw (Claude Code and Codex only, since 2026-09-28). Cursor CLI (Jan 2026) shares config with desktop.
 
 | Kind | Project paths | User paths | Confidence |
 |---|---|---|---|
-| agents | `.cursor/modes.json` | — | verified |
-| hooks | — | — | unsupported |
+| agents | `.cursor/agents/`, `.claude/agents/`, `.codex/agents/` | `~/.cursor/agents/`, `~/.claude/agents/`, `~/.codex/agents/` | verified |
+| hooks | `.cursor/hooks.json` | `~/.cursor/hooks.json` | verified |
 | ignore | `.cursorignore` | — | documented |
 | instructions | `AGENTS.md` | — | verified |
 | mcp | `.cursor/mcp.json` | `~/.cursor/mcp.json` | verified |
 | memory | — | — | unsupported |
 | rules | `.cursor/rules/`, `.cursorrules` | — | verified |
 | settings | — | — | documented |
-| skills | `.cursor/commands/` | `~/.cursor/commands/` | verified |
+| skills | `.cursor/skills/<name>/SKILL.md`, `.agents/skills/<name>/SKILL.md`, `.claude/skills/<name>/SKILL.md`, `.codex/skills/<name>/SKILL.md` | `~/.cursor/skills/`, `~/.agents/skills/`, `~/.claude/skills/`, `~/.codex/skills/` | verified |
 
 **MCP schema:**
 
@@ -219,23 +238,44 @@ Ordered by number of tools that read each path.
 - Auth: env vars, headers, OAuth static client credentials in `auth` object
 - Env var substitution: ${env:NAME}, ${userHome}, ${workspaceFolder}, ${workspaceFolderBasename}, ${pathSeparator}
 
-### Goose (AAIF / Linux Foundation) (`goose`) · `csaw_in_code: true`
+### Gemini CLI (`gemini`)
 
-- **Docs:** [https://goose-docs.ai/](https://goose-docs.ai/)
-- **Category:** native-cli · **Status:** active
-- **Notes:** MOVED from block/goose to aaif-goose/goose. .goosehints + .goose/recipes/ are real file-based concepts.
+- **Docs:** [https://geminicli.com/docs/](https://geminicli.com/docs/)
+- **Category:** native-cli · **Status:** active · **Research verified:** 2026-09-14
+- **Notes:** Not projected by csaw (Claude Code and Codex only, since 2026-09-28). Consumer (free / AI Pro / Ultra) auth ended 2026-06-18 and moved to Antigravity CLI; API-key and Gemini Code Assist enterprise users continue and the OSS project keeps releasing (v0.59.0 on 2026-09-08). Removed from ToolRegistry in v0.6.0 on a misread of that announcement; reinstated in v0.11.0.
 
 | Kind | Project paths | User paths | Confidence |
 |---|---|---|---|
-| agents | `.goose/recipes/` | `~/.config/goose/recipes/` | verified |
-| hooks | — | — | unsupported |
+| agents | `.gemini/agents/` | `~/.gemini/agents/` | verified |
+| extensions | — | `~/.gemini/extensions/<name>/gemini-extension.json` | verified |
+| hooks | `.gemini/settings.json` | `~/.gemini/settings.json` | verified |
+| ignore | `.geminiignore` | — | verified |
+| instructions | `GEMINI.md` | `~/.gemini/GEMINI.md` | verified |
+| mcp | `.gemini/settings.json` | `~/.gemini/settings.json`, `/etc/gemini-cli/settings.json` | verified |
+| rules | — | — | unsupported |
+| skills | `.gemini/skills/<name>/SKILL.md`, `.agents/skills/<name>/SKILL.md` | `~/.gemini/skills/`, `~/.agents/skills/` | verified |
+
+**MCP schema:**
+
+- Top-level key: `mcpServers`
+
+### Goose (AAIF / Linux Foundation) (`goose`)
+
+- **Docs:** [https://goose-docs.ai/](https://goose-docs.ai/)
+- **Category:** native-cli · **Status:** active · **Research verified:** 2026-09-14
+- **Notes:** Not projected by csaw (Claude Code and Codex only, since 2026-09-28). MOVED from block/goose to aaif-goose/goose. .goosehints + .goose/recipes/ are real file-based concepts.
+
+| Kind | Project paths | User paths | Confidence |
+|---|---|---|---|
+| agents | `.agents/agents/`, `.claude/agents/`, `.goose/agents/` | `~/.config/goose/recipes/` | verified |
+| hooks | — | — | documented |
 | ignore | `.gitignore` | — | verified |
 | instructions | `.goosehints`, `AGENTS.md` | `~/.goosehints` | verified |
 | mcp | — | `~/.config/goose/config.yaml` | verified |
 | memory | `.goosehints` | `~/.goosehints` | verified |
 | rules | `.goosehints` | `~/.goosehints` | verified |
 | settings | — | `~/.config/goose/config.yaml` | verified |
-| skills | `.goose/recipes/` | `~/.config/goose/recipes/` | verified |
+| skills | `.agents/skills/<name>/SKILL.md`, `.claude/skills/<name>/SKILL.md` | `~/.agents/skills/` | verified |
 
 **MCP schema:**
 
@@ -246,7 +286,7 @@ Ordered by number of tools that read each path.
 
 - **Docs:** [https://kiro.dev/docs/](https://kiro.dev/docs/)
 - **Category:** ide-or-cli · **Status:** active
-- **Notes:** AWS agentic coding IDE on Bedrock. Spec-driven. Removed from ToolRegistry in v0.6.1 to keep projection focused; re-add on user demand.
+- **Notes:** Not projected by csaw (Claude Code and Codex only, since 2026-09-28). AWS agentic coding IDE on Bedrock. Spec-driven. Removed from ToolRegistry in v0.6.1 to keep projection focused; re-add on user demand.
 
 | Kind | Project paths | User paths | Confidence |
 |---|---|---|---|
@@ -260,11 +300,11 @@ Ordered by number of tools that read each path.
 | settings | — | — | documented |
 | skills | `.kiro/specs/` | — | documented |
 
-### OpenCode (`opencode`) · `csaw_in_code: true`
+### OpenCode (`opencode`)
 
 - **Docs:** [https://opencode.ai/docs/](https://opencode.ai/docs/)
-- **Category:** native-cli · **Status:** active
-- **Notes:** OSS leader (150K+ stars). EXPLICIT cross-tool compat — reads .claude/ and .agents/ as skill fallbacks.
+- **Category:** native-cli · **Status:** active · **Research verified:** 2026-09-14
+- **Notes:** Not projected by csaw (Claude Code and Codex only, since 2026-09-28). OSS leader (150K+ stars). EXPLICIT cross-tool compat — reads .claude/ and .agents/ as skill fallbacks.
 
 | Kind | Project paths | User paths | Confidence |
 |---|---|---|---|
@@ -285,23 +325,23 @@ Ordered by number of tools that read each path.
 - Auth: OAuth auto (RFC 7591 dynamic registration), static OAuth, API key headers
 - Env var substitution: {env:VAR_NAME}
 
-### Windsurf (Codeium) (`windsurf`)
+### Windsurf (now Devin Desktop) (`windsurf`)
 
-- **Docs:** [https://docs.windsurf.com/](https://docs.windsurf.com/)
-- **Category:** ide · **Status:** active
-- **Notes:** Cascade has workflows (skill-like). Removed from ToolRegistry in v0.6.1 to keep projection focused; re-add on user demand.
+- **Docs:** [https://docs.devin.ai/](https://docs.devin.ai/)
+- **Category:** ide · **Status:** renamed
+- **Notes:** Not projected by csaw (Claude Code and Codex only, since 2026-09-28). Renamed Devin Desktop on 2026-06-02 (OTA). Preferred paths moved under .devin/; .windsurf/rules and .windsurfrules still read. A separate Devin CLI reads AGENTS.md, AGENTS.local.md, .devin/config.json. Not in ToolRegistry; AGENTS.md and .agents/skills cover it.
 
 | Kind | Project paths | User paths | Confidence |
 |---|---|---|---|
 | agents | — | — | unsupported |
 | hooks | — | — | unsupported |
-| ignore | `.gitignore` | — | inferred |
-| instructions | `.windsurfrules`, `.windsurf/rules/` | `~/.codeium/windsurf/memories/global_rules.md` | verified |
+| ignore | `.devinignore`, `.codeiumignore`, `.windsurfignore` | — | verified |
+| instructions | `AGENTS.md`, `.devin/rules/`, `.windsurf/rules/`, `.windsurfrules` | `~/.codeium/windsurf/memories/global_rules.md` | verified |
 | mcp | — | `~/.codeium/windsurf/mcp_config.json` | verified |
 | memory | — | `~/.codeium/windsurf/memories/` | verified |
-| rules | `.windsurfrules`, `.windsurf/rules/` | `~/.codeium/windsurf/memories/global_rules.md` | verified |
+| rules | `.devin/rules/`, `.windsurf/rules/`, `.windsurfrules` | `~/.codeium/windsurf/memories/global_rules.md` | verified |
 | settings | — | — | documented |
-| skills | `.windsurf/workflows/` | `~/.codeium/windsurf/global_workflows/` | verified |
+| skills | `.agents/skills/<name>/SKILL.md`, `.devin/skills/`, `.windsurf/skills/`, `.claude/skills/` | `~/.codeium/windsurf/global_workflows/` | documented |
 
 **MCP schema:**
 
@@ -316,7 +356,7 @@ Tools with file-based projection that are less prioritized for csaw's MVP. Promo
 
 | Tool | csaw_in_code | Project paths | User paths |
 |---|---|---|---|
-| Aider (`aider`) | — | `CONVENTIONS.md`, `AGENTS.md`, `.aider.conf.yml` | `~/.aider.conf.yml` |
+| Aider (`aider`) | — | `CONVENTIONS.md`, `.aider.conf.yml`, `.aiderignore` | `~/.aider.conf.yml` |
 | Amazon Q Developer (`amazon-q`) | — | `AGENTS.md`, `.amazonq/rules/` | — |
 | Amp (Sourcegraph) (`amp`) | — | `AGENTS.md`, `AGENT.md`, `CLAUDE.md` | `$HOME/.config/amp/AGENTS.md`, `$HOME/.config/AGENTS.md` |
 | Augment Code (`augment`) | — | `.augment-guidelines`, `.augment/rules/`, `AGENTS.md`, `CLAUDE.md` | — |
@@ -324,8 +364,8 @@ Tools with file-based projection that are less prioritized for csaw's MVP. Promo
 | CodeBuddy (Tencent) (`codebuddy`) | — | `.codebuddy/CODEBUDDY.md`, `.codebuddy/rules/`, `.codebuddy/agents/`, `.codebuddy/settings.json` | `~/.codebuddy/agents/` |
 | Cody (Sourcegraph) (`cody`) | — | `.vscode/cody.json`, `.cody/ignore` | `~/.vscode/cody.json` |
 | Devin (Cognition) (`devin`) | — | `AGENTS.md`, `.devin/wiki.json (docs)` | — |
+| Devin CLI (Cognition) (`devin-cli`) | — | `AGENTS.md`, `AGENTS.local.md`, `.devin/config.json`, `.devin/config.local.json`, `.devin/mcp_config.json`, `.agents/skills/` | `~/.devin/` |
 | Factory CLI (Droids) (`factory`) | — | `AGENTS.md` | `~/.factory/AGENTS.md` |
-| Gemini CLI (`gemini`) | — | `GEMINI.md`, `.gemini/agents/`, `.gemini/commands/ (TOML)`, `.gemini/settings.json` | `~/.gemini/` |
 | Hermes Agent (Nous Research) (`hermes`) | — | `.hermes.md`, `HERMES.md`, `AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.cursor/rules/*.mdc` | `~/.hermes/SOUL.md`, `~/.hermes/config.yaml`, `~/.hermes/skills/` |
 | JoyCode (`joycode`) | — | `.joycode/rules/`, `.joycode/agents/`, `.joycode/skills/`, `.joycode/mcp-configs/` | — |
 | Kilo Code (`kilo-code`) | — | `AGENTS.md`, `AGENT.md`, `.kilo/skills/`, `.kilo/agent`, `.kilocode/rules/memory-bank/` | `~/.config/kilo/kilo.jsonc` |

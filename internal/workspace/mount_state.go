@@ -22,6 +22,12 @@ type MountedStateEntry struct {
 	SourcePath   string `json:"source_path"`
 	Protected    bool   `json:"protected,omitempty"`
 	SourceSHA256 string `json:"source_sha256,omitempty"`
+	// Generated entries are real files csaw wrote from Content (e.g., the
+	// CLAUDE.md bridge). ContentSHA256 lets unmount and drift tell csaw's
+	// bytes apart from a user's later edits.
+	Generated     bool   `json:"generated,omitempty"`
+	Content       string `json:"content,omitempty"`
+	ContentSHA256 string `json:"content_sha256,omitempty"`
 }
 
 type MountState struct {

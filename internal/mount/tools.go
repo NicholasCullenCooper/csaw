@@ -5,6 +5,7 @@ package mount
 import (
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -51,24 +52,35 @@ func KindOf(entry SourceEntry) Kind {
 	}
 }
 
+// instructionFiles lists the project-root instruction files csaw recognizes.
+// AGENTS.md is the canonical cross-tool file (Codex reads it directly);
+// CLAUDE.md is what Claude Code reads. The rest are tool-specific files some
+// registries carry verbatim.
+var instructionFiles = []string{"AGENTS.md", "CLAUDE.md", "AGENT.md", "GEMINI.md", "QWEN.md", ".goosehints"}
+
+func isInstructionFile(name string) bool {
+	for _, candidate := range instructionFiles {
+		if name == candidate {
+			return true
+		}
+	}
+	return false
+}
+
 // isInstructionEntry returns true for top-level instruction files like
 // AGENTS.md, CLAUDE.md that mount to the project root and are always loaded.
-// Also recognizes tool-specific project-root instruction files: GEMINI.md
-// (Gemini CLI / Antigravity), QWEN.md (Qwen Code), and .goosehints (Goose).
 func isInstructionEntry(entry SourceEntry) bool {
 	rel := entry.RelativePath
 	if strings.Contains(rel, "/") {
 		return false
 	}
-	switch rel {
-	case "AGENTS.md", "CLAUDE.md", "AGENT.md", "GEMINI.md", "QWEN.md", ".goosehints":
-		return true
-	}
-	return false
+	return isInstructionFile(rel)
 }
 
 // isHookEntry returns true for entries under the registry's hooks/ directory.
-// These project into per-tool hook directories (e.g., .claude/hooks/).
+// These project into per-tool hook script directories (e.g., .claude/hooks/).
+// Scripts are placed only; declaring them in the tool's settings is a separate
+// step until the hooks kind is reworked (see docs/exec-plans/active/relaunch-2026-09.md).
 func isHookEntry(entry SourceEntry) bool {
 	return strings.HasPrefix(entry.RelativePath, "hooks/")
 }
@@ -100,7 +112,7 @@ func ParseKind(s string) (Kind, error) {
 	case "instruction", "instructions":
 		return KindInstruction, nil
 	default:
-		return "", fmt.Errorf("unknown kind %q (valid: agents, skills, rules, mcp, instructions)", s)
+		return "", fmt.Errorf("unknown kind %q (valid: agents, skills, rules, mcp, instructions, hooks, ignore)", s)
 	}
 }
 
@@ -126,17 +138,400 @@ func KindLabel(k Kind) string {
 	}
 }
 
+// ToolSpec describes what one AI coding tool reads from a project and where
+// csaw writes to serve it.
+//
+// Reads lists, per kind, every project-relative directory the tool scans:
+// its native path first, then compatibility paths it reads from other tools.
+// Writes names the single directory csaw uses when this tool must be served
+// and no directory chosen for another tool already covers it. PlanTargets
+// combines the two into the smallest set of directories that reaches every
+// configured tool.
+//
+// csaw supports Claude Code and Codex. Other tools are catalogued with their
+// research in docs/reference/tool-projection.json but are not projected.
+type ToolSpec struct {
+	Name        string
+	DisplayName string
+	// DetectPaths are project-relative paths whose presence implies the tool
+	// is in use, for auto-detection when no tools are configured.
+	DetectPaths []string
+	// InstructionFile is the project-root instruction file the tool reads.
+	InstructionFile string
+	// BridgeImport, when set, lets csaw generate InstructionFile from a
+	// registry's AGENTS.md using the tool's import syntax (e.g. "@AGENTS.md").
+	BridgeImport string
+	Reads        map[Kind][]string
+	Writes       map[Kind]string
+}
+
+// ReadsKind reports whether the tool reads any project directory for kind.
+func (t ToolSpec) ReadsKind(kind Kind) bool {
+	return len(t.Reads[kind]) > 0
+}
+
+func (t ToolSpec) readsDir(kind Kind, dir string) bool {
+	for _, candidate := range t.Reads[kind] {
+		if candidate == dir {
+			return true
+		}
+	}
+	return false
+}
+
+// neutralSkills is the tool-neutral skills directory Codex reads (as do most
+// other agents). Claude Code reads only .claude/skills.
+const neutralSkills = ".agents/skills"
+
+// ToolRegistry maps short tool names to their read and write specs.
+//
+// Paths were verified against vendor docs on 2026-09-14/15; see
+// docs/reference/tool-projection.json for the research behind each entry and
+// docs/reference/tool-projection.md for the rendered projection table.
+var ToolRegistry = map[string]ToolSpec{
+	"claude": {
+		Name:            "claude",
+		DisplayName:     "Claude Code",
+		DetectPaths:     []string{".claude"},
+		InstructionFile: "CLAUDE.md",
+		BridgeImport:    "@AGENTS.md",
+		Reads: map[Kind][]string{
+			KindSkill: {".claude/skills"},
+			KindAgent: {".claude/agents"},
+			KindRule:  {".claude/rules"},
+			KindHook:  {".claude/hooks"},
+		},
+		Writes: map[Kind]string{
+			KindSkill: ".claude/skills",
+			KindAgent: ".claude/agents",
+			KindRule:  ".claude/rules",
+			KindHook:  ".claude/hooks",
+		},
+	},
+	"codex": {
+		Name:            "codex",
+		DisplayName:     "Codex (OpenAI / ChatGPT)",
+		DetectPaths:     []string{".codex"},
+		InstructionFile: "AGENTS.md",
+		Reads: map[Kind][]string{
+			KindSkill: {neutralSkills},
+		},
+		Writes: map[Kind]string{
+			KindSkill: neutralSkills,
+		},
+	},
+}
+
+// StandardFallback is used when no tool is configured or detected: skills
+// land in the tool-neutral .agents/ directory that Codex (and most other
+// agents) read.
+var StandardFallback = ToolSpec{
+	Name:            "agents",
+	DisplayName:     "Neutral .agents/ directory",
+	InstructionFile: "AGENTS.md",
+	Reads: map[Kind][]string{
+		KindSkill: {neutralSkills},
+	},
+	Writes: map[Kind]string{
+		KindSkill: neutralSkills,
+	},
+}
+
+// AllToolNames returns all known tool names sorted alphabetically.
+func AllToolNames() []string {
+	names := make([]string, 0, len(ToolRegistry))
+	for name := range ToolRegistry {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// ToolDisplayName returns the human-readable name for a tool key, or the key
+// itself when unknown.
+func ToolDisplayName(key string) string {
+	if spec, ok := ToolRegistry[key]; ok {
+		return spec.DisplayName
+	}
+	return key
+}
+
+// ResolveTools determines which tools to project for by combining:
+// 1. Configured tools (from config.yml or --tools)
+// 2. Auto-detected tools whose DetectPaths exist in the project
+// 3. StandardFallback when nothing else applies
+//
+// The result is sorted by name so projection output is deterministic.
+func ResolveTools(projectRoot string, configuredTools []string) []ToolSpec {
+	seen := make(map[string]bool)
+	var tools []ToolSpec
+
+	for _, name := range configuredTools {
+		spec, ok := ToolRegistry[name]
+		if !ok || seen[name] {
+			continue
+		}
+		seen[name] = true
+		tools = append(tools, spec)
+	}
+
+	for _, name := range AllToolNames() {
+		if seen[name] {
+			continue
+		}
+		spec := ToolRegistry[name]
+		for _, detect := range spec.DetectPaths {
+			if _, err := os.Stat(filepath.Join(projectRoot, filepath.FromSlash(detect))); err == nil {
+				seen[name] = true
+				tools = append(tools, spec)
+				break
+			}
+		}
+	}
+
+	if len(tools) == 0 {
+		return []ToolSpec{StandardFallback}
+	}
+
+	sort.Slice(tools, func(i, j int) bool { return tools[i].Name < tools[j].Name })
+	return tools
+}
+
+// PlanTargets returns the smallest set of directories for kind such that
+// every tool that reads kind is served at least once. It is a greedy set
+// cover over each tool's Reads: the candidate directory reaching the most
+// still-uncovered tools wins each round, ties broken by directory name so
+// results are deterministic. Tools that read nothing for kind are skipped.
+func PlanTargets(kind Kind, tools []ToolSpec) []string {
+	var needing []ToolSpec
+	candidates := make(map[string]bool)
+	for _, tool := range tools {
+		if !tool.ReadsKind(kind) {
+			continue
+		}
+		needing = append(needing, tool)
+		if dir := tool.Writes[kind]; dir != "" {
+			candidates[dir] = true
+		}
+	}
+
+	covered := make(map[string]bool)
+	var chosen []string
+	for len(covered) < len(needing) {
+		bestDir := ""
+		bestCount := 0
+		for _, dir := range sortedKeys(candidates) {
+			count := 0
+			for _, tool := range needing {
+				if !covered[tool.Name] && tool.readsDir(kind, dir) {
+					count++
+				}
+			}
+			if count > bestCount {
+				bestCount = count
+				bestDir = dir
+			}
+		}
+		if bestCount == 0 {
+			break
+		}
+		chosen = append(chosen, bestDir)
+		for _, tool := range needing {
+			if tool.readsDir(kind, bestDir) {
+				covered[tool.Name] = true
+			}
+		}
+		delete(candidates, bestDir)
+	}
+
+	sort.Strings(chosen)
+	return chosen
+}
+
+func sortedKeys(set map[string]bool) []string {
+	keys := make([]string, 0, len(set))
+	for key := range set {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// BridgeContent renders the generated instruction file for a tool that does
+// not read AGENTS.md. Claude Code strips the HTML comment before the file
+// enters context.
+func BridgeContent(tool ToolSpec) string {
+	return fmt.Sprintf("<!-- csaw-managed: generated because %s reads %s, not AGENTS.md. Edit AGENTS.md in its source registry; csaw unmount removes this file. -->\n%s\n",
+		tool.DisplayName, tool.InstructionFile, tool.BridgeImport)
+}
+
+// skillParts splits a registry path under skills/ into the skill name and the
+// path of the file inside the skill directory. Any file under
+// skills/<name>/ (or skills/experimental/<name>/) belongs to skill <name>,
+// so supporting files such as references/ and scripts/ travel with SKILL.md.
+func skillParts(rel string) (name string, rest string, ok bool) {
+	segments := strings.Split(rel, "/")
+	index := -1
+	for i, segment := range segments {
+		if segment == "skills" {
+			index = i
+			break
+		}
+	}
+	if index < 0 {
+		return "", "", false
+	}
+	nameIndex := index + 1
+	if nameIndex < len(segments) && segments[nameIndex] == "experimental" {
+		nameIndex++
+	}
+	if nameIndex >= len(segments)-1 {
+		return "", "", false
+	}
+	return segments[nameIndex], strings.Join(segments[nameIndex+1:], "/"), true
+}
+
+// isSkillEntry returns true if the source entry belongs to a skill directory
+// (any file under skills/<name>/).
+func isSkillEntry(entry SourceEntry) bool {
+	_, _, ok := skillParts(entry.RelativePath)
+	return ok
+}
+
+// isAgentEntry returns true if the source entry is a subagent definition
+// under the agents/ directory (e.g., agents/code-reviewer.md, agents/planner.md).
+// Root-level AGENTS.md is NOT an agent entry — it mounts to project root.
+func isAgentEntry(entry SourceEntry) bool {
+	return strings.HasPrefix(entry.RelativePath, "agents/") && strings.HasSuffix(entry.RelativePath, ".md")
+}
+
+// isRuleEntry returns true if the source entry is a rule/instruction file
+// under the rules/ directory (e.g., rules/go-conventions.md).
+func isRuleEntry(entry SourceEntry) bool {
+	return strings.HasPrefix(entry.RelativePath, "rules/") && strings.HasSuffix(entry.RelativePath, ".md")
+}
+
+// ExpandToolTargets redirects registry entries into the project paths the
+// configured tools read.
+//
+//   - MCP and ignore files map to fixed per-tool paths.
+//   - Skill directories, agents, rules, and hook scripts are projected into the
+//     directories chosen by PlanTargets, so each configured tool sees every
+//     file exactly once.
+//   - Instruction files stay at the project root. When a tool reads a different
+//     root file than AGENTS.md (Claude Code reads CLAUDE.md) and the registry
+//     does not provide it, csaw adds a generated bridge file that imports
+//     AGENTS.md.
+//
+// With no tools, entries are returned after MCP and ignore projection only.
+func ExpandToolTargets(entries []SourceEntry, tools []ToolSpec) []SourceEntry {
+	entries = expandMCPTargets(entries)
+	entries = expandIgnoreTargets(entries)
+	if len(tools) == 0 {
+		return entries
+	}
+
+	targets := map[Kind][]string{
+		KindSkill: PlanTargets(KindSkill, tools),
+		KindAgent: PlanTargets(KindAgent, tools),
+		KindRule:  PlanTargets(KindRule, tools),
+		KindHook:  PlanTargets(KindHook, tools),
+	}
+
+	var expanded []SourceEntry
+	present := make(map[string]SourceEntry)
+	for _, entry := range entries {
+		if name, rest, ok := skillParts(entry.RelativePath); ok {
+			if len(targets[KindSkill]) == 0 {
+				expanded = append(expanded, entry)
+				continue
+			}
+			for _, dir := range targets[KindSkill] {
+				expanded = append(expanded, projectEntry(entry, path.Join(dir, name, rest)))
+			}
+			continue
+		}
+
+		switch {
+		case isAgentEntry(entry):
+			expanded = appendProjected(expanded, entry, targets[KindAgent])
+		case isRuleEntry(entry):
+			expanded = appendProjected(expanded, entry, targets[KindRule])
+		case isHookEntry(entry):
+			expanded = appendProjected(expanded, entry, targets[KindHook])
+		default:
+			if isInstructionEntry(entry) {
+				present[entry.RelativePath] = entry
+			}
+			expanded = append(expanded, entry)
+		}
+	}
+
+	if canonical, ok := present["AGENTS.md"]; ok {
+		bridged := make(map[string]bool)
+		for _, tool := range sortedTools(tools) {
+			file := tool.InstructionFile
+			if tool.BridgeImport == "" || file == "" || file == "AGENTS.md" {
+				continue
+			}
+			if _, exists := present[file]; exists || bridged[file] {
+				continue
+			}
+			bridged[file] = true
+			expanded = append(expanded, SourceEntry{
+				SourceName:    canonical.SourceName,
+				RelativePath:  file,
+				QualifiedPath: canonical.QualifiedPath + "→" + file,
+				FullPath:      canonical.FullPath,
+				Priority:      canonical.Priority,
+				Protected:     canonical.Protected,
+				Generated:     true,
+				Content:       BridgeContent(tool),
+			})
+		}
+	}
+
+	return expanded
+}
+
+func sortedTools(tools []ToolSpec) []ToolSpec {
+	sorted := append([]ToolSpec(nil), tools...)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Name < sorted[j].Name })
+	return sorted
+}
+
+func projectEntry(entry SourceEntry, rel string) SourceEntry {
+	return SourceEntry{
+		SourceName:    entry.SourceName,
+		RelativePath:  rel,
+		QualifiedPath: entry.QualifiedPath + "→" + rel,
+		FullPath:      entry.FullPath,
+		Priority:      entry.Priority,
+		Protected:     entry.Protected,
+	}
+}
+
+// appendProjected projects a single-file registry entry into each target
+// directory. With no targets the entry is kept at its original path.
+func appendProjected(expanded []SourceEntry, entry SourceEntry, dirs []string) []SourceEntry {
+	if len(dirs) == 0 {
+		return append(expanded, entry)
+	}
+	base := filepath.Base(entry.RelativePath)
+	for _, dir := range dirs {
+		expanded = append(expanded, projectEntry(entry, path.Join(dir, base)))
+	}
+	return expanded
+}
+
 // KindOfProjectPath classifies a project-relative mounted path by destination.
 // This is the post-projection classifier used by inspect to group mounted
 // files by what they are.
 func KindOfProjectPath(rel string) Kind {
 	rel = filepath.ToSlash(rel)
 
-	if !strings.Contains(rel, "/") {
-		switch rel {
-		case "AGENTS.md", "CLAUDE.md", "AGENT.md", "GEMINI.md", "QWEN.md", ".goosehints":
-			return KindInstruction
-		}
+	if !strings.Contains(rel, "/") && isInstructionFile(rel) {
+		return KindInstruction
 	}
 
 	for _, target := range KnownIgnoreTargets {
@@ -155,266 +550,82 @@ func KindOfProjectPath(rel string) Kind {
 		return KindMCP
 	}
 
-	for _, tool := range ToolRegistry {
-		prefix := tool.Dir + "/"
-		if !strings.HasPrefix(rel, prefix) {
-			continue
-		}
-		rest := strings.TrimPrefix(rel, prefix)
-		if tool.AgentsSubdir != "" && strings.HasPrefix(rest, tool.AgentsSubdir+"/") {
-			return KindAgent
-		}
-		if tool.SkillsSubdir != "" && strings.HasPrefix(rest, tool.SkillsSubdir+"/") {
-			return KindSkill
-		}
-		if tool.RulesSubdir != "" && strings.HasPrefix(rest, tool.RulesSubdir+"/") {
-			return KindRule
-		}
-		if tool.HooksSubdir != "" && strings.HasPrefix(rest, tool.HooksSubdir+"/") {
-			return KindHook
-		}
-	}
-
-	if strings.HasPrefix(rel, StandardFallback.Dir+"/") {
-		rest := strings.TrimPrefix(rel, StandardFallback.Dir+"/")
-		if StandardFallback.SkillsSubdir != "" && strings.HasPrefix(rest, StandardFallback.SkillsSubdir+"/") {
-			return KindSkill
+	for _, dk := range projectDirKinds() {
+		if strings.HasPrefix(rel, dk.dir+"/") {
+			return dk.kind
 		}
 	}
 
 	return KindOther
 }
 
-// ToolDir describes a tool's directory conventions for skills, rules, agents, and hooks.
-type ToolDir struct {
-	// Dir is the dot-directory name (e.g., ".claude").
-	Dir string
-	// SkillsSubdir is the path under Dir where skills are stored (e.g., "skills").
-	SkillsSubdir string
-	// RulesSubdir is the path under Dir where rule/instruction files are stored.
-	// Empty means this tool doesn't have a rules directory.
-	RulesSubdir string
-	// RulesSuffix, if non-empty, rewrites projected rule filenames by replacing
-	// the source extension. Used by tools like GitHub Copilot that require
-	// per-file suffixes (e.g., "security.md" → "security.instructions.md").
-	RulesSuffix string
-	// AgentsSubdir is the path under Dir where subagent definitions are stored.
-	// Empty means this tool doesn't support subagents.
-	AgentsSubdir string
-	// AgentsSuffix, if non-empty, rewrites projected agent filenames the same
-	// way as RulesSuffix (e.g., ".agent.md" for Copilot).
-	AgentsSuffix string
-	// HooksSubdir is the path under Dir where lifecycle hook scripts are stored.
-	// Empty means this tool doesn't have a file-based hooks directory.
-	HooksSubdir string
-	// HooksSuffix, if non-empty, rewrites projected hook filenames the same
-	// way as RulesSuffix.
-	HooksSuffix string
+type dirKind struct {
+	dir  string
+	kind Kind
 }
 
-// ToolRegistry maps short tool names to their directory conventions.
-//
-// Per-tool support matrix is derived from docs/reference/tool-projection.json.
-// Tools NOT included and why:
-//   - codex has no `.codex/agents/` (uses TOML inline tables in config.toml)
-//   - cursor has no `.cursor/agents/` (Background Agents are runtime, not files)
-//   - goose has `.goose/recipes/` (YAML, not csaw's SKILL.md folder pattern) and
-//     `.goosehints` (project-root single file); needs new kind support — pending.
-//   - gemini removed in v0.6.0: Google sunset Gemini CLI on 2026-06-18; users
-//     should migrate to antigravity which reuses `.agents/` (also csaw's
-//     StandardFallback path). GEMINI.md is still recognized as an instruction
-//     file (Antigravity reads it).
-var ToolRegistry = map[string]ToolDir{
-	"claude":      {Dir: ".claude", SkillsSubdir: "skills", RulesSubdir: "rules", AgentsSubdir: "agents", HooksSubdir: "hooks"},
-	"opencode":    {Dir: ".opencode", SkillsSubdir: "skills", AgentsSubdir: "agents"},
-	"codex":       {Dir: ".codex", SkillsSubdir: "skills"}, // hooks live in config.toml [hooks] — not file-projectable
-	"cursor":      {Dir: ".cursor", RulesSubdir: "rules"},
-	"antigravity": {Dir: ".agents", SkillsSubdir: "skills"}, // Replaces sunset Gemini CLI. Same path as StandardFallback.
-	"goose":       {Dir: ".goose"},                          // .goosehints handled at instruction layer; recipes are user-scope.
-
-	// GitHub Copilot (VS Code + CLI share .github/ paths). Requires per-file
-	// suffixes (.instructions.md, .agent.md); csaw rewrites filenames on
-	// projection. Projected files are hidden from git like every other
-	// projection — teams who want them committed for PR review run
-	// `csaw show .github/instructions/*` or equivalent. Single-file
-	// .github/copilot-instructions.md alias is not yet projected; AGENTS.md
-	// at project root covers Copilot's universal-instructions case.
-	"copilot": {
-		Dir:          ".github",
-		RulesSubdir:  "instructions",
-		RulesSuffix:  ".instructions.md",
-		AgentsSubdir: "agents",
-		AgentsSuffix: ".agent.md",
-	},
-}
-
-// KnownToolDirs returns all known tool directories.
-func KnownToolDirs() []ToolDir {
-	var dirs []ToolDir
-	for _, tool := range ToolRegistry {
-		dirs = append(dirs, tool)
+// projectDirKinds returns every directory any known tool reads or csaw
+// writes, tagged with its kind and sorted longest-first so nested directories
+// win prefix matching.
+func projectDirKinds() []dirKind {
+	seen := make(map[string]Kind)
+	add := func(kind Kind, dir string) {
+		if dir != "" {
+			seen[dir] = kind
+		}
 	}
-	return dirs
-}
-
-// AllToolNames returns all known tool names sorted alphabetically.
-func AllToolNames() []string {
-	names := make([]string, 0, len(ToolRegistry))
-	for name := range ToolRegistry {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
-}
-
-// StandardFallback is always used as a skill mount target, created if needed.
-var StandardFallback = ToolDir{Dir: ".agents", SkillsSubdir: "skills"}
-
-// ResolveToolDirs determines which tool directories to use by combining:
-// 1. Configured tools (from config.yml) — the baseline
-// 2. Auto-detected tool directories in the project — merged in
-// 3. .agents/ fallback — always included
-func ResolveToolDirs(projectRoot string, configuredTools []string) []ToolDir {
-	found := make(map[string]bool)
-	var dirs []ToolDir
-
-	// Start with configured tools
-	for _, name := range configuredTools {
-		if tool, ok := ToolRegistry[name]; ok {
-			if !found[tool.Dir] {
-				found[tool.Dir] = true
-				dirs = append(dirs, tool)
+	for _, spec := range append(allToolSpecs(), StandardFallback) {
+		for kind, dirs := range spec.Reads {
+			for _, dir := range dirs {
+				add(kind, dir)
 			}
 		}
-	}
-
-	// Add auto-detected tool dirs (even if not in config)
-	for _, tool := range ToolRegistry {
-		if found[tool.Dir] {
-			continue
-		}
-		dir := filepath.Join(projectRoot, tool.Dir)
-		if info, err := os.Stat(dir); err == nil && info.IsDir() {
-			found[tool.Dir] = true
-			dirs = append(dirs, tool)
+		for kind, dir := range spec.Writes {
+			add(kind, dir)
 		}
 	}
-
-	// Always include the standard fallback
-	if !found[StandardFallback.Dir] {
-		fallbackPath := filepath.Join(projectRoot, StandardFallback.Dir)
-		os.MkdirAll(fallbackPath, 0o755)
-		dirs = append(dirs, StandardFallback)
+	out := make([]dirKind, 0, len(seen))
+	for dir, kind := range seen {
+		out = append(out, dirKind{dir: dir, kind: kind})
 	}
-
-	return dirs
-}
-
-// isSkillEntry returns true if the source entry looks like a skill
-// (lives under a skills/ directory and is named SKILL.md).
-func isSkillEntry(entry SourceEntry) bool {
-	rel := entry.RelativePath
-	return strings.HasSuffix(rel, "/SKILL.md") && containsSegment(rel, "skills")
-}
-
-// isAgentEntry returns true if the source entry is a subagent definition
-// under the agents/ directory (e.g., agents/code-reviewer.md, agents/planner.md).
-// These are projected into tool-native agent directories (.claude/agents/, etc.).
-// Root-level AGENTS.md is NOT an agent entry — it mounts to project root.
-func isAgentEntry(entry SourceEntry) bool {
-	return strings.HasPrefix(entry.RelativePath, "agents/") && strings.HasSuffix(entry.RelativePath, ".md")
-}
-
-// isRuleEntry returns true if the source entry is a rule/instruction file
-// under the rules/ directory (e.g., rules/go-conventions.md).
-// These are projected into tool-native rule directories (.claude/rules/, etc.).
-func isRuleEntry(entry SourceEntry) bool {
-	return strings.HasPrefix(entry.RelativePath, "rules/") && strings.HasSuffix(entry.RelativePath, ".md")
-}
-
-// skillName extracts the skill directory name from a skill entry path.
-// e.g., "skills/code-review/SKILL.md" → "code-review"
-func skillName(entry SourceEntry) string {
-	dir := filepath.Dir(entry.RelativePath)
-	return filepath.Base(dir)
-}
-
-// ExpandToolTargets takes a list of source entries and redirects skill entries
-// into tool-specific directories. Non-skill entries (AGENTS.md, CLAUDE.md,
-// agents/, commands/, workflows/) are kept at their original paths.
-//
-// Skill entries are NOT mounted at their original registry path (e.g.,
-// skills/code-review/SKILL.md). Instead, they are mounted only into tool
-// directories (e.g., .claude/skills/code-review/SKILL.md). This ensures
-// skills are discovered by tool-native scanning rather than relying on
-// git-aware file indexing.
-func ExpandToolTargets(entries []SourceEntry, toolDirs []ToolDir) []SourceEntry {
-	// First pass: project MCP configs to tool-specific paths.
-	entries = expandMCPTargets(entries)
-	// Second pass: project ignore files to tool-specific paths.
-	entries = expandIgnoreTargets(entries)
-
-	var expanded []SourceEntry
-	for _, entry := range entries {
-		if isSkillEntry(entry) {
-			if len(toolDirs) == 0 {
-				expanded = append(expanded, entry)
-				continue
-			}
-			name := skillName(entry)
-			for _, tool := range toolDirs {
-				if tool.SkillsSubdir == "" {
-					continue
-				}
-				toolRelPath := filepath.ToSlash(
-					filepath.Join(tool.Dir, tool.SkillsSubdir, name, "SKILL.md"),
-				)
-				expanded = append(expanded, SourceEntry{
-					SourceName:    entry.SourceName,
-					RelativePath:  toolRelPath,
-					QualifiedPath: entry.QualifiedPath + "→" + toolRelPath,
-					FullPath:      entry.FullPath,
-					Priority:      entry.Priority,
-					Protected:     entry.Protected,
-				})
-			}
-			continue
+	sort.Slice(out, func(i, j int) bool {
+		if len(out[i].dir) != len(out[j].dir) {
+			return len(out[i].dir) > len(out[j].dir)
 		}
+		return out[i].dir < out[j].dir
+	})
+	return out
+}
 
-		if isAgentEntry(entry) {
-			// Mount subagent definitions into tool agent directories
-			// (e.g., agents/code-reviewer.md → .claude/agents/code-reviewer.md;
-			// Copilot rewrites to .github/agents/code-reviewer.agent.md)
-			expanded = appendProjected(expanded, entry, toolDirs,
-				func(t ToolDir) string { return t.AgentsSubdir },
-				func(t ToolDir) string { return t.AgentsSuffix })
-			continue
-		}
-
-		if isRuleEntry(entry) {
-			// Mount rule files into tool rule directories
-			// (e.g., rules/go-conventions.md → .claude/rules/go-conventions.md;
-			// Copilot rewrites to .github/instructions/go-conventions.instructions.md)
-			expanded = appendProjected(expanded, entry, toolDirs,
-				func(t ToolDir) string { return t.RulesSubdir },
-				func(t ToolDir) string { return t.RulesSuffix })
-			continue
-		}
-
-		if isHookEntry(entry) {
-			// Mount hook scripts into tool hook directories
-			// (e.g., hooks/pre-commit.sh → .claude/hooks/pre-commit.sh)
-			expanded = appendProjected(expanded, entry, toolDirs,
-				func(t ToolDir) string { return t.HooksSubdir },
-				func(t ToolDir) string { return t.HooksSuffix })
-			continue
-		}
-
-		// Everything else (AGENTS.md, CLAUDE.md, etc.): keep at original path
-		expanded = append(expanded, entry)
+func allToolSpecs() []ToolSpec {
+	specs := make([]ToolSpec, 0, len(ToolRegistry))
+	for _, name := range AllToolNames() {
+		specs = append(specs, ToolRegistry[name])
 	}
+	return specs
+}
 
-	return expanded
+// KnownTopLevelDirs returns the first path segment of every directory csaw
+// may write or a tool may read (".claude", ".agents", ...), sorted.
+func KnownTopLevelDirs() []string {
+	seen := make(map[string]bool)
+	for _, dk := range projectDirKinds() {
+		first, _, _ := strings.Cut(dk.dir, "/")
+		seen[first] = true
+	}
+	return sortedKeys(seen)
+}
+
+// readDirsForKind returns every directory any known tool reads for kind,
+// deduplicated and sorted.
+func readDirsForKind(kind Kind) []string {
+	seen := make(map[string]bool)
+	for _, spec := range append(allToolSpecs(), StandardFallback) {
+		for _, dir := range spec.Reads[kind] {
+			seen[dir] = true
+		}
+	}
+	return sortedKeys(seen)
 }
 
 // MCPTarget maps a registry filename under mcp/ to a project-relative path
@@ -428,6 +639,8 @@ type MCPTarget struct {
 
 // KnownMCPTargets lists the supported MCP config projections. Each entry maps
 // a file in the registry's mcp/ directory to the path a tool reads from.
+// Claude Code reads .mcp.json. Codex keeps MCP inside .codex/config.toml,
+// which `csaw mcp sync codex` merges rather than links.
 var KnownMCPTargets = []MCPTarget{
 	{RegistryFile: "claude-code.json", ProjectPath: ".mcp.json"},
 	{RegistryFile: "vscode.json", ProjectPath: ".vscode/mcp.json"},
@@ -446,12 +659,15 @@ type IgnoreTarget struct {
 
 // KnownIgnoreTargets lists the supported per-tool ignore file projections.
 // Each entry maps a file in the registry's ignore/ directory to the path the
-// corresponding tool reads. Uses gitignore-style syntax in all cases.
+// corresponding tool reads. Uses gitignore-style syntax in all cases. Neither
+// Claude Code nor Codex has a project ignore file; these serve other tools a
+// registry may still carry files for.
 var KnownIgnoreTargets = []IgnoreTarget{
 	{RegistryFile: "cursor", ProjectPath: ".cursorignore"},
 	{RegistryFile: "cody", ProjectPath: ".cody/ignore"},
 	{RegistryFile: "aider", ProjectPath: ".aiderignore"},
 	{RegistryFile: "lingma", ProjectPath: ".tongyiignore"},
+	{RegistryFile: "gemini", ProjectPath: ".geminiignore"},
 }
 
 // ignoreProjectPath returns the project-relative target path for an ignore
@@ -481,14 +697,7 @@ func expandIgnoreTargets(entries []SourceEntry) []SourceEntry {
 			expanded = append(expanded, entry)
 			continue
 		}
-		expanded = append(expanded, SourceEntry{
-			SourceName:    entry.SourceName,
-			RelativePath:  projectPath,
-			QualifiedPath: entry.QualifiedPath + "→" + projectPath,
-			FullPath:      entry.FullPath,
-			Priority:      entry.Priority,
-			Protected:     entry.Protected,
-		})
+		expanded = append(expanded, projectEntry(entry, projectPath))
 	}
 	return expanded
 }
@@ -529,61 +738,9 @@ func expandMCPTargets(entries []SourceEntry) []SourceEntry {
 			expanded = append(expanded, entry)
 			continue
 		}
-		expanded = append(expanded, SourceEntry{
-			SourceName:    entry.SourceName,
-			RelativePath:  projectPath,
-			QualifiedPath: entry.QualifiedPath + "→" + projectPath,
-			FullPath:      entry.FullPath,
-			Priority:      entry.Priority,
-			Protected:     entry.Protected,
-		})
+		expanded = append(expanded, projectEntry(entry, projectPath))
 	}
 	return expanded
-}
-
-// appendProjected projects a registry entry into tool-native directories using
-// the provided subdir and suffix selectors. If suffixFn returns a non-empty
-// suffix, the source extension is replaced (e.g., "security.md" →
-// "security.instructions.md" for Copilot). If no tool has the relevant subdir,
-// the entry is kept at its original path.
-func appendProjected(expanded []SourceEntry, entry SourceEntry, toolDirs []ToolDir, subdirFn, suffixFn func(ToolDir) string) []SourceEntry {
-	srcBase := filepath.Base(entry.RelativePath)
-	mounted := false
-	for _, tool := range toolDirs {
-		subdir := subdirFn(tool)
-		if subdir == "" {
-			continue
-		}
-		name := srcBase
-		if suffix := suffixFn(tool); suffix != "" {
-			name = strings.TrimSuffix(srcBase, filepath.Ext(srcBase)) + suffix
-		}
-		toolRelPath := filepath.ToSlash(
-			filepath.Join(tool.Dir, subdir, name),
-		)
-		expanded = append(expanded, SourceEntry{
-			SourceName:    entry.SourceName,
-			RelativePath:  toolRelPath,
-			QualifiedPath: entry.QualifiedPath + "→" + toolRelPath,
-			FullPath:      entry.FullPath,
-			Priority:      entry.Priority,
-			Protected:     entry.Protected,
-		})
-		mounted = true
-	}
-	if !mounted {
-		expanded = append(expanded, entry)
-	}
-	return expanded
-}
-
-func containsSegment(path string, segment string) bool {
-	for _, part := range strings.Split(path, "/") {
-		if part == segment {
-			return true
-		}
-	}
-	return false
 }
 
 // AdoptableFile describes a file in a project that can be adopted into a registry.
@@ -594,26 +751,30 @@ type AdoptableFile struct {
 
 // ScanAdoptableFiles scans a project directory for AI config files that can be
 // adopted into a csaw registry. This is the reverse of ExpandToolTargets —
-// it maps tool-native paths back to registry-standard paths.
+// it maps tool-native paths back to registry-standard paths. Every directory
+// a supported tool reads is scanned.
 func ScanAdoptableFiles(projectRoot string) []AdoptableFile {
 	var files []AdoptableFile
 	seen := make(map[string]bool) // registry path → already found
 
+	add := func(projectPath, registryPath string) {
+		if seen[registryPath] {
+			return
+		}
+		seen[registryPath] = true
+		files = append(files, AdoptableFile{ProjectPath: filepath.ToSlash(projectPath), RegistryPath: registryPath})
+	}
+
 	// Root-level instruction files
 	for _, name := range []string{"AGENTS.md", "CLAUDE.md"} {
-		path := filepath.Join(projectRoot, name)
-		if _, err := os.Stat(path); err == nil {
-			files = append(files, AdoptableFile{ProjectPath: name, RegistryPath: name})
-			seen[name] = true
+		if _, err := os.Stat(filepath.Join(projectRoot, name)); err == nil {
+			add(name, name)
 		}
 	}
 
-	// Skills from tool directories (reverse: .claude/skills/foo/SKILL.md → skills/foo/SKILL.md)
-	for _, tool := range ToolRegistry {
-		if tool.SkillsSubdir == "" {
-			continue
-		}
-		skillsDir := filepath.Join(projectRoot, tool.Dir, tool.SkillsSubdir)
+	// Whole skill directories (reverse: .claude/skills/foo/** → skills/foo/**)
+	for _, dir := range readDirsForKind(KindSkill) {
+		skillsDir := filepath.Join(projectRoot, filepath.FromSlash(dir))
 		entries, err := os.ReadDir(skillsDir)
 		if err != nil {
 			continue
@@ -622,90 +783,62 @@ func ScanAdoptableFiles(projectRoot string) []AdoptableFile {
 			if !entry.IsDir() {
 				continue
 			}
-			skillFile := filepath.Join(skillsDir, entry.Name(), "SKILL.md")
-			if _, err := os.Stat(skillFile); err != nil {
+			skillRoot := filepath.Join(skillsDir, entry.Name())
+			if _, err := os.Stat(filepath.Join(skillRoot, "SKILL.md")); err != nil {
 				continue
 			}
-			registryPath := "skills/" + entry.Name() + "/SKILL.md"
-			if seen[registryPath] {
-				continue
-			}
-			seen[registryPath] = true
-			files = append(files, AdoptableFile{
-				ProjectPath:  filepath.ToSlash(filepath.Join(tool.Dir, tool.SkillsSubdir, entry.Name(), "SKILL.md")),
-				RegistryPath: registryPath,
+			filepath.WalkDir(skillRoot, func(p string, d os.DirEntry, err error) error {
+				if err != nil || d.IsDir() {
+					return nil
+				}
+				rest, err := filepath.Rel(skillRoot, p)
+				if err != nil {
+					return nil
+				}
+				rest = filepath.ToSlash(rest)
+				add(path.Join(dir, entry.Name(), rest), path.Join("skills", entry.Name(), rest))
+				return nil
 			})
 		}
 	}
 
-	// Rules from tool rule directories (reverse: .claude/rules/go.md → rules/go.md)
-	for _, tool := range ToolRegistry {
-		if tool.RulesSubdir == "" {
-			continue
-		}
-		rulesDir := filepath.Join(projectRoot, tool.Dir, tool.RulesSubdir)
-		entries, err := os.ReadDir(rulesDir)
-		if err != nil {
-			continue
-		}
-		for _, entry := range entries {
-			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
-				continue
-			}
-			registryPath := "rules/" + entry.Name()
-			if seen[registryPath] {
-				continue
-			}
-			seen[registryPath] = true
-			files = append(files, AdoptableFile{
-				ProjectPath:  filepath.ToSlash(filepath.Join(tool.Dir, tool.RulesSubdir, entry.Name())),
-				RegistryPath: registryPath,
-			})
+	// Rules (reverse: .claude/rules/go.md → rules/go.md)
+	for _, dir := range readDirsForKind(KindRule) {
+		for _, name := range markdownFilesIn(filepath.Join(projectRoot, filepath.FromSlash(dir))) {
+			add(path.Join(dir, name), path.Join("rules", name))
 		}
 	}
 
-	// Subagent definitions from tool agent directories (reverse: .claude/agents/reviewer.md → agents/reviewer.md)
-	for _, tool := range ToolRegistry {
-		if tool.AgentsSubdir == "" {
-			continue
-		}
-		agentsDir := filepath.Join(projectRoot, tool.Dir, tool.AgentsSubdir)
-		entries, err := os.ReadDir(agentsDir)
-		if err != nil {
-			continue
-		}
-		for _, entry := range entries {
-			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
-				continue
-			}
-			registryPath := "agents/" + entry.Name()
-			if seen[registryPath] {
-				continue
-			}
-			seen[registryPath] = true
-			files = append(files, AdoptableFile{
-				ProjectPath:  filepath.ToSlash(filepath.Join(tool.Dir, tool.AgentsSubdir, entry.Name())),
-				RegistryPath: registryPath,
-			})
+	// Subagent definitions (reverse: .claude/agents/reviewer.md → agents/reviewer.md)
+	for _, dir := range readDirsForKind(KindAgent) {
+		for _, name := range markdownFilesIn(filepath.Join(projectRoot, filepath.FromSlash(dir))) {
+			add(path.Join(dir, name), path.Join("agents", name))
 		}
 	}
 
 	// MCP configs (reverse: .mcp.json → mcp/claude-code.json)
 	for _, target := range KnownMCPTargets {
-		path := filepath.Join(projectRoot, filepath.FromSlash(target.ProjectPath))
-		if _, err := os.Stat(path); err != nil {
-			continue
+		if _, err := os.Stat(filepath.Join(projectRoot, filepath.FromSlash(target.ProjectPath))); err == nil {
+			add(target.ProjectPath, "mcp/"+target.RegistryFile)
 		}
-		registryPath := "mcp/" + target.RegistryFile
-		if seen[registryPath] {
-			continue
-		}
-		seen[registryPath] = true
-		files = append(files, AdoptableFile{
-			ProjectPath:  target.ProjectPath,
-			RegistryPath: registryPath,
-		})
 	}
 
 	return files
+}
+
+// markdownFilesIn lists .md files directly inside dir, sorted.
+func markdownFilesIn(dir string) []string {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var names []string
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+			continue
+		}
+		names = append(names, entry.Name())
+	}
+	sort.Strings(names)
+	return names
 }

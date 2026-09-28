@@ -292,19 +292,25 @@ csaw classifies AI workspace files by kind:
 
 | Kind         | Registry path                                                | Project target              |
 | ------------ | ------------------------------------------------------------ | --------------------------- |
-| Instructions | `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.goosehints`         | Project root                |
-| Rules        | `rules/*.md`                                                 | Tool rule directories       |
-| Agents       | `agents/*.md`                                                | Tool agent directories      |
-| Skills       | `skills/*/SKILL.md`                                          | Tool skill directories      |
-| MCP          | `mcp/*.json`                                                 | Tool MCP config paths       |
-| Hooks        | `hooks/*`                                                    | Tool hook directories       |
-| Ignore       | `ignore/*` (one file per tool)                               | Tool-specific ignore paths  |
+| Instructions | `AGENTS.md`, `CLAUDE.md`                                     | Project root; `CLAUDE.md` is a generated bridge when the registry has only `AGENTS.md` |
+| Rules        | `rules/*.md`                                                 | `.claude/rules/` (Codex has no rules directory) |
+| Agents       | `agents/*.md`                                                | `.claude/agents/` (Codex has no agents directory) |
+| Skills       | `skills/<name>/` (whole directory: `SKILL.md`, `references/`, `scripts/`) | `.claude/skills/` for Claude Code, `.agents/skills/` for Codex |
+| MCP          | `mcp/*.json`, `mcp/codex.toml`                               | `.mcp.json`; `.codex/config.toml` via `csaw mcp sync codex` |
+| Hooks        | `hooks/*`                                                    | `.claude/hooks/` scripts only; you declare them in Claude Code's settings |
+| Ignore       | `ignore/*` (one file per tool)                               | Tool-specific ignore paths (other tools; Claude Code and Codex have none) |
 
 csaw deliberately does **not** project two additional kinds you might expect: `settings` (contains API keys and credentials — never project to a team source) and `memory` (today this is session state or user-private — revisit if a portable standard emerges). See [planning/projection-roadmap.md](planning/projection-roadmap.md).
 
-Tool projection means one registry shape can support multiple tools. For
-example, `skills/review/SKILL.md` can mount to `.claude/skills/review/SKILL.md`
-and `.opencode/skills/review/SKILL.md`. **GitHub Copilot is the rewriting case**: `rules/security.md` projects to `.github/instructions/security.instructions.md` (suffix is mandatory for Copilot; csaw applies it automatically).
+csaw supports two tools, **Claude Code** and **Codex**, and writes each kind into the smallest set of directories that every configured tool reads:
+
+- `claude` alone → everything under `.claude/`.
+- `codex` alone → `AGENTS.md` at the root and skills in `.agents/skills/`; rules, agents, and hook scripts stay at their registry paths because Codex has nowhere to read them.
+- `claude,codex` → skills in both `.claude/skills/` and `.agents/skills/` (Claude Code does not read `.agents/`); everything else under `.claude/`.
+
+**Claude Code reads `CLAUDE.md`, not `AGENTS.md`.** When Claude Code is a configured tool and the registry ships only `AGENTS.md`, csaw generates a `CLAUDE.md` containing `@AGENTS.md` so both tools read the same instructions. Generated files are tracked in mount state; unmount removes them, and if you edited one, your edits are kept under `.csaw-stash/modified/`.
+
+The full per-tool table is generated from the code in [reference/tool-projection.md](reference/tool-projection.md).
 
 The starter `default` profile includes instructions, rules, agents, and skills.
 It does not include MCP, hooks, or ignore files. Mount those by adding
@@ -314,7 +320,7 @@ qualified patterns.
 Set preferred tools:
 
 ```bash
-csaw config set tools claude,cursor,codex
+csaw config set tools claude,codex
 ```
 
 Mount only some kinds:
@@ -350,9 +356,10 @@ personal-ai/
 Mount the starter profile for instructions, rules, agents, and skills. Then mount the rest explicitly: `csaw mount paths 'personal/mcp/**' 'personal/hooks/**' 'personal/ignore/**'` — or add `mcp/**`, `hooks/**`, `ignore/**` to `personal-ai/csaw.yml`. Predict where each file should appear before running `csaw inspect`.
 
 The interesting projections to predict:
-- `hooks/pre-commit.sh` → `.claude/hooks/pre-commit.sh` (only claude has `HooksSubdir` today).
-- `ignore/cursor` → `.cursorignore` (single-file alias, like MCP).
-- If you have copilot in your tools config, `rules/security.md` *also* lands at `.github/instructions/security.instructions.md` with the suffix rewritten. Like every other csaw projection, it's hidden from git by default. To make it visible for PR review (the conventional Copilot pattern), run `csaw show .github/instructions/security.instructions.md` as an explicit opt-in.
+- `AGENTS.md` → `AGENTS.md` (Codex reads it) plus a generated `CLAUDE.md` if claude is one of your tools.
+- `hooks/pre-commit.sh` → `.claude/hooks/pre-commit.sh` (scripts only; only claude has a hooks directory today, and you still declare the hook in settings).
+- `ignore/cursor` → `.cursorignore` (single-file alias, like MCP; neither Claude Code nor Codex reads one, so this only matters for registries that also serve other tools).
+- With `claude,codex`, the skill lands in `.claude/skills/` and `.agents/skills/` (Codex reads the neutral directory, not `.codex/skills/`).
 
 ## Module 6: Multi-Source Composition
 
@@ -847,7 +854,7 @@ If you show a file under a hidden tool directory, the parent directory can
 appear in `git status` until you hide the file again. Project policy files such
 as `.csaw/policy.yml` are independent of mount visibility.
 
-**GitHub Copilot doesn't change the rule.** Even though `.github/instructions/` is the GitHub-blessed location for shared team context that many teams want committed to git, csaw still hides projections there by default — consistent with everything else. Opting in is an explicit team decision: run `csaw show .github/instructions/*` (or per-file) to make them visible to PR reviewers.
+**Generated files don't change the rule either.** The `CLAUDE.md` bridge csaw writes for Claude Code is hidden from git like every projection. If a team wants a committed `CLAUDE.md`, commit a real one in the repo and csaw will stash it while mounted and restore it on unmount, or run `csaw show CLAUDE.md` as an explicit decision.
 
 ### Exercise
 
@@ -980,7 +987,7 @@ csaw hide <path>
 git check-ignore -v <path>
 ```
 
-If your team has run `csaw show .github/instructions/*` to make Copilot context visible for PR review, that's expected behavior — `csaw hide` will reverse it.
+If your team has run `csaw show AGENTS.md` to make the mounted instructions visible for PR review, that's expected behavior — `csaw hide` will reverse it.
 
 ### Audit Says Policy Missing
 
@@ -1104,7 +1111,7 @@ Build a personal source with:
 - One ignore file (`ignore/cursor` — gitignore-style patterns excluding `node_modules/` and `dist/`).
 
 Mount it into a disposable project, inspect it, audit it, promote the
-experimental skill, and unmount cleanly. Confirm with `git status` and `.git/info/exclude` that all projected files are hidden by default — including any Copilot projections under `.github/`. If you want Copilot's instructions visible for team PR review, run `csaw show .github/instructions/*` as a separate, explicit step.
+experimental skill, and unmount cleanly. Confirm with `git status` and `.git/info/exclude` that all projected files are hidden by default — including the generated `CLAUDE.md`. If you want a file visible for team PR review, run `csaw show <path>` as a separate, explicit step.
 
 ## Capstone 2: Team Governance
 
@@ -1151,7 +1158,7 @@ You are operating at expert level when you can:
 - Debug every `csaw check` issue without data loss.
 - Write a client isolation policy from memory.
 - Decide when to protect, pin, fork, promote, or keep repo-local.
-- Design a source layout that works across Claude Code, Codex, Cursor,
-  Windsurf, OpenCode, Copilot, and Antigravity.
+- Design a source layout that works across Claude Code and Codex, and still
+  gives other agents the `AGENTS.md` and `.agents/skills/` floor.
 - Review a csaw code change and identify which docs, tests, and workflows need
   updates.

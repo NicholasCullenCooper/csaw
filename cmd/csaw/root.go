@@ -889,10 +889,10 @@ func runMountCommand(cmd *cobra.Command, args []string, options mountRunOptions)
 	}
 
 	if len(configuredTools) == 0 && isInteractive() {
-		detected := mount.ResolveToolDirs(projectRoot, nil)
+		detected := mount.ResolveTools(projectRoot, nil)
 		hasRealTools := false
 		for _, d := range detected {
-			if d.Dir != ".agents" {
+			if d.Name != mount.StandardFallback.Name {
 				hasRealTools = true
 				break
 			}
@@ -915,9 +915,9 @@ func runMountCommand(cmd *cobra.Command, args []string, options mountRunOptions)
 		}
 	}
 
-	toolDirs := mount.ResolveToolDirs(projectRoot, configuredTools)
+	tools := mount.ResolveTools(projectRoot, configuredTools)
 	if !options.restore {
-		entries = mount.ExpandToolTargets(entries, toolDirs)
+		entries = mount.ExpandToolTargets(entries, tools)
 	}
 
 	result, err := mount.Apply(projectRoot, paths, entries, promptConflictResolver{
@@ -992,6 +992,9 @@ func newUnmountCommand() *cobra.Command {
 			}
 
 			fmt.Printf("%s %s\n", output.SymbolOK, inspect.RenderUnmountResult(result.Removed, result.Restored))
+			for _, kept := range result.KeptModified {
+				output.Warnf("kept your edits to a generated file at %s", kept)
+			}
 			fmt.Printf("\n  %s\n", tui.HintLine("Remount:", "csaw mount --restore"))
 			return nil
 		},
@@ -1707,11 +1710,9 @@ func remapPinnedMountsToDefault(projectRoot string, paths runtime.Paths, source 
 }
 
 func mountedToolDirCount(files []string) int {
-	known := map[string]bool{
-		mount.StandardFallback.Dir: true,
-	}
-	for _, tool := range mount.ToolRegistry {
-		known[tool.Dir] = true
+	known := map[string]bool{}
+	for _, dir := range mount.KnownTopLevelDirs() {
+		known[dir] = true
 	}
 
 	seen := map[string]bool{}
@@ -1911,21 +1912,8 @@ func newHideCommand() *cobra.Command {
 	}
 }
 
-var toolDisplayNames = map[string]string{
-	"claude":      "Claude Code",
-	"cursor":      "Cursor",
-	"opencode":    "OpenCode",
-	"codex":       "Codex CLI",
-	"antigravity": "Antigravity (Google)",
-	"goose":       "Goose (AAIF / Linux Foundation)",
-	"copilot":     "GitHub Copilot (VS Code + CLI)",
-}
-
 func toolDisplayName(key string) string {
-	if name, ok := toolDisplayNames[key]; ok {
-		return name
-	}
-	return key
+	return mount.ToolDisplayName(key)
 }
 
 func handlePullError(cmd *cobra.Command, err error) error {

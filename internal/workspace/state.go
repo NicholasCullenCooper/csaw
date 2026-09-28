@@ -135,6 +135,32 @@ func RestoreFile(store StateStore, projectRoot string, relativePath string) (boo
 	return true, nil
 }
 
+// ModifiedDirName is the subdirectory of the stash where csaw preserves
+// generated files a user edited before unmount. Nothing csaw removes is ever
+// the user's only copy.
+const ModifiedDirName = "modified"
+
+// StashModified moves a user-modified generated file out of the project into
+// .csaw-stash/modified/<relativePath> and returns that path.
+func StashModified(projectRoot string, relativePath string) (string, error) {
+	absolutePath := filepath.Join(projectRoot, filepath.FromSlash(relativePath))
+	content, err := os.ReadFile(absolutePath)
+	if err != nil {
+		return "", err
+	}
+	keptPath := filepath.Join(StashDir(projectRoot), ModifiedDirName, filepath.FromSlash(relativePath))
+	if err := os.MkdirAll(filepath.Dir(keptPath), 0o755); err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(keptPath, content, 0o644); err != nil {
+		return "", err
+	}
+	if err := os.Remove(absolutePath); err != nil {
+		return "", err
+	}
+	return keptPath, nil
+}
+
 func CleanupStash(store StateStore, projectRoot string) error {
 	manifest, err := store.ReadManifest(projectRoot)
 	if err != nil {

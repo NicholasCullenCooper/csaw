@@ -38,6 +38,9 @@ type Result struct {
 	AlreadyLinked int
 	Removed       int
 	Restored      int
+	// KeptModified lists generated files a user edited; unmount preserves
+	// them under .csaw-stash/modified/ instead of deleting the edits.
+	KeptModified []string
 }
 
 func Apply(projectRoot string, paths runtime.Paths, entries []SourceEntry, resolver ConflictResolver) (Result, error) {
@@ -63,22 +66,19 @@ func Apply(projectRoot string, paths runtime.Paths, entries []SourceEntry, resol
 		}
 
 		if _, err := os.Lstat(targetPath); err == nil {
-			if linkmode.IsLink(lm, targetPath, entry.FullPath) {
-				healthy, _ := linkmode.Verify(lm, targetPath, entry.FullPath, runtime.PathsEqual)
-				if healthy {
-					stateEntry, err := toMountedStateEntry(entry)
-					if err != nil {
+			if alreadyMounted(lm, targetPath, entry) {
+				stateEntry, err := toMountedStateEntry(entry)
+				if err != nil {
+					return result, err
+				}
+				currentState = workspace.UpsertMountedEntry(currentState, stateEntry)
+				if !workspace.IsGitIgnored(projectRoot, entry.RelativePath) {
+					if _, err := workspace.AddExclusion(projectRoot, entry.RelativePath); err != nil {
 						return result, err
 					}
-					currentState = workspace.UpsertMountedEntry(currentState, stateEntry)
-					if !workspace.IsGitIgnored(projectRoot, entry.RelativePath) {
-						if _, err := workspace.AddExclusion(projectRoot, entry.RelativePath); err != nil {
-							return result, err
-						}
-					}
-					result.AlreadyLinked++
-					continue
 				}
+				result.AlreadyLinked++
+				continue
 			}
 
 			action, err := resolver.Resolve(Conflict{
@@ -112,11 +112,17 @@ func Apply(projectRoot string, paths runtime.Paths, entries []SourceEntry, resol
 			return result, err
 		}
 
-		if _, err := os.Stat(entry.FullPath); err != nil {
-			return result, err
-		}
-		if err := linkmode.Create(lm, entry.FullPath, targetPath); err != nil {
-			return result, err
+		if entry.Generated {
+			if err := os.WriteFile(targetPath, []byte(entry.Content), 0o644); err != nil {
+				return result, err
+			}
+		} else {
+			if _, err := os.Stat(entry.FullPath); err != nil {
+				return result, err
+			}
+			if err := linkmode.Create(lm, entry.FullPath, targetPath); err != nil {
+				return result, err
+			}
 		}
 
 		// Only add git exclude if the path isn't already covered by .gitignore
@@ -171,8 +177,26 @@ func Unmount(projectRoot string, selection Selection) (Result, error) {
 
 	for _, entry := range selected {
 		targetPath := filepath.Join(projectRoot, filepath.FromSlash(entry.RelativePath))
-		if _, err := os.Lstat(targetPath); err == nil {
-			if linkmode.IsLink(lm, targetPath, entry.SourcePath) {
+		if info, err := os.Lstat(targetPath); err == nil {
+			switch {
+			case entry.Generated && info.Mode().IsRegular():
+				actualHash, err := workspace.FileSHA256(targetPath)
+				if err != nil {
+					return result, err
+				}
+				if actualHash == entry.ContentSHA256 {
+					if err := os.Remove(targetPath); err != nil {
+						return result, err
+					}
+				} else {
+					kept, err := workspace.StashModified(projectRoot, entry.RelativePath)
+					if err != nil {
+						return result, err
+					}
+					result.KeptModified = append(result.KeptModified, kept)
+				}
+				result.Removed++
+			case !entry.Generated && linkmode.IsLink(lm, targetPath, entry.SourcePath):
 				if err := os.Remove(targetPath); err != nil {
 					return result, err
 				}
@@ -256,9 +280,30 @@ func EntriesFromMountedState(state workspace.MountState) []SourceEntry {
 			QualifiedPath: entry.SourceName + "/" + entry.RelativePath,
 			FullPath:      entry.SourcePath,
 			Protected:     entry.Protected,
+			Generated:     entry.Generated,
+			Content:       entry.Content,
 		})
 	}
 	return entries
+}
+
+// alreadyMounted reports whether targetPath already holds what entry would
+// produce: the expected link for linked entries, or a regular file with the
+// same bytes for generated ones.
+func alreadyMounted(lm linkmode.Mode, targetPath string, entry SourceEntry) bool {
+	if entry.Generated {
+		info, err := os.Lstat(targetPath)
+		if err != nil || !info.Mode().IsRegular() {
+			return false
+		}
+		actualHash, err := workspace.FileSHA256(targetPath)
+		return err == nil && actualHash == workspace.ContentSHA256([]byte(entry.Content))
+	}
+	if !linkmode.IsLink(lm, targetPath, entry.FullPath) {
+		return false
+	}
+	healthy, _ := linkmode.Verify(lm, targetPath, entry.FullPath, runtime.PathsEqual)
+	return healthy
 }
 
 func Repair(projectRoot string) (Result, []drift.Status, error) {
@@ -272,16 +317,36 @@ func Repair(projectRoot string) (Result, []drift.Status, error) {
 	statuses := drift.InspectMountState(projectRoot, state, lm)
 	result := Result{}
 
+	generatedContent := make(map[string]string)
+	for _, entry := range state.Entries {
+		if entry.Generated {
+			generatedContent[entry.RelativePath] = entry.Content
+		}
+	}
+
 	for _, status := range statuses {
 		if status.Healthy {
 			continue
 		}
 
 		switch status.Issue {
-		case drift.IssueMissingSource, drift.IssueReplacedLink:
+		case drift.IssueMissingSource, drift.IssueReplacedLink, drift.IssueGeneratedModified:
 			continue
 		case drift.IssueDriftedLink, drift.IssueMissingLink:
 			targetPath := filepath.Join(projectRoot, filepath.FromSlash(status.RelativePath))
+			if status.Generated {
+				if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
+					return result, statuses, err
+				}
+				if err := os.WriteFile(targetPath, []byte(generatedContent[status.RelativePath]), 0o644); err != nil {
+					return result, statuses, err
+				}
+				if _, err := workspace.AddExclusion(projectRoot, status.RelativePath); err != nil {
+					return result, statuses, err
+				}
+				result.Linked++
+				continue
+			}
 			// Remove existing file/link if present
 			if _, err := os.Lstat(targetPath); err == nil {
 				if err := os.Remove(targetPath); err != nil {
@@ -439,7 +504,12 @@ func toMountedStateEntry(entry SourceEntry) (workspace.MountedStateEntry, error)
 		SourceName:   entry.SourceName,
 		SourcePath:   entry.FullPath,
 	}
-	if !entry.Protected {
+	if entry.Generated {
+		stateEntry.Generated = true
+		stateEntry.Content = entry.Content
+		stateEntry.ContentSHA256 = workspace.ContentSHA256([]byte(entry.Content))
+	}
+	if !entry.Protected || entry.Generated {
 		return stateEntry, nil
 	}
 

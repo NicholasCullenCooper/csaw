@@ -520,15 +520,32 @@ project/
 │       └── pre-commit-test.sh    ← symlink to team/hooks/pre-commit-test.sh
 ```
 
-Claude Code reads the script when its commit lifecycle fires. Today only `.claude/hooks/` is a projection target — other tools either don't have file-based hooks (Codex inlines them in `config.toml`) or weren't added yet.
+csaw places the script. It does not run by itself: no AI tool scans a hooks directory. Claude Code runs hooks declared in its settings files and Codex runs hooks declared in `.codex/hooks.json` (same JSON shape). To wire the mounted script into Claude Code, declare it once in `.claude/settings.json` (or `.claude/settings.local.json` to keep it out of git):
 
-`csaw inspect` shows hooks under the **Hooks** group, alongside the source they came from.
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/pre-commit-test.sh" }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Today `.claude/hooks/` is the only script target. Projecting the declaration itself into Claude Code's settings and Codex's `.codex/hooks.json` is planned as the hooks rework in [`docs/exec-plans/active/relaunch-2026-09.md`](exec-plans/active/relaunch-2026-09.md).
+
+`csaw inspect` shows hooks under the **Hooks** group with a "scripts only" reminder, alongside the source they came from.
 
 ---
 
 ## Ignore Patterns
 
-You want Cursor and Aider to skip `node_modules/`, `dist/`, and `*.snap` files across every project. Same patterns, different tool conventions.
+Your registry also serves teammates on tools that have project ignore files (Cursor, Aider, Cody), and you want them to skip `node_modules/`, `dist/`, and `*.snap` files across every project. Neither Claude Code nor Codex reads an ignore file, so this kind is for those other tools.
 
 In your source:
 
@@ -540,52 +557,22 @@ team/
     └── aider           # same content; tools read different files
 ```
 
-After mount in a project with cursor configured:
+After mount:
 
 ```
 project/
 └── .cursorignore       ← symlink to team/ignore/cursor
 ```
 
-Add aider to the tools list and `.aiderignore` shows up too. Each tool gets its own file at the path it expects (`.cursorignore`, `.cody/ignore`, `.aiderignore`, `.tongyiignore`), all linked back to the same source file group.
+Ignore files project by registry filename regardless of the tools list: `ignore/aider` becomes `.aiderignore`, and so on (`.cursorignore`, `.cody/ignore`, `.aiderignore`, `.tongyiignore`, `.geminiignore`).
 
 If you only want to maintain one set of patterns: put them in `ignore/cursor` and `ignore/aider` as two files with identical content (today there's no single-source-of-truth aliasing — that's a roadmap item).
 
 ---
 
-## Sharing Context With GitHub Copilot
+## Other Tools
 
-GitHub Copilot is unusual: it reads `.github/instructions/` and `.github/agents/`, which are the team's *committed* shared context (PR reviewers see them in diffs). csaw handles this differently from every other tool.
-
-You author rules and agents the normal way:
-
-```
-team/
-├── rules/
-│   └── security.md
-└── agents/
-    └── code-reviewer.md
-```
-
-After `csaw mount` with copilot in your tools list:
-
-```
-project/
-├── .github/
-│   ├── instructions/
-│   │   └── security.instructions.md    ← suffix added automatically
-│   └── agents/
-│       └── code-reviewer.agent.md      ← suffix added automatically
-```
-
-Two things to notice:
-
-1. **Filename suffixes are automatic.** Copilot *requires* `.instructions.md` and `.agent.md` suffixes on the disk. csaw rewrites the projected filename; your source file in `team/rules/security.md` is unchanged.
-2. **These paths are hidden from git like every other projection.** csaw treats the projected `.github/instructions/security.instructions.md` exactly the way it treats `.claude/rules/security.md` — added to `.git/info/exclude` by default. If your team wants Copilot's `.github/` context committed for PR review (the conventional GitHub pattern), opt in with `csaw show .github/instructions/*` or per-file `csaw show .github/instructions/security.instructions.md`. This is an explicit decision — not a hidden default — and you can codify it in your onboarding script.
-
-If you also have claude configured, `rules/security.md` lands in two places: `.claude/rules/security.md` and `.github/instructions/security.instructions.md`. Both hidden by default; both shown via `csaw show` if you want.
-
----
+csaw projects for Claude Code and Codex. Registries often carry files for other tools too (Cursor rules, Copilot instructions, ignore files); csaw does not project those, and unrecognized registry paths mount at the same relative path in the project. Most other agents read `AGENTS.md` at the root and skills under `.agents/skills/`, which csaw already writes for Codex, so they get the universal floor for free. Their researched paths stay catalogued in [`reference/tool-projection.json`](reference/tool-projection.json) for the day one is added back; adding a tool is one registry entry in `internal/mount/tools.go`.
 
 ## Sharing MCP With Codex (`csaw mcp sync`)
 
@@ -648,7 +635,7 @@ csaw mcp sync codex --remove
 
 csaw verifies the bounded section's SHA matches what it last wrote (drift detection — if you edited inside the markers, it refuses), then deletes the section + restores the file to its pre-merge state.
 
-Today this works for Codex only. OpenCode, Copilot CLI, and VS Code settings.json have the same merge problem and the same design works for them — they're pre-staged in [`docs/planning/mcp-merge-design.md`](planning/mcp-merge-design.md) but unimplemented until a real user reports friction.
+Codex is the only merge target, and with csaw scoped to Claude Code and Codex it is the only one needed: Claude Code reads a whole-file `.mcp.json` that csaw links directly. The same bounded-section design is documented in [`docs/planning/mcp-merge-design.md`](planning/mcp-merge-design.md) should another target ever be added.
 
 ---
 

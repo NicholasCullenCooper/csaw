@@ -37,11 +37,11 @@ csaw treats AI workspace artifacts as five distinct kinds, each with its own con
 
 | Kind | Registry path | Projects to | When loaded |
 |---|---|---|---|
-| Instructions | `AGENTS.md`, `CLAUDE.md` | Project root | Every turn — always in context |
-| Rules | `rules/*.md` | `.claude/rules/`, `.cursor/rules/`, etc. | Every turn — always-on coding standards |
-| Agents | `agents/*.md` | `.claude/agents/`, `.cursor/agents/`, etc. | When invoked — specialized subagent personas |
-| Skills | `skills/*/SKILL.md` | `.claude/skills/`, `.opencode/skills/`, etc. | When relevant — on-demand procedural workflows |
-| MCP | `mcp/*.json` | `.mcp.json`, `.cursor/mcp.json`, `.vscode/mcp.json` | Session start — tool/data connectivity |
+| Instructions | `AGENTS.md`, `CLAUDE.md` | Project root; `CLAUDE.md` generated from `AGENTS.md` for Claude Code when absent | Every turn — always in context |
+| Rules | `rules/*.md` | `.claude/rules/` | Every turn — always-on coding standards |
+| Agents | `agents/*.md` | `.claude/agents/` | When invoked — specialized subagent personas |
+| Skills | `skills/<name>/` (whole directory) | `.claude/skills/` (Claude Code), `.agents/skills/` (Codex) | When relevant — on-demand procedural workflows |
+| MCP | `mcp/*.json`, `mcp/codex.toml` | `.mcp.json` (Claude Code); `.codex/config.toml` via `csaw mcp sync codex` | Session start — tool/data connectivity |
 
 ## Design principles
 

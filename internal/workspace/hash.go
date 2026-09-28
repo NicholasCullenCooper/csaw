@@ -7,6 +7,12 @@ import (
 	"os"
 )
 
+// ContentSHA256 returns the hex SHA-256 of content.
+func ContentSHA256(content []byte) string {
+	sum := sha256.Sum256(content)
+	return hex.EncodeToString(sum[:])
+}
+
 func FileSHA256(path string) (string, error) {
 	file, err := os.Open(path)
 	if err != nil {

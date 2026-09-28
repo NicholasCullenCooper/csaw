@@ -51,7 +51,9 @@ Implemented now:
 - skill lifecycle promotion (`csaw promote` from `skills/experimental/` to `skills/`)
 - inspect and status summaries (sources with priority, pins, protected counts, mounted files grouped by kind)
 - local context audit (`csaw audit`) with `.csaw/policy.yml`, required sources, blocked sources, required kinds, strict mode, and JSON output
-- tool routing for Claude Code, Cursor, Codex, OpenCode, Windsurf
+- tool projection for Claude Code and Codex (the supported tools): each declares the directories it reads, and csaw writes each kind into the smallest set of directories that serves every configured tool
+- a generated instruction bridge (`CLAUDE.md` importing `AGENTS.md`) tracked in mount state with a content hash; user edits are preserved on unmount
+- whole-skill-directory projection (`SKILL.md` with its `references/`, `scripts/`, `assets/`)
 - MCP config projection (`mcp/claude-code.json` → `.mcp.json`, etc.)
 - repository validation tests
 

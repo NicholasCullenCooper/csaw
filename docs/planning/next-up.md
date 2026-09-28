@@ -6,6 +6,18 @@ For strategic/vision direction see [`../product/roadmap.md`](../product/roadmap.
 
 ---
 
+## Relaunch (2026-09)
+
+The September 2026 audit found that a fresh mount silently missed Claude Code and Cursor. The four-phase plan in [`../exec-plans/active/relaunch-2026-09.md`](../exec-plans/active/relaunch-2026-09.md) supersedes the tiers below until it completes:
+
+- **Scope (2026-09-28): Claude Code and Codex only.** Every phase designs for two surfaces. Other tools stay researched in the JSON catalogue with `csaw_in_code: false`.
+- **Phase 0 (v0.11.0) — shipped in working tree:** reads table with minimal-set projection, generated `CLAUDE.md` bridge, whole-skill directories, `.codex/skills` dropped, honest hooks labelling, per-kind JSON consistency test with `checked_at`.
+- **Phase 1 (v0.12.0):** copy mode default with ownership hashes, transforms, lockfile, real `diff`, command-file split.
+- **Phase 2 (v0.13.0):** hooks as a merged kind into Claude Code settings and Codex `.codex/hooks.json`, using the bounded-section engine already built for Codex MCP.
+- **Phase 3 (v0.14.0):** export to Claude Code plugins/marketplaces and Agent Plugins (Codex/ChatGPT); vendor content checks and scanner seam; skill validation.
+
+**Retired (2026-09):** the `csaw://` URL scheme, the GUI/TUI for inspect, the `csaw context` vocabulary refactor, continuity/handoff/context ledger, and the community preset marketplace. None has a user and each competes with the phases above for the same time. The "wait for a user to ask" gate is replaced by a dogfood gate: mount csaw into real repos on the maintainer's machine before each tag.
+
 ## Tier 1 — current focus (post-v0.8.1)
 
 ### ~~1. "Minimal intrusion" framing in README~~ ✅ Shipped

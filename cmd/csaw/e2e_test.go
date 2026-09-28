@@ -460,7 +460,6 @@ func TestE2EMountRestoreDoesNotReprojectToolTargets(t *testing.T) {
 
 	for _, path := range []string{
 		".claude/skills/testing/SKILL.md",
-		".codex/skills/testing/SKILL.md",
 		".agents/skills/testing/SKILL.md",
 	} {
 		if !env.fileExists(path) {
@@ -686,5 +685,94 @@ func runGit(t *testing.T, dir string, args ...string) {
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git %s failed: %v\n%s", strings.Join(args, " "), err, out)
+	}
+}
+
+func TestE2EMountGeneratesClaudeBridge(t *testing.T) {
+	env := newE2EEnv(t)
+
+	reg := env.createRegistry("reg", map[string]string{
+		"csaw.yml":    "default:\n  include:\n    - AGENTS.md\n    - rules/**\n",
+		"AGENTS.md":   "# team instructions\n",
+		"rules/go.md": "use gofmt\n",
+	})
+	env.run("source", "add", "reg", reg)
+	env.run("mount", "--profile", "reg/default", "--tools", "claude,codex")
+
+	if !env.fileExists("AGENTS.md") {
+		t.Fatal("AGENTS.md should be mounted for Codex")
+	}
+	bridge := env.readFile("CLAUDE.md")
+	if !strings.Contains(bridge, "@AGENTS.md") {
+		t.Fatalf("CLAUDE.md bridge should import AGENTS.md, got: %s", bridge)
+	}
+	if !env.fileExists(".claude/rules/go.md") {
+		t.Fatal("rule should be projected for Claude Code")
+	}
+	for _, unexpected := range []string{".codex", ".agents", "rules"} {
+		if env.fileExists(unexpected) {
+			t.Fatalf("%s should not exist: Codex has no rules directory and no skills were mounted", unexpected)
+		}
+	}
+
+	env.run("unmount")
+	if env.fileExists("CLAUDE.md") {
+		t.Fatal("generated CLAUDE.md should be removed on unmount")
+	}
+}
+
+func TestE2EMountProjectsWholeSkillDirectory(t *testing.T) {
+	env := newE2EEnv(t)
+
+	reg := env.createRegistry("reg", map[string]string{
+		"csaw.yml":                            "default:\n  include:\n    - skills/**\n",
+		"skills/deploy/SKILL.md":              "---\nname: deploy\ndescription: deploy\n---\nsee references/runbook.md\n",
+		"skills/deploy/references/runbook.md": "runbook",
+		"skills/deploy/scripts/deploy.sh":     "echo hi",
+	})
+	env.run("source", "add", "reg", reg)
+	env.run("mount", "--profile", "reg/default", "--tools", "claude,codex")
+
+	for _, want := range []string{
+		".claude/skills/deploy/SKILL.md",
+		".claude/skills/deploy/references/runbook.md",
+		".claude/skills/deploy/scripts/deploy.sh",
+		".agents/skills/deploy/SKILL.md",
+		".agents/skills/deploy/references/runbook.md",
+		".agents/skills/deploy/scripts/deploy.sh",
+	} {
+		if !env.fileExists(want) {
+			t.Fatalf("%s should be mounted", want)
+		}
+	}
+	if env.fileExists("skills") {
+		t.Fatal("no skills/ directory should be created at the project root")
+	}
+	if env.fileExists(".codex/skills") {
+		t.Fatal("Codex reads .agents/skills; nothing should be written under .codex/")
+	}
+}
+
+func TestE2EUnmountKeepsEditedBridge(t *testing.T) {
+	env := newE2EEnv(t)
+
+	reg := env.createRegistry("reg", map[string]string{
+		"csaw.yml":  "default:\n  include:\n    - AGENTS.md\n",
+		"AGENTS.md": "instructions",
+	})
+	env.run("source", "add", "reg", reg)
+	env.run("mount", "--profile", "reg/default", "--tools", "claude")
+
+	edited := env.readFile("CLAUDE.md") + "\n## my notes\n"
+	if err := os.WriteFile(filepath.Join(env.projectDir, "CLAUDE.md"), []byte(edited), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	env.run("unmount")
+	if env.fileExists("CLAUDE.md") {
+		t.Fatal("edited bridge should be moved out of the project root")
+	}
+	if got := env.readFile(".csaw-stash/modified/CLAUDE.md"); got != edited {
+		t.Fatalf("edits should be preserved under .csaw-stash/modified/, got %q", got)
 	}
 }

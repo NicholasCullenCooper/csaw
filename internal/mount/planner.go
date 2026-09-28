@@ -43,6 +43,10 @@ type SourceEntry struct {
 	FullPath      string
 	Priority      int
 	Protected     bool
+	// Generated marks an entry csaw synthesizes rather than links, such as
+	// the CLAUDE.md bridge that imports AGENTS.md. Content holds its bytes.
+	Generated bool
+	Content   string
 }
 
 func NewPlanner() Planner {

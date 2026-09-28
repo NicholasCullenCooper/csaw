@@ -4,9 +4,11 @@ Planning doc for what csaw projects (and doesn't) across AI coding tools. Living
 
 Source of truth for *what csaw actually projects today* is [`docs/reference/tool-projection.json`](../reference/tool-projection.json) (tools with `csaw_in_code: true`). This file is for what's *coming* or explicitly *out of scope*.
 
-## Currently in code (v0.8.1)
+## Currently in code (v0.11.0)
 
-Seven tools with `"csaw_in_code": true`: **claude, cursor, codex, opencode, copilot, antigravity, goose**. The projection test (`internal/mount/projection_consistency_test.go`) enforces that the JSON's claims match the actual Go `ToolRegistry`.
+Two tools with `"csaw_in_code": true`: **claude** and **codex**. Scope decision 2026-09-28: the maintainer uses Claude Code and Codex, so csaw designs for, tests, and documents those two surfaces only. Each tool declares what it *reads* (native path plus compatibility paths) and csaw projects each kind into the smallest set of directories that serves every configured tool; `tool-projection.md` renders that table from the Go registry. The consistency tests (`internal/mount/projection_consistency_test.go`) enforce that every directory the Go registry reads or writes is documented in the JSON for that tool and kind, and log any tool whose `checked_at` research date is older than 120 days.
+
+Cursor, Copilot, OpenCode, Gemini CLI, Antigravity, and goose were researched in September 2026 and are catalogued with `csaw_in_code: false`. Re-adding any of them is one `ToolSpec` entry plus, where a tool rewrites filenames or requires frontmatter (Cursor `.mdc`, Copilot `.instructions.md`), a small suffix/transform feature that was removed with them.
 
 ## Coming up
 
@@ -21,17 +23,19 @@ These tools read the cross-tool `AGENTS.md` standard, so csaw's existing instruc
 - **Continue** — Reads `.continue/rules/*.md`, `.continue/prompts/*.md`, `config.yaml`. csaw covers ~20%. Source: [docs.continue.dev](https://docs.continue.dev/customize/deep-dives/rules).
 - **Factory Droid** — Reads `.factory/skills/<name>/SKILL.md` (same agentskills.io standard as csaw's `skills/`), `.factory/rules/`, hooks, MCP, custom droids, plugins. Skills directory is the easiest win — exact same SKILL.md format csaw already uses. Source: [docs.factory.ai](https://docs.factory.ai/cli/configuration/skills.md).
 - **Augment** — Reads `.augment/rules/*.md` (multi-file rules with Always/Manual/Auto activation modes), plus hierarchical `AGENTS.md`/`CLAUDE.md` in subdirectories. Source: [docs.augmentcode.com/setup-augment/guidelines](https://docs.augmentcode.com/setup-augment/guidelines).
-- **Amp** — Reads `.agents/skills/<name>/SKILL.md` (csaw already covers via antigravity/StandardFallback projection!), `.agents/checks/` (review criteria, novel concept), `.amp/plugins/*.ts`. Skills projection is already free; checks would be a new kind. Source: [ampcode.com/manual](https://ampcode.com/manual).
+- **Amp** — Reads `.agents/skills/<name>/SKILL.md` (served whenever csaw writes the neutral `.agents/skills/`), `.agents/checks/` (review criteria, novel concept), `.amp/plugins/*.ts`. Skills projection is already free; checks would be a new kind. Source: [ampcode.com/manual](https://ampcode.com/manual).
 - **Aider** — Reads `CONVENTIONS.md` (Aider-specific equivalent of AGENTS.md), `.aider.conf.yml`, `.aiderignore`. Quick win: add `CONVENTIONS.md` to the instruction file recognition list. Source: [aider.chat/docs/usage/conventions.html](https://aider.chat/docs/usage/conventions.html).
 - **Hermes** — Reads `.cursor/rules/`, `.cursorrules`, `AGENTS.md`, `CLAUDE.md`. csaw's cursor projection covers most of this for free.
 - **Pi** — Reads `AGENTS.md` + `CLAUDE.md` only at project scope (MCP lives in `~/.pi/agent/`, out of scope). AGENTS.md is the full project surface — true "already served." (Verify quarterly.)
 
 **Quick wins to consider:**
 - Add `CONVENTIONS.md` to instruction file recognition (one-line change, covers Aider's main project file).
-- Add `factory` to `ToolRegistry` with `Dir: ".factory", SkillsSubdir: "skills"` — Factory Droid uses the same agentskills.io standard csaw already projects.
-- Add `cline` to `ToolRegistry` — but Cline's `.clinerules/` is a top-level dir (not nested under `.cline/`), so the existing `Dir` + `Subdir` shape doesn't quite fit. Either model it as `Dir: ".clinerules", RulesSubdir: ""` (semantic stretch) or add a `RulesDir` field for tools whose rules dir is at root.
-- Add `continue` to `ToolRegistry` with `Dir: ".continue", RulesSubdir: "rules"`. Continue's `.continue/prompts/` is single-file prompts — same problem as Copilot's `.github/prompts/` (deferred).
-- Add `augment` to `ToolRegistry` with `Dir: ".augment", RulesSubdir: "rules"`.
+- Add `factory` to `ToolRegistry` with skills read from `.factory/skills` and `.agents/skills` (write target `.agents/skills`) — Factory Droid uses the same agentskills.io standard csaw already projects.
+- Add `cline` to `ToolRegistry` with rules read from `.clinerules/` (a top-level directory; the `ToolSpec` reads/writes model handles any path) and skills from `.cline/skills`, `.claude/skills`.
+- Add `continue` to `ToolRegistry` with rules read from `.continue/rules`. Continue's `.continue/prompts/` is single-file prompts — same problem as Copilot's `.github/prompts/` (deferred).
+- Add `augment` to `ToolRegistry` with rules read from `.augment/rules`.
+
+Since v0.11.0 a tool entry is a `ToolSpec` (`internal/mount/tools.go`): per kind, the directories the tool reads and the one csaw writes when needed. Adding a tool is one map entry plus its JSON research entry; the consistency test refuses paths that are not documented.
 
 ## Merged-config tools — MCP lives inside shared files
 
@@ -66,7 +70,10 @@ Three of the four have project-scope file options, so csaw's project-scope ident
 
 ## Removed
 
-- **gemini** (removed v0.6.0) — Google sunset 2026-06-18. Migration target: `antigravity` (`.agents/`, also csaw's StandardFallback). `GEMINI.md` is still recognized as an instruction file because Antigravity reads it.
+- **gemini** (removed v0.6.0) — the June 2026 announcement ended consumer auth only; API-key and enterprise users continue and the OSS project keeps releasing. Research refreshed 2026-09; not in code under the Claude Code and Codex scope.
+- **cursor, copilot, opencode, antigravity, goose** (removed 2026-09-28) — dropped from `ToolRegistry` with the scope decision above. Research refreshed and kept in the JSON.
+- **`.codex/skills`** (dropped v0.11.0) — Codex documents `.agents/skills` only; the neutral directory already served it, so the extra links were dead.
+- **windsurf** (renamed) — Windsurf became Devin Desktop in June 2026 with paths under `.devin/`. Still catalogued, still not in code; `AGENTS.md` and `.agents/skills/` cover it.
 - **amazon-q, kiro, openhands, windsurf, codebuddy** (removed v0.6.1) — Trimmed from `ToolRegistry` to keep projection focused on the tools users actually ask about. All five remain catalogued in `tool-projection.json` (with `csaw_in_code: false`) and can be re-added in a single commit if user demand emerges.
 
 ## Watch list

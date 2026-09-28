@@ -17,6 +17,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/NicholasCullenCooper/csaw/internal/mount"
 )
 
 const headerNote = `<!--
@@ -88,6 +90,7 @@ type toolEntry struct {
 	Category     string               `json:"category"`
 	Status       string               `json:"status"`
 	CSAWInCode   bool                 `json:"csaw_in_code"`
+	CheckedAt    string               `json:"checked_at,omitempty"`
 	ScopeNotes   string               `json:"scope_notes"`
 	Kinds        map[string]kindEntry `json:"kinds"`
 }
@@ -130,10 +133,73 @@ func render(w io.Writer, doc *projectionDoc) {
 	fmt.Fprintf(w, "Planning content (recommended additions, deferred tools) lives in [`../planning/projection-roadmap.md`](../planning/projection-roadmap.md).\n\n")
 
 	renderInCodeSummary(w, doc)
+	renderCsawProjection(w)
 	renderKinds(w, doc.KindsDefs)
 	renderUniversalPaths(w, doc)
 	renderTools(w, doc.Tools)
 	renderWatchlist(w, &doc.Watchlist)
+}
+
+var projectedKinds = []mount.Kind{mount.KindSkill, mount.KindAgent, mount.KindRule, mount.KindHook}
+
+// renderCsawProjection renders what csaw writes, straight from the Go
+// ToolRegistry, so the document cannot disagree with the binary.
+func renderCsawProjection(w io.Writer) {
+	fmt.Fprintln(w, "## What csaw Writes")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "csaw projects for **Claude Code and Codex**. Derived from the Go `ToolRegistry` (`internal/mount/tools.go`): for each kind, csaw writes into the smallest set of directories that every configured tool reads. Instruction bridges are generated files that import `AGENTS.md` for tools that do not read it.")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "| Tool | Kind | csaw writes (when needed) | Tool reads |")
+	fmt.Fprintln(w, "|---|---|---|---|")
+	for _, name := range mount.AllToolNames() {
+		spec := mount.ToolRegistry[name]
+		if spec.BridgeImport != "" {
+			fmt.Fprintf(w, "| `%s` | instructions | `%s` (generated, imports `AGENTS.md`) | `%s` |\n", name, spec.InstructionFile, spec.InstructionFile)
+		} else {
+			fmt.Fprintf(w, "| `%s` | instructions | `AGENTS.md` | `AGENTS.md` |\n", name)
+		}
+		for _, kind := range projectedKinds {
+			reads := spec.Reads[kind]
+			if len(reads) == 0 {
+				continue
+			}
+			write := "`" + spec.Writes[kind] + "/`"
+			if kind == mount.KindHook {
+				write += " (scripts only; declare them in the tool's settings)"
+			}
+			fmt.Fprintf(w, "| `%s` | %s | %s | %s |\n", name, mount.KindLabel(kind), write, codeJoin(reads))
+		}
+	}
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Codex keeps MCP servers inside `.codex/config.toml`; `csaw mcp sync codex` merges them there. Codex has no rules, agents, or hooks directory, so those kinds reach Codex only through `AGENTS.md` and, for hooks, the planned `.codex/hooks.json` merge. With no tool configured or detected, skills go to the neutral `.agents/skills/` directory.")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Examples of the minimal-set rule:")
+	fmt.Fprintln(w)
+	examples := [][]string{
+		{"claude"},
+		{"codex"},
+		{"claude", "codex"},
+	}
+	for _, names := range examples {
+		specs := make([]mount.ToolSpec, 0, len(names))
+		for _, n := range names {
+			specs = append(specs, mount.ToolRegistry[n])
+		}
+		var parts []string
+		for _, kind := range projectedKinds {
+			targets := mount.PlanTargets(kind, specs)
+			if len(targets) == 0 {
+				continue
+			}
+			dirs := make([]string, 0, len(targets))
+			for _, dir := range targets {
+				dirs = append(dirs, "`"+dir+"/`")
+			}
+			parts = append(parts, fmt.Sprintf("%s → %s", mount.KindLabel(kind), strings.Join(dirs, ", ")))
+		}
+		fmt.Fprintf(w, "- `%s`: %s\n", strings.Join(names, ","), strings.Join(parts, "; "))
+	}
+	fmt.Fprintln(w)
 }
 
 func renderInCodeSummary(w io.Writer, doc *projectionDoc) {
@@ -253,7 +319,11 @@ func renderTools(w io.Writer, tools map[string]toolEntry) {
 		if t.DocsHomepage != "" {
 			fmt.Fprintf(w, "- **Docs:** [%s](%s)\n", t.DocsHomepage, t.DocsHomepage)
 		}
-		fmt.Fprintf(w, "- **Category:** %s · **Status:** %s\n", t.Category, t.Status)
+		fmt.Fprintf(w, "- **Category:** %s · **Status:** %s", t.Category, t.Status)
+		if t.CheckedAt != "" {
+			fmt.Fprintf(w, " · **Research verified:** %s", t.CheckedAt)
+		}
+		fmt.Fprintln(w)
 		if t.ScopeNotes != "" {
 			fmt.Fprintf(w, "- **Notes:** %s\n", t.ScopeNotes)
 		}

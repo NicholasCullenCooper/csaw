@@ -1,7 +1,7 @@
 {
-  "$schema_version": 7,
-  "updated_at": "2026-05-24",
-  "scope_notes": "Per-tool projection map: filesystem paths each AI coding tool reads, by kind, at project and user scope. Source of truth for csaw's ToolRegistry (tools with csaw_in_code: true). Planning/roadmap content (recommended additions, deferred tools, deprecation timelines) lives in docs/planning/projection-roadmap.md.",
+  "$schema_version": 8,
+  "updated_at": "2026-09-28",
+  "scope_notes": "Per-tool projection map: filesystem paths each AI coding tool reads, by kind, at project and user scope. csaw projects for Claude Code and Codex only (scope decision 2026-09-28); every other tool here is research kept for reference and marked csaw_in_code: false. This file documents what tools READ. What csaw WRITES is decided by the Go ToolRegistry in internal/mount/tools.go and rendered into tool-projection.md by cmd/tools-gen; a test asserts every directory csaw reads or writes for a supported tool is documented here. Per-tool checked_at records when the research was last verified.",
   "confidence_legend": {
     "verified": "Read directly from official tool docs.",
     "documented": "Official docs mention but with caveats.",
@@ -15,12 +15,12 @@
     "globs": "* matches a filename segment; ** matches any number of segments; <name> is a placeholder."
   },
   "kinds_definitions": {
-    "instructions": "Always-on project guidance. AGENTS.md, CLAUDE.md, GEMINI.md, .hermes.md, .goosehints. [csaw projects: YES]",
+    "instructions": "Always-on project guidance. AGENTS.md is the cross-tool file; CLAUDE.md, GEMINI.md, .hermes.md, .goosehints are tool-specific. [csaw projects: YES; generates CLAUDE.md and GEMINI.md bridges that import AGENTS.md when the registry has none]",
     "rules": "Always-on coding/style rules. [csaw projects: YES]",
     "agents": "Subagent / persona / mode definitions. [csaw projects: YES]",
-    "skills": "On-demand procedural workflows (SKILL.md folders, slash commands, prompts, recipes). [csaw projects: YES]",
+    "skills": "On-demand procedural workflows: SKILL.md folders including their references/, scripts/, and assets/ (Agent Skills standard). [csaw projects: YES, whole directory]",
     "mcp": "MCP server configs. Per-tool schema varies widely. [csaw projects: YES (via per-tool registry files)]",
-    "hooks": "Lifecycle scripts triggered by tool events. [csaw projects: YES — planned v0.6.0]",
+    "hooks": "Lifecycle scripts triggered by tool events. Tools run hooks declared in their settings files (settings.json, hooks.json); none scans a directory. [csaw projects: scripts only, into .claude/hooks/; declaring them is manual until the hooks kind is reworked]",
     "ignore": "Context exclusion patterns (.cody/ignore, .cursorignore, .tongyiignore). [csaw projects: YES — planned v0.6.0]",
     "memory": "Persistent context across sessions. [csaw projects: NEVER for now — most memory is session state or user-private. Revisit if a portable memory standard emerges.]",
     "settings": "General tool config that may contain multiple kinds. [csaw projects: NEVER — settings files contain API keys and personal credentials; mounting them to a team source would leak secrets. Documented as reference only.]"
@@ -36,23 +36,34 @@
       "kinds": {
         "instructions": {
           "project_paths": [
-            "AGENTS.md",
             "CLAUDE.md",
+            ".claude/CLAUDE.md",
             "CLAUDE.local.md"
           ],
           "user_paths": [
             "~/.claude/CLAUDE.md"
           ],
           "format": "markdown",
-          "notes": "CLAUDE.local.md is gitignored personal additions.",
+          "notes": "Does NOT read AGENTS.md; docs recommend a CLAUDE.md that imports it (@AGENTS.md) or a symlink. csaw generates that CLAUDE.md bridge when a registry has none. CLAUDE.local.md is gitignored personal additions. Managed policy CLAUDE.md under /Library/Application Support/ClaudeCode/ or /etc/claude-code/.",
           "confidence": "verified",
           "sources": [
             "https://code.claude.com/docs/en/memory"
           ]
         },
         "rules": {
-          "confidence": "unsupported",
-          "notes": "No separate rules concept. Path-specific rules live in CLAUDE.md."
+          "confidence": "verified",
+          "notes": "A symlink whose target is outside the working directory is treated as an external import: it does not load until external imports are approved, and path-scoped rules never load through it. Motivates csaw copy mode.",
+          "project_paths": [
+            ".claude/rules/"
+          ],
+          "user_paths": [
+            "~/.claude/rules/"
+          ],
+          "format": "markdown",
+          "file_pattern": "*.md (recursive); optional paths: frontmatter for path-scoped rules",
+          "sources": [
+            "https://code.claude.com/docs/en/memory"
+          ]
         },
         "agents": {
           "project_paths": [
@@ -95,7 +106,7 @@
           "frontmatter_required": [
             "description"
           ],
-          "notes": "Folder-per-skill. agentskills.io open standard.",
+          "notes": "Folder-per-skill (Agent Skills standard); symlinked skill folders are read. Does not read .agents/skills. Legacy .claude/commands/ still works.",
           "confidence": "verified",
           "sources": [
             "https://code.claude.com/docs/en/skills"
@@ -137,14 +148,19 @@
         },
         "hooks": {
           "project_paths": [
-            ".claude/hooks/"
+            ".claude/hooks/",
+            ".claude/settings.json",
+            ".claude/settings.local.json"
           ],
           "user_paths": [
-            "~/.claude/hooks/"
+            "~/.claude/settings.json"
           ],
-          "format": "shell scripts",
-          "notes": "Per-skill hooks via SKILL.md frontmatter; per-agent via agent frontmatter; settings-level in settings.json.",
-          "confidence": "documented"
+          "format": "json (settings) + scripts",
+          "notes": "Hooks are declared in settings JSON (user, project, local, managed), plugin hooks/hooks.json, or skill/agent frontmatter. No hooks directory is scanned: .claude/hooks/ is only csaw's script drop location.",
+          "confidence": "verified",
+          "sources": [
+            "https://code.claude.com/docs/en/hooks"
+          ]
         },
         "memory": {
           "project_paths": [
@@ -177,15 +193,16 @@
           "notes": "settings.local.json is gitignored personal overrides.",
           "confidence": "verified"
         }
-      }
+      },
+      "checked_at": "2026-09-14"
     },
     "codex": {
       "display_name": "OpenAI Codex CLI",
-      "docs_homepage": "https://developers.openai.com/codex/",
+      "docs_homepage": "https://learn.chatgpt.com/docs/",
       "category": "native-cli",
       "status": "active",
       "csaw_in_code": true,
-      "scope_notes": "TOML-driven. Almost no per-kind directories.",
+      "scope_notes": "TOML-driven config. Skills follow the Agent Skills standard under the neutral .agents/skills; docs moved from developers.openai.com to learn.chatgpt.com.",
       "kinds": {
         "instructions": {
           "project_paths": [
@@ -221,7 +238,19 @@
           ]
         },
         "skills": {
-          "confidence": "unsupported"
+          "confidence": "verified",
+          "project_paths": [
+            ".agents/skills/<name>/SKILL.md"
+          ],
+          "user_paths": [
+            "~/.agents/skills/",
+            "/etc/codex/skills/"
+          ],
+          "format": "markdown",
+          "notes": "Scanned from cwd up to the repo root. .codex/skills is no longer documented. Optional agents/openai.yaml sidecar per skill.",
+          "sources": [
+            "https://learn.chatgpt.com/docs/build-skills"
+          ]
         },
         "mcp": {
           "project_paths": [
@@ -271,8 +300,11 @@
             "~/.codex/hooks.json"
           ],
           "format": "json",
-          "notes": "Also via [hooks] table in config.toml.",
-          "confidence": "documented"
+          "notes": "Same JSON shape as Claude Code hooks; 12 events; non-managed hooks trusted by hash.",
+          "confidence": "verified",
+          "sources": [
+            "https://learn.chatgpt.com/docs/hooks"
+          ]
         },
         "memory": {
           "confidence": "unsupported"
@@ -295,15 +327,16 @@
           "notes": "Single config.toml holds agents, MCP, hooks.",
           "confidence": "verified"
         }
-      }
+      },
+      "checked_at": "2026-09-15"
     },
     "cursor": {
       "display_name": "Cursor (IDE + CLI)",
       "docs_homepage": "https://cursor.com/docs/",
       "category": "ide-or-cli",
       "status": "active",
-      "csaw_in_code": true,
-      "scope_notes": "Cursor CLI (Jan 2026) shares config with desktop.",
+      "csaw_in_code": false,
+      "scope_notes": "Not projected by csaw (Claude Code and Codex only, since 2026-09-28). Cursor CLI (Jan 2026) shares config with desktop.",
       "kinds": {
         "instructions": {
           "project_paths": [
@@ -321,34 +354,56 @@
             ".cursorrules"
           ],
           "format": "markdown / mdc",
-          "file_pattern": "*.md or *.mdc OR single .cursorrules",
+          "file_pattern": "*.mdc only; a plain .md in .cursor/rules is ignored because it has no frontmatter",
           "frontmatter_optional": [
             "alwaysApply",
             "description",
             "globs"
           ],
-          "notes": "User rules in app settings (not filesystem). .cursorrules legacy but still read; Hermes also reads.",
-          "confidence": "verified"
+          "notes": "Frontmatter: alwaysApply, globs, description. AGENTS.md (root and nested) is the plain-markdown alternative. Team Rules from the dashboard apply first.",
+          "confidence": "verified",
+          "sources": [
+            "https://cursor.com/docs/context/rules"
+          ]
         },
         "agents": {
           "project_paths": [
-            ".cursor/modes.json"
+            ".cursor/agents/",
+            ".claude/agents/",
+            ".codex/agents/"
           ],
-          "format": "json",
-          "notes": "Cursor 'Background Agents' are runtime cloud sessions.",
-          "confidence": "verified"
+          "format": "markdown",
+          "notes": "Markdown with frontmatter (name, description, model, readonly, is_background). .cursor/ wins on name conflicts.",
+          "confidence": "verified",
+          "user_paths": [
+            "~/.cursor/agents/",
+            "~/.claude/agents/",
+            "~/.codex/agents/"
+          ],
+          "sources": [
+            "https://cursor.com/docs/context/subagents"
+          ]
         },
         "skills": {
           "project_paths": [
-            ".cursor/commands/"
+            ".cursor/skills/<name>/SKILL.md",
+            ".agents/skills/<name>/SKILL.md",
+            ".claude/skills/<name>/SKILL.md",
+            ".codex/skills/<name>/SKILL.md"
           ],
           "user_paths": [
-            "~/.cursor/commands/"
+            "~/.cursor/skills/",
+            "~/.agents/skills/",
+            "~/.claude/skills/",
+            "~/.codex/skills/"
           ],
           "format": "markdown",
           "file_pattern": "*.md",
-          "notes": "Filename = slash command name.",
-          "confidence": "verified"
+          "notes": "Agent Skills standard; nested skill directories supported. .cursor/commands/ single-file commands still exist.",
+          "confidence": "verified",
+          "sources": [
+            "https://cursor.com/docs/context/skills"
+          ]
         },
         "mcp": {
           "project_paths": [
@@ -395,8 +450,18 @@
           ]
         },
         "hooks": {
-          "confidence": "unsupported",
-          "notes": "Configured in IDE settings, not file-based."
+          "confidence": "verified",
+          "notes": "version: 1 wrapper; ~21 events.",
+          "project_paths": [
+            ".cursor/hooks.json"
+          ],
+          "user_paths": [
+            "~/.cursor/hooks.json"
+          ],
+          "format": "json",
+          "sources": [
+            "https://cursor.com/docs/hooks"
+          ]
         },
         "memory": {
           "confidence": "unsupported"
@@ -413,15 +478,16 @@
           "confidence": "documented",
           "notes": "Settings in Cursor app (not filesystem)."
         }
-      }
+      },
+      "checked_at": "2026-09-15"
     },
     "opencode": {
       "display_name": "OpenCode",
       "docs_homepage": "https://opencode.ai/docs/",
       "category": "native-cli",
       "status": "active",
-      "csaw_in_code": true,
-      "scope_notes": "OSS leader (150K+ stars). EXPLICIT cross-tool compat — reads .claude/ and .agents/ as skill fallbacks.",
+      "csaw_in_code": false,
+      "scope_notes": "Not projected by csaw (Claude Code and Codex only, since 2026-09-28). OSS leader (150K+ stars). EXPLICIT cross-tool compat — reads .claude/ and .agents/ as skill fallbacks.",
       "kinds": {
         "instructions": {
           "project_paths": [
@@ -554,20 +620,23 @@
           "notes": "Single config holds MCP, agent config, models.",
           "confidence": "verified"
         }
-      }
+      },
+      "checked_at": "2026-09-14"
     },
     "windsurf": {
-      "display_name": "Windsurf (Codeium)",
-      "docs_homepage": "https://docs.windsurf.com/",
+      "display_name": "Windsurf (now Devin Desktop)",
+      "docs_homepage": "https://docs.devin.ai/",
       "category": "ide",
-      "status": "active",
+      "status": "renamed",
       "csaw_in_code": false,
-      "scope_notes": "Cascade has workflows (skill-like). Removed from ToolRegistry in v0.6.1 to keep projection focused; re-add on user demand.",
+      "scope_notes": "Not projected by csaw (Claude Code and Codex only, since 2026-09-28). Renamed Devin Desktop on 2026-06-02 (OTA). Preferred paths moved under .devin/; .windsurf/rules and .windsurfrules still read. A separate Devin CLI reads AGENTS.md, AGENTS.local.md, .devin/config.json. Not in ToolRegistry; AGENTS.md and .agents/skills cover it.",
       "kinds": {
         "instructions": {
           "project_paths": [
-            ".windsurfrules",
-            ".windsurf/rules/"
+            "AGENTS.md",
+            ".devin/rules/",
+            ".windsurf/rules/",
+            ".windsurfrules"
           ],
           "user_paths": [
             "~/.codeium/windsurf/memories/global_rules.md"
@@ -578,8 +647,9 @@
         },
         "rules": {
           "project_paths": [
-            ".windsurfrules",
-            ".windsurf/rules/"
+            ".devin/rules/",
+            ".windsurf/rules/",
+            ".windsurfrules"
           ],
           "user_paths": [
             "~/.codeium/windsurf/memories/global_rules.md"
@@ -593,7 +663,10 @@
         },
         "skills": {
           "project_paths": [
-            ".windsurf/workflows/"
+            ".agents/skills/<name>/SKILL.md",
+            ".devin/skills/",
+            ".windsurf/skills/",
+            ".claude/skills/"
           ],
           "user_paths": [
             "~/.codeium/windsurf/global_workflows/"
@@ -601,7 +674,7 @@
           "format": "markdown",
           "file_pattern": "*.md",
           "notes": "12000 char limit per workflow.",
-          "confidence": "verified",
+          "confidence": "documented",
           "sources": [
             "https://docs.windsurf.com/windsurf/cascade/workflows"
           ]
@@ -643,9 +716,11 @@
         },
         "ignore": {
           "project_paths": [
-            ".gitignore"
+            ".devinignore",
+            ".codeiumignore",
+            ".windsurfignore"
           ],
-          "confidence": "inferred"
+          "confidence": "verified"
         },
         "settings": {
           "confidence": "documented",
@@ -658,8 +733,8 @@
       "docs_homepage": "https://code.visualstudio.com/docs/copilot/",
       "category": "vscode-extension-and-cli",
       "status": "active",
-      "csaw_in_code": true,
-      "scope_notes": "VS Code Copilot and Copilot CLI share the same .github/ paths and ~/.copilot/ user-scope agents. csaw projects rules (with .instructions.md suffix) and agents (with .agent.md suffix) into .github/. Projected files are hidden from git by default like every other projection — teams who want them committed for PR review run `csaw show .github/instructions/*` as an explicit opt-in. Skills (.github/prompts/, single-file) and the .github/copilot-instructions.md alias not yet projected — AGENTS.md at project root covers Copilot's universal-instructions case.",
+      "csaw_in_code": false,
+      "scope_notes": "Not projected by csaw (Claude Code and Codex only, since 2026-09-28). VS Code Copilot and Copilot CLI share the same .github/ paths and ~/.copilot/ user-scope agents. csaw projects rules (with .instructions.md suffix) and agents (with .agent.md suffix) into .github/. Projected files are hidden from git by default like every other projection — teams who want them committed for PR review run `csaw show .github/instructions/*` as an explicit opt-in. Skills (.github/prompts/, single-file) and the .github/copilot-instructions.md alias not yet projected — AGENTS.md at project root covers Copilot's universal-instructions case.",
       "kinds": {
         "instructions": {
           "project_paths": [
@@ -711,7 +786,7 @@
             "tools",
             "model"
           ],
-          "notes": "Reads .claude/agents/ for compat. SHARES ~/.copilot/agents/ with Copilot CLI. .chatmode.md DEPRECATED.",
+          "notes": ".agent.md suffix under .github/agents (nested dirs discovered); .claude/agents read for compatibility. Shares ~/.copilot/agents/ with Copilot CLI.",
           "confidence": "verified",
           "sources": [
             "https://code.visualstudio.com/docs/copilot/customization/custom-agents"
@@ -719,7 +794,9 @@
         },
         "skills": {
           "project_paths": [
-            ".github/prompts/"
+            ".github/skills/<name>/SKILL.md",
+            ".claude/skills/<name>/SKILL.md",
+            ".agents/skills/<name>/SKILL.md"
           ],
           "format": "markdown",
           "file_pattern": "*.prompt.md (suffix mandatory)",
@@ -731,12 +808,21 @@
             "model",
             "tools"
           ],
-          "notes": "Single-file, not folder-per-skill.",
-          "confidence": "verified"
+          "notes": "Agent Skills across cloud agent, code review, CLI, VS Code, JetBrains. .github/prompts/ single-file prompts deprecated in favour of skills.",
+          "confidence": "verified",
+          "user_paths": [
+            "~/.copilot/skills/",
+            "~/.agents/skills/"
+          ],
+          "sources": [
+            "https://docs.github.com/en/copilot/concepts/agents/about-agent-skills"
+          ]
         },
         "mcp": {
           "project_paths": [
-            ".vscode/mcp.json"
+            ".vscode/mcp.json",
+            ".mcp.json",
+            ".github/mcp.json"
           ],
           "format": "json",
           "schema_top_level_key": "servers",
@@ -758,15 +844,25 @@
             "sandbox"
           ],
           "sandboxing": "macOS/Linux stdio: sandboxEnabled + sandbox object for fs/network",
-          "notes": "VS Code's NATIVE MCP. Top-level `servers` NOT `mcpServers`.",
+          "notes": "VS Code reads .vscode/mcp.json (top-level `servers`). Copilot CLI reads .mcp.json and .github/mcp.json (mcpServers) plus ~/.copilot/mcp-config.json.",
           "confidence": "verified",
           "sources": [
             "https://code.visualstudio.com/docs/copilot/customization/mcp-servers"
           ]
         },
         "hooks": {
-          "confidence": "unsupported",
-          "notes": "Via VS Code extension API, not file-based."
+          "confidence": "verified",
+          "notes": "One JSON file per hook set; 8 events.",
+          "project_paths": [
+            ".github/hooks/"
+          ],
+          "user_paths": [
+            "~/.copilot/hooks/"
+          ],
+          "format": "json",
+          "sources": [
+            "https://docs.github.com/en/copilot/concepts/agents/hooks"
+          ]
         },
         "memory": {
           "confidence": "unsupported"
@@ -788,6 +884,110 @@
           "notes": "VS Code workspace settings (Copilot-related keys nested).",
           "confidence": "documented"
         }
+      },
+      "checked_at": "2026-09-15"
+    },
+    "gemini": {
+      "display_name": "Gemini CLI",
+      "docs_homepage": "https://geminicli.com/docs/",
+      "category": "native-cli",
+      "status": "active",
+      "csaw_in_code": false,
+      "checked_at": "2026-09-14",
+      "scope_notes": "Not projected by csaw (Claude Code and Codex only, since 2026-09-28). Consumer (free / AI Pro / Ultra) auth ended 2026-06-18 and moved to Antigravity CLI; API-key and Gemini Code Assist enterprise users continue and the OSS project keeps releasing (v0.59.0 on 2026-09-08). Removed from ToolRegistry in v0.6.0 on a misread of that announcement; reinstated in v0.11.0.",
+      "kinds": {
+        "instructions": {
+          "project_paths": [
+            "GEMINI.md"
+          ],
+          "user_paths": [
+            "~/.gemini/GEMINI.md"
+          ],
+          "format": "markdown",
+          "notes": "Loaded from ancestors and just-in-time from subdirectories; @file imports supported; context.fileName can add AGENTS.md. csaw generates a GEMINI.md bridge importing AGENTS.md when the registry has none.",
+          "confidence": "verified",
+          "sources": [
+            "https://geminicli.com/docs/cli/gemini-md/"
+          ]
+        },
+        "rules": {
+          "confidence": "unsupported",
+          "notes": "No rules directory; use GEMINI.md."
+        },
+        "agents": {
+          "project_paths": [
+            ".gemini/agents/"
+          ],
+          "user_paths": [
+            "~/.gemini/agents/"
+          ],
+          "format": "markdown",
+          "confidence": "verified",
+          "sources": [
+            "https://geminicli.com/docs/core/subagents/"
+          ]
+        },
+        "skills": {
+          "project_paths": [
+            ".gemini/skills/<name>/SKILL.md",
+            ".agents/skills/<name>/SKILL.md"
+          ],
+          "user_paths": [
+            "~/.gemini/skills/",
+            "~/.agents/skills/"
+          ],
+          "format": "markdown",
+          "notes": "Agent Skills standard; the .agents alias wins when both exist.",
+          "confidence": "verified",
+          "sources": [
+            "https://geminicli.com/docs/cli/skills/"
+          ]
+        },
+        "mcp": {
+          "project_paths": [
+            ".gemini/settings.json"
+          ],
+          "user_paths": [
+            "~/.gemini/settings.json",
+            "/etc/gemini-cli/settings.json"
+          ],
+          "format": "json",
+          "schema_top_level_key": "mcpServers",
+          "notes": "Settings-embedded; merge projection target (planned).",
+          "confidence": "verified"
+        },
+        "hooks": {
+          "project_paths": [
+            ".gemini/settings.json"
+          ],
+          "user_paths": [
+            "~/.gemini/settings.json"
+          ],
+          "format": "json",
+          "confidence": "verified",
+          "sources": [
+            "https://geminicli.com/docs/hooks/"
+          ]
+        },
+        "ignore": {
+          "project_paths": [
+            ".geminiignore"
+          ],
+          "confidence": "verified",
+          "sources": [
+            "https://geminicli.com/docs/cli/gemini-ignore/"
+          ]
+        },
+        "extensions": {
+          "user_paths": [
+            "~/.gemini/extensions/<name>/gemini-extension.json"
+          ],
+          "notes": "Extensions bundle skills/, agents/, hooks/hooks.json, commands/, policies/.",
+          "confidence": "verified",
+          "sources": [
+            "https://geminicli.com/docs/extensions/reference/"
+          ]
+        }
       }
     },
     "antigravity": {
@@ -795,8 +995,8 @@
       "docs_homepage": "https://antigravity.google/docs/",
       "category": "ide-or-cli",
       "status": "active",
-      "csaw_in_code": true,
-      "scope_notes": "Gemini CLI's successor (Gemini sunset 2026-06-18). Built in Go. Uses .agents/ (plural) — same as csaw's StandardFallback.",
+      "csaw_in_code": false,
+      "scope_notes": "Not projected by csaw (Claude Code and Codex only, since 2026-09-28). Google's agentic CLI + IDE. Successor for Gemini CLI consumer accounts (Gemini CLI itself continues for API-key and enterprise users). Uses the neutral .agents/ layout: rules, agents, skills.",
       "kinds": {
         "instructions": {
           "project_paths": [
@@ -811,33 +1011,32 @@
         },
         "rules": {
           "project_paths": [
-            ".agents/"
+            ".agents/rules/"
           ],
           "format": "markdown",
-          "file_pattern": "agents.md, rules.md, skills.md inside .agents/",
-          "notes": "Loose rules concept.",
-          "confidence": "documented"
+          "file_pattern": "*.md (legacy .agent/rules)",
+          "notes": "Rules directory under .agents/; legacy .agent/rules still read.",
+          "confidence": "verified"
         },
         "agents": {
           "project_paths": [
-            ".agents/agents.md"
+            ".agents/agents/"
           ],
           "format": "markdown",
-          "file_pattern": "single markdown declarations file",
-          "notes": "Single file enumerating agents, not folder-per-agent.",
-          "confidence": "documented"
+          "file_pattern": "<name>.md",
+          "notes": "Folder of markdown subagent definitions (earlier docs described a single agents.md file; now a directory).",
+          "confidence": "verified"
         },
         "skills": {
           "project_paths": [
-            ".agents/skills/<name>/SKILL.md",
-            ".agents/skills.md"
+            ".agents/skills/<name>/SKILL.md"
           ],
           "user_paths": [
-            "~/.gemini/antigravity/skills/"
+            "~/.gemini/antigravity-cli/skills/"
           ],
           "format": "markdown",
           "file_pattern": "folder containing SKILL.md AND/OR skills.md declaration",
-          "notes": "Same SKILL.md folder as Claude (agentskills.io). csaw's .agents/skills/ fallback SERVES Antigravity for free.",
+          "notes": "Agent Skills standard.",
           "confidence": "verified"
         },
         "mcp": {
@@ -854,7 +1053,14 @@
         },
         "hooks": {
           "confidence": "documented",
-          "notes": "Hooks supported (inherited from Gemini CLI); paths unclear."
+          "notes": "Hooks supported (inherited from Gemini CLI); paths unclear.",
+          "project_paths": [
+            ".agents/hooks.json"
+          ],
+          "user_paths": [
+            "~/.gemini/config/hooks.json"
+          ],
+          "format": "json"
         },
         "memory": {
           "user_paths": [
@@ -876,7 +1082,8 @@
           "format": "json",
           "confidence": "documented"
         }
-      }
+      },
+      "checked_at": "2026-09-14"
     },
     "kiro": {
       "display_name": "Kiro (AWS)",
@@ -884,7 +1091,7 @@
       "category": "ide-or-cli",
       "status": "active",
       "csaw_in_code": false,
-      "scope_notes": "AWS agentic coding IDE on Bedrock. Spec-driven. Removed from ToolRegistry in v0.6.1 to keep projection focused; re-add on user demand.",
+      "scope_notes": "Not projected by csaw (Claude Code and Codex only, since 2026-09-28). AWS agentic coding IDE on Bedrock. Spec-driven. Removed from ToolRegistry in v0.6.1 to keep projection focused; re-add on user demand.",
       "kinds": {
         "instructions": {
           "project_paths": [
@@ -970,7 +1177,7 @@
       "category": "vscode-extension",
       "status": "active",
       "csaw_in_code": false,
-      "scope_notes": "Has .continue/rules/ (project) and ~/.continue/rules/ (user) — file-based, NOT all nested in config.",
+      "scope_notes": "Not projected by csaw (Claude Code and Codex only, since 2026-09-28). Has .continue/rules/ (project) and ~/.continue/rules/ (user) — file-based, NOT all nested in config.",
       "kinds": {
         "instructions": {
           "project_paths": [
@@ -1060,7 +1267,7 @@
       "category": "vscode-extension",
       "status": "active",
       "csaw_in_code": false,
-      "scope_notes": "Formerly Claude Dev. VS Code + JetBrains + CLI. Roo Code is popular fork.",
+      "scope_notes": "Not projected by csaw (Claude Code and Codex only, since 2026-09-28). Formerly Claude Dev. VS Code + JetBrains + CLI. Roo Code is popular fork.",
       "kinds": {
         "instructions": {
           "project_paths": [
@@ -1121,8 +1328,8 @@
       "docs_homepage": "https://goose-docs.ai/",
       "category": "native-cli",
       "status": "active",
-      "csaw_in_code": true,
-      "scope_notes": "MOVED from block/goose to aaif-goose/goose. .goosehints + .goose/recipes/ are real file-based concepts.",
+      "csaw_in_code": false,
+      "scope_notes": "Not projected by csaw (Claude Code and Codex only, since 2026-09-28). MOVED from block/goose to aaif-goose/goose. .goosehints + .goose/recipes/ are real file-based concepts.",
       "kinds": {
         "instructions": {
           "project_paths": [
@@ -1148,12 +1355,14 @@
         },
         "agents": {
           "project_paths": [
-            ".goose/recipes/"
+            ".agents/agents/",
+            ".claude/agents/",
+            ".goose/agents/"
           ],
           "user_paths": [
             "~/.config/goose/recipes/"
           ],
-          "format": "yaml",
+          "format": "markdown",
           "file_pattern": "*.yaml or *.json (recipes)",
           "frontmatter_required": [
             "name",
@@ -1167,7 +1376,7 @@
             "sub_recipes",
             "response_schema"
           ],
-          "notes": "Discovery: current dir → GOOSE_RECIPE_PATH env → ~/.config/goose/recipes/ → .goose/recipes/ → GitHub via GOOSE_RECIPE_GITHUB_REPO env.",
+          "notes": "Markdown agent definitions under the neutral .agents/agents; .goose/agents and .claude/agents read for compatibility.",
           "confidence": "verified",
           "sources": [
             "https://goose-docs.ai/docs/guides/recipes/storing-recipes/"
@@ -1175,13 +1384,14 @@
         },
         "skills": {
           "project_paths": [
-            ".goose/recipes/"
+            ".agents/skills/<name>/SKILL.md",
+            ".claude/skills/<name>/SKILL.md"
           ],
           "user_paths": [
-            "~/.config/goose/recipes/"
+            "~/.agents/skills/"
           ],
-          "format": "yaml",
-          "notes": "Recipes serve as both agents and skills (workflows).",
+          "format": "markdown",
+          "notes": "Agent Skills canonical under .agents/skills since v1.30; .goose/skills and .claude/skills read for compatibility. Recipes (.goose/recipes/, YAML) are a separate concept.",
           "confidence": "verified"
         },
         "mcp": {
@@ -1199,7 +1409,9 @@
           "confidence": "verified"
         },
         "hooks": {
-          "confidence": "unsupported"
+          "confidence": "documented",
+          "project_paths": [],
+          "notes": "Hooks exist only inside plugins (.agents/plugins/<name>/hooks/hooks.json)."
         },
         "memory": {
           "project_paths": [
@@ -1226,33 +1438,18 @@
           "format": "yaml",
           "confidence": "verified"
         }
-      }
+      },
+      "checked_at": "2026-09-14"
     }
   },
   "watchlist": {
     "description": "Tools with file-based projection that are less prioritized for csaw's MVP. Promoted to deep entries when adoption signals warrant.",
     "tools": {
-      "gemini": {
-        "display_name": "Gemini CLI",
-        "status": "deprecated",
-        "csaw_in_code": false,
-        "scope_notes": "Sunset 2026-06-18 by Google. Removed from ToolRegistry in v0.6.0. Migration: Antigravity (.agents/). GEMINI.md is still recognized as an instruction file (Antigravity reads it).",
-        "project_paths": [
-          "GEMINI.md",
-          ".gemini/agents/",
-          ".gemini/commands/ (TOML)",
-          ".gemini/settings.json"
-        ],
-        "user_paths": [
-          "~/.gemini/"
-        ],
-        "mcp_key": "mcpServers (in settings.json)"
-      },
       "roo-code": {
         "display_name": "Roo Code",
-        "status": "active",
+        "status": "archived",
         "csaw_in_code": false,
-        "scope_notes": "Cline fork. Strongest file-based mode system.",
+        "scope_notes": "Repository archived 2026-05-15. The Kilo Code fork continues (.kilocode/rules, AGENTS.md).",
         "project_paths": [
           ".roo/rules/",
           ".roo/rules-<mode-slug>/",
@@ -1330,18 +1527,18 @@
       },
       "aider": {
         "display_name": "Aider",
-        "status": "active",
+        "status": "dormant",
         "csaw_in_code": false,
-        "scope_notes": "Model-agnostic. Single CONVENTIONS.md.",
+        "scope_notes": "No release since v0.86.0 (2025-08-09). Reads CONVENTIONS.md; csaw still projects .aiderignore through the ignore kind.",
         "project_paths": [
           "CONVENTIONS.md",
-          "AGENTS.md",
-          ".aider.conf.yml"
+          ".aider.conf.yml",
+          ".aiderignore"
         ],
         "user_paths": [
           "~/.aider.conf.yml"
         ],
-        "mcp_key": "(no MCP client support)"
+        "mcp_key": ""
       },
       "amp": {
         "display_name": "Amp (Sourcegraph)",
@@ -1570,6 +1767,24 @@
           "~/.openclaw/workspace/skills/<skill>/SKILL.md"
         ],
         "mcp_key": "(documented elsewhere)"
+      },
+      "devin-cli": {
+        "display_name": "Devin CLI (Cognition)",
+        "status": "active",
+        "csaw_in_code": false,
+        "scope_notes": "Companion CLI to Devin Desktop (formerly Windsurf). Reads AGENTS.md, AGENTS.local.md, .claude/, .cursor/rules; project config in .devin/.",
+        "project_paths": [
+          "AGENTS.md",
+          "AGENTS.local.md",
+          ".devin/config.json",
+          ".devin/config.local.json",
+          ".devin/mcp_config.json",
+          ".agents/skills/"
+        ],
+        "user_paths": [
+          "~/.devin/"
+        ],
+        "mcp_key": "mcpServers"
       }
     }
   },

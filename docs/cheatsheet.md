@@ -170,19 +170,19 @@ csaw update                             # repair broken links
 
 | Kind | Registry path | Projects to |
 |---|---|---|
-| Instructions | `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.goosehints` | Project root |
-| Rules | `rules/*.md` | `.claude/rules/`, `.cursor/rules/`, `.github/instructions/*.instructions.md` (Copilot, suffix auto-applied) |
-| Agents | `agents/*.md` | `.claude/agents/`, `.opencode/agents/`, `.github/agents/*.agent.md` (Copilot, suffix auto-applied) |
-| Skills | `skills/*/SKILL.md` | `.claude/skills/`, `.opencode/skills/`, `.codex/skills/`, `.agents/skills/` |
-| MCP | `mcp/*.json` | `.mcp.json`, `.cursor/mcp.json`, `.vscode/mcp.json` |
+| Instructions | `AGENTS.md`, `CLAUDE.md` | Project root; `CLAUDE.md` generated from `AGENTS.md` for Claude Code when absent |
+| Rules | `rules/*.md` | `.claude/rules/` (Codex has no rules directory) |
+| Agents | `agents/*.md` | `.claude/agents/` (Codex has no agents directory) |
+| Skills | `skills/<name>/` (whole directory) | `.claude/skills/` and/or the neutral `.agents/skills/`, whichever your tools read |
+| MCP | `mcp/*.json`, `mcp/codex.toml` | `.mcp.json` (Claude Code); `csaw mcp sync codex` merges into `.codex/config.toml` |
 | Hooks | `hooks/*` | `.claude/hooks/` |
-| Ignore | `ignore/*` | `.cursorignore`, `.cody/ignore`, `.aiderignore`, `.tongyiignore` |
+| Ignore | `ignore/*` | `.cursorignore`, `.cody/ignore`, `.aiderignore`, `.tongyiignore`, `.geminiignore` (other tools; neither Claude Code nor Codex has one) |
 
-`.agents/skills/` is always created as a fallback. Other tool directories are used only if they already exist in the project or are configured via `csaw config set tools claude,cursor`.
+csaw projects for Claude Code and Codex. Tools are taken from `csaw config set tools claude,codex` (or `--tools`), auto-detected from `.claude/` and `.codex/`, and fall back to the neutral `.agents/skills/` when neither is known.
 
 Files at unrecognized registry paths are mounted at the same path in the project (no per-tool projection).
 
-**GitHub Copilot** projections get automatic suffix rewriting — you write `rules/security.md` in your registry; Copilot sees `.github/instructions/security.instructions.md`. Like every csaw projection, these files are hidden from git by default. If your team wants them committed for PR review, opt in with `csaw show .github/instructions/*` (or per-file).
+**Claude Code** reads `CLAUDE.md`, not `AGENTS.md`; csaw generates a `CLAUDE.md` that imports `AGENTS.md` when the registry has none. **Codex** reads `AGENTS.md` and `.agents/skills/`; its MCP config is merged with `csaw mcp sync codex`.
 
 ## Profile Format (`csaw.yml`)
 
@@ -244,6 +244,6 @@ my-registry/
 
 **Kinds** — csaw classifies registry files as one of seven kinds: instructions, rules, agents, skills, mcp, hooks, ignore. Each has its own projection target. Filter with `csaw use team/backend --kind agents,skills`. csaw does **not** project settings (credentials) or memory (session state); see `docs/planning/projection-roadmap.md`.
 
-**Tool directories** — Each kind projects into the right per-tool directory (`.claude/agents/`, `.cursor/rules/`, etc.) where AI tools discover files natively.
+**Tool directories** — Each kind projects into the directories the configured tools read (`.claude/agents/`, `.claude/skills/`, `.agents/skills/`) where the tools discover files natively.
 
 **Git exclude** — Mounted files are hidden from git by default. Use `csaw show`/`hide` to control visibility. Files in already-gitignored directories (like `.claude/`) need no extra exclusion.

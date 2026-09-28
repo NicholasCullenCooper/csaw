@@ -239,7 +239,19 @@ var kindDisplayOrder = []mount.Kind{
 	mount.KindSkill,
 	mount.KindRule,
 	mount.KindMCP,
+	mount.KindHook,
+	mount.KindIgnore,
 	mount.KindOther,
+}
+
+// kindGroupLabel names a kind group in inspect output. Hooks carry a caveat:
+// csaw places the scripts, but no tool runs them until they are declared in
+// that tool's settings.
+func kindGroupLabel(kind mount.Kind) string {
+	if kind == mount.KindHook {
+		return mount.KindLabel(kind) + " · scripts only; wire them in the tool's settings"
+	}
+	return mount.KindLabel(kind)
 }
 
 func writeKindGroups(b *strings.Builder, statuses []drift.Status) {
@@ -255,7 +267,7 @@ func writeKindGroups(b *strings.Builder, statuses []drift.Status) {
 			continue
 		}
 		b.WriteString(fmt.Sprintf("    %s %s\n",
-			output.Faint(mount.KindLabel(kind)),
+			output.Faint(kindGroupLabel(kind)),
 			output.Faint(fmt.Sprintf("(%d)", len(group))),
 		))
 		for _, status := range group {
