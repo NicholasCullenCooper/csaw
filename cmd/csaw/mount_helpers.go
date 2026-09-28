@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/NicholasCullenCooper/csaw/internal/linkmode"
+	"github.com/NicholasCullenCooper/csaw/internal/lock"
 	"github.com/NicholasCullenCooper/csaw/internal/mount"
 	"github.com/NicholasCullenCooper/csaw/internal/output"
 	"github.com/NicholasCullenCooper/csaw/internal/pinning"
@@ -136,7 +137,7 @@ func preflightAutoUnmountConflicts(projectRoot string, entries []mount.SourceEnt
 // bytes. A generated file the user edited is preserved by unmount rather
 // than treated as a conflict.
 func mountedEntryIntact(lm linkmode.Mode, targetPath string, entry workspace.MountedStateEntry) bool {
-	if !entry.Generated {
+	if !entry.IsCopy() {
 		return linkmode.IsLink(lm, targetPath, entry.SourcePath)
 	}
 	info, err := os.Lstat(targetPath)
@@ -293,4 +294,54 @@ func pickProfile(manager sources.Manager, paths runtime.Paths) (string, error) {
 	}
 
 	return result.Selected, nil
+}
+
+// buildLock describes the given mount state as a lock file, resolving each
+// source's checkout commit.
+func buildLock(manager sources.Manager, paths runtime.Paths, projectRoot string, state workspace.MountState) (lock.File, error) {
+	infos, err := lock.SourceInfos(context.Background(), manager.Git, paths, projectRoot)
+	if err != nil {
+		return lock.File{}, err
+	}
+	return lock.FromState(state, infos)
+}
+
+// writeLock records the current mount in .csaw/lock.yml. A failure to write
+// the lock is reported but does not undo a mount that already succeeded.
+func writeLock(manager sources.Manager, paths runtime.Paths, projectRoot string, state workspace.MountState) {
+	if len(state.Entries) == 0 {
+		return
+	}
+	file, err := buildLock(manager, paths, projectRoot, state)
+	if err == nil {
+		err = lock.Write(projectRoot, file)
+	}
+	if err != nil {
+		output.Warnf("could not write %s: %v", filepath.ToSlash(filepath.Join(lock.DirName, lock.FileName)), err)
+	}
+}
+
+// checkFrozen refuses a mount whose planned result differs from the
+// committed lock.
+func checkFrozen(manager sources.Manager, paths runtime.Paths, projectRoot string, entries []mount.SourceEntry, mode mount.MountMode) error {
+	locked, found, err := lock.Read(projectRoot)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return fmt.Errorf("--frozen needs %s; mount once without --frozen to create it", filepath.ToSlash(filepath.Join(lock.DirName, lock.FileName)))
+	}
+	planned, err := mount.PlannedState(entries, mode)
+	if err != nil {
+		return err
+	}
+	current, err := buildLock(manager, paths, projectRoot, planned)
+	if err != nil {
+		return err
+	}
+	if diffs := lock.Diff(locked, current); len(diffs) > 0 {
+		return fmt.Errorf("mount differs from %s:\n  - %s\nMount without --frozen to accept the change and rewrite the lock",
+			filepath.ToSlash(filepath.Join(lock.DirName, lock.FileName)), strings.Join(diffs, "\n  - "))
+	}
+	return nil
 }

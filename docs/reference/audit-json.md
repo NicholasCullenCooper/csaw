@@ -68,6 +68,9 @@ Optional fields are omitted when empty.
 | `mount.none` | `warn` | No active csaw context was found. |
 | `mount.healthy` | `ok` | All inspected mounted files are healthy. |
 | `mount.unhealthy` | `error` | A mounted file is missing, replaced, drifted, points to a missing source, or has protected content drift. |
+| `lock.missing` | `warn` (`error` when the policy sets `require_lock: true`) | Something is mounted but `.csaw/lock.yml` does not exist. |
+| `lock.match` | `ok` | The mounted files and source commits match `.csaw/lock.yml`. |
+| `lock.mismatch` | `error` | The mounted context differs from `.csaw/lock.yml`; `detail` lists each difference. |
 | `source.required.present` | `ok` | A required source is active and healthy. |
 | `source.required.missing` | `error` | A required source is not active and healthy. |
 | `source.required.metadata_missing` | `error` | A required source is active, but its configured metadata could not be found for URL verification. |
@@ -157,6 +160,14 @@ required_kinds:
 | `replaced-link` | The project path exists but is no longer the expected csaw-managed link. |
 | `drifted-link` | The project path is a link, but it points somewhere other than the recorded source. |
 | `protected-content-drift` | A protected mounted file no longer matches the SHA-256 hash recorded at mount time. |
+| `missing-file` | A copied or generated file recorded in mount state no longer exists. |
+| `replaced-file` | The project path exists but is no longer a regular file. |
+| `stale` | The source changed since the copy was made and the copy is untouched; `csaw update` refreshes it. |
+| `modified-locally` | The project copy was edited after csaw wrote it; csaw never overwrites it. |
+| `stale-and-modified` | Both the source and the project copy changed. |
+| `unreadable` | The project file could not be hashed. |
+
+`missing-link`, `replaced-link`, and `drifted-link` apply to symlink-mode mounts; the file issues apply to copies and generated files.
 | `protected-hash-unreadable` | csaw could not read a protected mounted file to verify its hash. |
 
 Remount the context to accept an intentional protected source update and record a new protected hash.

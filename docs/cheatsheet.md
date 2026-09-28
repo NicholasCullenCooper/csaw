@@ -224,7 +224,7 @@ my-registry/
 
 ## Key Concepts
 
-**Mount, not install** — Symlinks from a source. Reversible. Your repo stays clean.
+**Mount, not install** — Hash-tracked copies from a source (symlinks opt-in). Reversible. Your repo stays clean.
 
 **Profiles** — Named file selections with glob patterns in a source's `csaw.yml`. Can inherit from each other via `extends:`.
 

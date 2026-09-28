@@ -75,7 +75,7 @@ csaw use team/backend
 
 `team/backend` means: use the `backend` profile from the configured `team`
 source. Your project gets the team's AGENTS.md, skills, and rules — all
-symlinked. Every repo on the team can activate the same named mode. When
+copied in. Every repo on the team can activate the same named mode. When
 someone updates the team config:
 
 ```bash
@@ -83,9 +83,9 @@ csaw pull team
 # ✔ pulled team
 ```
 
-Every project sees edits to already-mounted files instantly through the symlinks.
+Run `csaw pull` then `csaw update` in a project to pick up edits to already-mounted files; `csaw check` lists what is stale.
 If the update added new files, rerun the same activation command to add the new
-symlinks.
+copies.
 
 ---
 
@@ -367,13 +367,14 @@ csaw pull team
 # ✔ pulled team
 ```
 
-Since your project's `AGENTS.md` is a symlink to the team registry, edits to
-that file are visible instantly. If the team added new rules, skills, agents, or
-MCP files, rerun the profile activation to add those new symlinks.
+Since your project's `AGENTS.md` is a copy of the team registry's file, edits to
+that file reach the project on the next `csaw pull` and `csaw update`. If the
+team added new rules, skills, agents, or MCP files, rerun the profile activation
+to add those new files.
 
 ### What if I edited a mounted file?
 
-If you edited `AGENTS.md` in your project, you actually edited the team registry (through the symlink). `csaw status` flags this proactively so you see the edit before you try to pull:
+If you edited `AGENTS.md` in your project, `csaw check` reports it as edited locally and `csaw update` leaves it alone. In symlink mode the edit lands in the team registry checkout instead, and `csaw status` flags that too:
 
 ```
 uncommitted edits in source checkouts
@@ -414,7 +415,7 @@ This is standard git — csaw tells you what happened and where to fix it. The r
 
 ## Sharing Your Changes
 
-You updated a skill through a symlink (or edited the registry directly). Push it:
+You updated a skill in the registry checkout (directly, or through a symlink-mode mount). Push it:
 
 ```bash
 csaw push team -m "improve code review skill"
@@ -517,7 +518,7 @@ In a project with claude configured, after `csaw mount`:
 project/
 ├── .claude/
 │   └── hooks/
-│       └── pre-commit-test.sh    ← symlink to team/hooks/pre-commit-test.sh
+│       └── pre-commit-test.sh    ← copy of team/hooks/pre-commit-test.sh
 ```
 
 csaw places the script. It does not run by itself: no AI tool scans a hooks directory. Claude Code runs hooks declared in its settings files and Codex runs hooks declared in `.codex/hooks.json` (same JSON shape). To wire the mounted script into Claude Code, declare it once in `.claude/settings.json` (or `.claude/settings.local.json` to keep it out of git):
@@ -561,7 +562,7 @@ After mount:
 
 ```
 project/
-└── .cursorignore       ← symlink to team/ignore/cursor
+└── .cursorignore       ← copy of team/ignore/cursor
 ```
 
 Ignore files project by registry filename regardless of the tools list: `ignore/aider` becomes `.aiderignore`, and so on (`.cursorignore`, `.cody/ignore`, `.aiderignore`, `.tongyiignore`, `.geminiignore`).
@@ -721,7 +722,7 @@ The vendored content can't accidentally become active context — it's explicitl
 csaw unmount
 ```
 
-Every symlink is removed. If csaw stashed any original files during mount (because they existed before), they're restored. Your project is exactly as it was.
+Every file csaw wrote is removed. If csaw stashed any original files during mount (because they existed before), they're restored. Anything you edited after mounting is moved to `.csaw-stash/modified/` instead of deleted. Your project is exactly as it was.
 
 ```
 ✔ 6 removed · 2 restored

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/NicholasCullenCooper/csaw/internal/drift"
 	"github.com/NicholasCullenCooper/csaw/internal/linkmode"
 	"github.com/NicholasCullenCooper/csaw/internal/runtime"
 	"github.com/NicholasCullenCooper/csaw/internal/sources"
@@ -51,12 +52,12 @@ func TestApplyUnmountAndRestoreState(t *testing.T) {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
-	result, err := Apply(project, paths, []SourceEntry{{
+	result, err := ApplyWithOptions(project, paths, []SourceEntry{{
 		SourceName:    "personal",
 		RelativePath:  "agents/base.md",
 		QualifiedPath: "personal/agents/base.md",
 		FullPath:      sourceFile,
-	}}, staticResolver{action: ConflictOverwrite})
+	}}, staticResolver{action: ConflictOverwrite}, ApplyOptions{Mode: ModeSymlink})
 	if err != nil {
 		t.Fatalf("Apply() error = %v", err)
 	}
@@ -414,4 +415,176 @@ func TestEntriesFromMountedStateCarriesGeneratedContent(t *testing.T) {
 	if len(entries) != 1 || !entries[0].Generated || entries[0].Content != "@AGENTS.md\n" {
 		t.Fatalf("restore entries lost generated content: %#v", entries)
 	}
+}
+
+func copyFixture(t *testing.T) (project string, paths runtime.Paths, entry SourceEntry, sourceFile string) {
+	t.Helper()
+	root := t.TempDir()
+	paths = runtime.BuildPaths(filepath.Join(root, ".csaw"))
+	project = filepath.Join(root, "project")
+	sourceRoot := filepath.Join(root, "source")
+	if err := os.MkdirAll(filepath.Join(project, ".git", "info"), 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(sourceRoot, "rules"), 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	sourceFile = filepath.Join(sourceRoot, "rules", "go.md")
+	if err := os.WriteFile(sourceFile, []byte("v1\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	entry = SourceEntry{
+		SourceName:    "team",
+		RelativePath:  ".claude/rules/go.md",
+		QualifiedPath: "team/rules/go.md",
+		FullPath:      sourceFile,
+	}
+	return project, paths, entry, sourceFile
+}
+
+func TestApplyCopyModeWritesPlainFilesWithHashes(t *testing.T) {
+	project, paths, entry, sourceFile := copyFixture(t)
+	target := filepath.Join(project, ".claude", "rules", "go.md")
+
+	result, err := Apply(project, paths, []SourceEntry{entry}, staticResolver{action: ConflictOverwrite})
+	if err != nil {
+		t.Fatalf("Apply() error = %v", err)
+	}
+	if result.Linked != 1 {
+		t.Fatalf("Apply() result = %#v", result)
+	}
+	info, err := os.Lstat(target)
+	if err != nil || !info.Mode().IsRegular() {
+		t.Fatalf("copy mode must write a regular file (err %v)", err)
+	}
+	if content, _ := os.ReadFile(target); string(content) != "v1\n" {
+		t.Fatalf("copied content = %q", content)
+	}
+
+	state, _ := workspace.ReadMountState(project)
+	wantHash, _ := workspace.FileSHA256(sourceFile)
+	if len(state.Entries) != 1 || state.Entries[0].Mode != "copy" || state.Entries[0].ContentSHA256 != wantHash || state.Entries[0].SourceSHA256 != wantHash {
+		t.Fatalf("state should record copy mode and hashes: %#v", state.Entries)
+	}
+
+	again, err := Apply(project, paths, []SourceEntry{entry}, staticResolver{action: ConflictSkip})
+	if err != nil {
+		t.Fatalf("second Apply() error = %v", err)
+	}
+	if again.AlreadyLinked != 1 || again.Linked != 0 {
+		t.Fatalf("identical copy should be a no-op: %#v", again)
+	}
+
+	unmountResult, err := Unmount(project, Selection{})
+	if err != nil {
+		t.Fatalf("Unmount() error = %v", err)
+	}
+	if unmountResult.Removed != 1 || len(unmountResult.KeptModified) != 0 {
+		t.Fatalf("Unmount() result = %#v", unmountResult)
+	}
+	if _, err := os.Lstat(target); !os.IsNotExist(err) {
+		t.Fatal("unmodified copy should be removed")
+	}
+}
+
+func TestCopyModePreservesExecutableBit(t *testing.T) {
+	project, paths, entry, sourceFile := copyFixture(t)
+	if err := os.Chmod(sourceFile, 0o755); err != nil {
+		t.Fatalf("Chmod() error = %v", err)
+	}
+	if _, err := Apply(project, paths, []SourceEntry{entry}, staticResolver{action: ConflictOverwrite}); err != nil {
+		t.Fatalf("Apply() error = %v", err)
+	}
+	info, err := os.Stat(filepath.Join(project, ".claude", "rules", "go.md"))
+	if err != nil {
+		t.Fatalf("Stat() error = %v", err)
+	}
+	if info.Mode().Perm()&0o100 == 0 {
+		t.Fatalf("executable bit lost: %v", info.Mode())
+	}
+}
+
+func TestRepairRefreshesStaleCopyAndKeepsEdits(t *testing.T) {
+	project, paths, entry, sourceFile := copyFixture(t)
+	target := filepath.Join(project, ".claude", "rules", "go.md")
+	if _, err := Apply(project, paths, []SourceEntry{entry}, staticResolver{action: ConflictOverwrite}); err != nil {
+		t.Fatalf("Apply() error = %v", err)
+	}
+
+	// Source moves on: the copy is stale and update refreshes it.
+	if err := os.WriteFile(sourceFile, []byte("v2\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	statuses := drift.InspectMountState(project, mustState(t, project), linkmode.Detect())
+	if statuses[0].Issue != drift.IssueStale {
+		t.Fatalf("expected stale, got %#v", statuses[0])
+	}
+	result, after, err := Repair(project)
+	if err != nil {
+		t.Fatalf("Repair() error = %v", err)
+	}
+	if result.Linked != 1 || !after[0].Healthy {
+		t.Fatalf("Repair() = %#v, statuses %#v", result, after)
+	}
+	if content, _ := os.ReadFile(target); string(content) != "v2\n" {
+		t.Fatalf("refreshed content = %q", content)
+	}
+
+	// A local edit is reported, never overwritten, and kept on unmount.
+	if err := os.WriteFile(target, []byte("v2 + mine\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	statuses = drift.InspectMountState(project, mustState(t, project), linkmode.Detect())
+	if statuses[0].Issue != drift.IssueModifiedLocally {
+		t.Fatalf("expected modified-locally, got %#v", statuses[0])
+	}
+	if err := os.WriteFile(sourceFile, []byte("v3\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	statuses = drift.InspectMountState(project, mustState(t, project), linkmode.Detect())
+	if statuses[0].Issue != drift.IssueStaleAndModified {
+		t.Fatalf("expected stale-and-modified, got %#v", statuses[0])
+	}
+	result, _, err = Repair(project)
+	if err != nil {
+		t.Fatalf("Repair() error = %v", err)
+	}
+	if result.Linked != 0 {
+		t.Fatalf("Repair must not touch an edited copy: %#v", result)
+	}
+	if content, _ := os.ReadFile(target); string(content) != "v2 + mine\n" {
+		t.Fatalf("edit overwritten: %q", content)
+	}
+	unmountResult, err := Unmount(project, Selection{})
+	if err != nil {
+		t.Fatalf("Unmount() error = %v", err)
+	}
+	if len(unmountResult.KeptModified) != 1 {
+		t.Fatalf("edit should be kept: %#v", unmountResult)
+	}
+}
+
+func TestCopyModeProtectedEditIsProtectedDrift(t *testing.T) {
+	project, paths, entry, _ := copyFixture(t)
+	entry.Protected = true
+	if _, err := Apply(project, paths, []SourceEntry{entry}, staticResolver{action: ConflictOverwrite}); err != nil {
+		t.Fatalf("Apply() error = %v", err)
+	}
+	target := filepath.Join(project, ".claude", "rules", "go.md")
+	if err := os.WriteFile(target, []byte("tampered\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	statuses := drift.InspectMountState(project, mustState(t, project), linkmode.Detect())
+	if statuses[0].Issue != drift.IssueProtectedContentDrift {
+		t.Fatalf("expected protected-content-drift, got %#v", statuses[0])
+	}
+}
+
+func mustState(t *testing.T, project string) workspace.MountState {
+	t.Helper()
+	state, err := workspace.ReadMountState(project)
+	if err != nil {
+		t.Fatalf("ReadMountState() error = %v", err)
+	}
+	return state
 }

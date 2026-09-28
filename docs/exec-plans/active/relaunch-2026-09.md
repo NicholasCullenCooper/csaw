@@ -84,7 +84,10 @@ Phase 3 (v0.14.0)
 
 Landed in the working tree on 2026-09-28: `ToolSpec` reads/writes table with `PlanTargets` set cover (`internal/mount/tools.go`); whole-skill projection; generated `CLAUDE.md` bridge tracked with a content hash, edits preserved under `.csaw-stash/modified/` on unmount, rewritten by `csaw update` when missing; `.codex/skills` dropped in favour of `.agents/skills`; JSON schema 8 with `checked_at` and per-kind path checks; `tool-projection.md` renders "What csaw writes" from the Go registry; docs, curriculum, walkthrough, cheatsheet, and README updated; registry trimmed to `claude` and `codex` with the Cursor/Copilot suffix and frontmatter machinery removed. Remaining before tagging: the manual pass in a real Claude Code and Codex session.
 
-### Phase 1: copy mode, ownership, lock (v0.12.0)
+### Phase 1: copy mode, ownership, lock (v0.12.0) — implemented
+
+**Status (2026-09-28): implemented in the working tree, not yet tagged.** `mount_mode` config and `--mode` flag with copy as the default; `MountedStateEntry.Mode` plus content and source hashes; atomic copy writer preserving the executable bit; drift statuses `stale`, `modified-locally`, `stale-and-modified`, `missing-file`, `replaced-file`, `unreadable`; `csaw update` refreshes what it can and rewrites the lock; `csaw status` shows drift counts; unmount and unpin keep edits; `internal/lock` with `.csaw/lock.yml`, `csaw use --frozen`, `lock.missing|match|mismatch` findings and `require_lock` policy; `cmd/csaw/root.go` split into per-command files; end-to-end tests run in copy mode without a symlink privilege. Remaining: the manual pass in a real Claude Code session and the dogfood week.
+
 
 **1.1 Mount modes.** `internal/mount/engine.go`, `internal/sources/config.go`
 

@@ -12,7 +12,7 @@ The September 2026 audit found that a fresh mount silently missed Claude Code an
 
 - **Scope (2026-09-28): Claude Code and Codex only.** Every phase designs for two surfaces. Other tools stay researched in the JSON catalogue with `csaw_in_code: false`.
 - **Phase 0 (v0.11.0) — shipped in working tree:** reads table with minimal-set projection, generated `CLAUDE.md` bridge, whole-skill directories, `.codex/skills` dropped, honest hooks labelling, per-kind JSON consistency test with `checked_at`.
-- **Phase 1 (v0.12.0):** copy mode default with ownership hashes, transforms, lockfile, real `diff`, command-file split.
+- **Phase 1 (v0.12.0) — shipped in working tree:** copy mode by default with per-file hashes (stale / edited / missing classified by `csaw check`, `csaw update` refreshes, unmount keeps edits), symlink mode opt-in, `.csaw/lock.yml` with `--frozen` and `lock.*` audit findings, `root.go` split into per-command files.
 - **Phase 2 (v0.13.0):** hooks as a merged kind into Claude Code settings and Codex `.codex/hooks.json`, using the bounded-section engine already built for Codex MCP.
 - **Phase 3 (v0.14.0):** export to Claude Code plugins/marketplaces and Agent Plugins (Codex/ChatGPT); vendor content checks and scanner seam; skill validation.
 

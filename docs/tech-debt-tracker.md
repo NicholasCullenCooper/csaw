@@ -4,7 +4,7 @@
 
 - Expand `inspect` from source attribution to full layered provenance.
 - Improve multi-source collision UX beyond the current fail-fast ambiguity error.
-- Revisit `diff` semantics so it is useful for healthy mounts and drifted files, not just a command-level smoke path.
+- Raise test coverage in `internal/runtime` (15%) and `internal/workspace` (31%).
 - Add Phase 2 structured context support.
 
 ## Usage

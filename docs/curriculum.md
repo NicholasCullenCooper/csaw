@@ -581,6 +581,14 @@ human failure summary may still be written to stderr.
 `--strict` fails on warnings as well as errors. A missing policy is a warning in
 default mode and a failure in strict mode.
 
+### The Lockfile
+
+Every mount and every `csaw update` writes `.csaw/lock.yml`: the commit each
+mounted source was at and the SHA-256 of every file csaw placed. Commit it.
+`csaw use <profile> --frozen` refuses to mount anything that differs from it,
+and `csaw audit` reports `lock.match` or `lock.mismatch`. Set
+`require_lock: true` in `.csaw/policy.yml` to make a missing lock an error.
+
 ### JSON Contract
 
 Use [reference/audit-json.md](reference/audit-json.md) for:
@@ -804,6 +812,10 @@ Common issues:
 | `missing-link`              | Project path is gone.                      | Run `csaw update` or remount.                       |
 | `replaced-link`             | Project path is no longer csaw-managed.    | Inspect manually; remount if intentional.           |
 | `drifted-link`              | Link points at the wrong source.           | Run `csaw update` or remount.                       |
+| `stale`                     | Source changed; copy untouched.            | Run `csaw update`.                                  |
+| `modified-locally`          | You edited the copy.                       | `csaw diff` to review; keep it with `csaw fork`, or `csaw unmount <path>` (edit kept under `.csaw-stash/modified/`). |
+| `stale-and-modified`        | Source and copy both changed.              | Same as above; `csaw update` will not touch it.     |
+| `missing-file`              | Copied or generated file is gone.          | Run `csaw update`.                                  |
 | `protected-content-drift`   | Protected file hash changed.               | Audit the change; remount if approved.              |
 | `protected-hash-unreadable` | Hash verification could not read the file. | Check filesystem permissions and mount state.       |
 
@@ -813,7 +825,7 @@ Repair what csaw can repair:
 csaw update
 ```
 
-`csaw update` repairs missing and drifted links that can be reconstructed from
+`csaw update` refreshes missing and stale copies, and repairs missing and drifted links, that can be reconstructed from
 mount state.
 
 Unmount and restore originals:
@@ -823,7 +835,7 @@ csaw unmount
 ```
 
 Use `csaw diff <path>` to compare a replaced mounted file with its source.
-For a healthy symlink, the project path and source path are the same content,
+For a healthy mount, the project path and source path are the same content,
 so there may be no meaningful content diff.
 
 ### Exercise
@@ -1011,8 +1023,10 @@ or remount the intended profile.
 
 ### Windows Link Issues
 
-csaw uses symlinks where available and hardlinks as a fallback. Hardlinks can
-drift when the source file is replaced. Use `csaw check` and `csaw update`.
+csaw copies files by default and tracks them by hash, so no symlink privilege is
+needed. Symlink mode (`csaw config set mount_mode symlink`) uses hardlinks as a
+fallback, which can drift when the source file is replaced. Use `csaw check` and
+`csaw update` either way.
 
 ## Module 18: Expert Mental Models
 

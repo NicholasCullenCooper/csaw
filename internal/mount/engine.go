@@ -32,24 +32,37 @@ type ConflictResolver interface {
 }
 
 type Result struct {
+	// Linked counts files placed (copied, written, or linked).
 	Linked        int
 	Stashed       int
 	Skipped       int
 	AlreadyLinked int
 	Removed       int
 	Restored      int
-	// KeptModified lists generated files a user edited; unmount preserves
-	// them under .csaw-stash/modified/ instead of deleting the edits.
+	// KeptModified lists files a user edited after csaw placed them; unmount
+	// preserves them under .csaw-stash/modified/ instead of deleting the edits.
 	KeptModified []string
 }
 
+// Apply places entries using the default mount mode (copy).
 func Apply(projectRoot string, paths runtime.Paths, entries []SourceEntry, resolver ConflictResolver) (Result, error) {
+	return ApplyWithOptions(projectRoot, paths, entries, resolver, ApplyOptions{Mode: DefaultMountMode})
+}
+
+// ApplyWithOptions places entries in the project as copies or links,
+// stashing displaced originals, recording mount state, and hiding paths
+// from git.
+func ApplyWithOptions(projectRoot string, paths runtime.Paths, entries []SourceEntry, resolver ConflictResolver, options ApplyOptions) (Result, error) {
 	var err error
 	entries, err = resolveConflictsByPriority(entries)
 	if err != nil {
 		return Result{}, err
 	}
 
+	mode := options.Mode
+	if mode == "" {
+		mode = DefaultMountMode
+	}
 	lm := linkmode.Detect()
 
 	store := workspace.FileStateStore{}
@@ -66,8 +79,8 @@ func Apply(projectRoot string, paths runtime.Paths, entries []SourceEntry, resol
 		}
 
 		if _, err := os.Lstat(targetPath); err == nil {
-			if alreadyMounted(lm, targetPath, entry) {
-				stateEntry, err := toMountedStateEntry(entry)
+			if alreadyMounted(lm, mode, targetPath, entry) {
+				stateEntry, err := toMountedStateEntry(entry, mode)
 				if err != nil {
 					return result, err
 				}
@@ -112,17 +125,8 @@ func Apply(projectRoot string, paths runtime.Paths, entries []SourceEntry, resol
 			return result, err
 		}
 
-		if entry.Generated {
-			if err := os.WriteFile(targetPath, []byte(entry.Content), 0o644); err != nil {
-				return result, err
-			}
-		} else {
-			if _, err := os.Stat(entry.FullPath); err != nil {
-				return result, err
-			}
-			if err := linkmode.Create(lm, entry.FullPath, targetPath); err != nil {
-				return result, err
-			}
+		if err := placeEntry(lm, mode, entry, targetPath); err != nil {
+			return result, err
 		}
 
 		// Only add git exclude if the path isn't already covered by .gitignore
@@ -132,7 +136,7 @@ func Apply(projectRoot string, paths runtime.Paths, entries []SourceEntry, resol
 			}
 		}
 
-		stateEntry, err := toMountedStateEntry(entry)
+		stateEntry, err := toMountedStateEntry(entry, mode)
 		if err != nil {
 			return result, err
 		}
@@ -158,6 +162,48 @@ func Apply(projectRoot string, paths runtime.Paths, entries []SourceEntry, resol
 	return result, nil
 }
 
+// placeEntry writes a generated file, copies the source, or creates a link,
+// depending on the entry and mode.
+func placeEntry(lm linkmode.Mode, mode MountMode, entry SourceEntry, targetPath string) error {
+	if entry.Generated {
+		return os.WriteFile(targetPath, []byte(entry.Content), 0o644)
+	}
+	if _, err := os.Stat(entry.FullPath); err != nil {
+		return err
+	}
+	if mode == ModeCopy {
+		_, err := workspace.CopyFile(entry.FullPath, targetPath)
+		return err
+	}
+	return linkmode.Create(lm, entry.FullPath, targetPath)
+}
+
+// alreadyMounted reports whether targetPath already holds what entry would
+// produce: the same bytes for generated and copied entries, or the expected
+// link for linked ones.
+func alreadyMounted(lm linkmode.Mode, mode MountMode, targetPath string, entry SourceEntry) bool {
+	if entry.Generated || mode == ModeCopy {
+		info, err := os.Lstat(targetPath)
+		if err != nil || !info.Mode().IsRegular() {
+			return false
+		}
+		actualHash, err := workspace.FileSHA256(targetPath)
+		if err != nil {
+			return false
+		}
+		if entry.Generated {
+			return actualHash == workspace.ContentSHA256([]byte(entry.Content))
+		}
+		sourceHash, err := workspace.FileSHA256(entry.FullPath)
+		return err == nil && actualHash == sourceHash
+	}
+	if !linkmode.IsLink(lm, targetPath, entry.FullPath) {
+		return false
+	}
+	healthy, _ := linkmode.Verify(lm, targetPath, entry.FullPath, runtime.PathsEqual)
+	return healthy
+}
+
 func Unmount(projectRoot string, selection Selection) (Result, error) {
 	state, err := workspace.ReadMountState(projectRoot)
 	if err != nil {
@@ -179,7 +225,7 @@ func Unmount(projectRoot string, selection Selection) (Result, error) {
 		targetPath := filepath.Join(projectRoot, filepath.FromSlash(entry.RelativePath))
 		if info, err := os.Lstat(targetPath); err == nil {
 			switch {
-			case entry.Generated && info.Mode().IsRegular():
+			case entry.IsCopy() && info.Mode().IsRegular():
 				actualHash, err := workspace.FileSHA256(targetPath)
 				if err != nil {
 					return result, err
@@ -196,7 +242,7 @@ func Unmount(projectRoot string, selection Selection) (Result, error) {
 					result.KeptModified = append(result.KeptModified, kept)
 				}
 				result.Removed++
-			case !entry.Generated && linkmode.IsLink(lm, targetPath, entry.SourcePath):
+			case !entry.IsCopy() && linkmode.IsLink(lm, targetPath, entry.SourcePath):
 				if err := os.Remove(targetPath); err != nil {
 					return result, err
 				}
@@ -238,7 +284,7 @@ func Unmount(projectRoot string, selection Selection) (Result, error) {
 	return result, nil
 }
 
-// cleanupEmptyDirs removes empty directories left behind after symlink removal.
+// cleanupEmptyDirs removes empty directories left behind after file removal.
 // It collects all ancestor directories, sorts deepest-first, and removes each
 // one that is empty. It never removes projectRoot itself.
 func cleanupEmptyDirs(projectRoot string, removedPaths []string) {
@@ -287,25 +333,10 @@ func EntriesFromMountedState(state workspace.MountState) []SourceEntry {
 	return entries
 }
 
-// alreadyMounted reports whether targetPath already holds what entry would
-// produce: the expected link for linked entries, or a regular file with the
-// same bytes for generated ones.
-func alreadyMounted(lm linkmode.Mode, targetPath string, entry SourceEntry) bool {
-	if entry.Generated {
-		info, err := os.Lstat(targetPath)
-		if err != nil || !info.Mode().IsRegular() {
-			return false
-		}
-		actualHash, err := workspace.FileSHA256(targetPath)
-		return err == nil && actualHash == workspace.ContentSHA256([]byte(entry.Content))
-	}
-	if !linkmode.IsLink(lm, targetPath, entry.FullPath) {
-		return false
-	}
-	healthy, _ := linkmode.Verify(lm, targetPath, entry.FullPath, runtime.PathsEqual)
-	return healthy
-}
-
+// Repair brings unhealthy entries back without discarding anything:
+// missing or stale copies are rewritten from the source, missing or drifted
+// links are recreated, missing generated files are rewritten. Locally
+// modified files are left alone and reported in the returned statuses.
 func Repair(projectRoot string) (Result, []drift.Status, error) {
 	state, err := workspace.ReadMountState(projectRoot)
 	if err != nil {
@@ -317,37 +348,47 @@ func Repair(projectRoot string) (Result, []drift.Status, error) {
 	statuses := drift.InspectMountState(projectRoot, state, lm)
 	result := Result{}
 
-	generatedContent := make(map[string]string)
-	for _, entry := range state.Entries {
-		if entry.Generated {
-			generatedContent[entry.RelativePath] = entry.Content
-		}
+	entryIndex := make(map[string]int, len(state.Entries))
+	for i, entry := range state.Entries {
+		entryIndex[entry.RelativePath] = i
 	}
+	stateChanged := false
 
 	for _, status := range statuses {
-		if status.Healthy {
+		if status.Healthy || !status.NeedsUpdate() {
 			continue
 		}
-
-		switch status.Issue {
-		case drift.IssueMissingSource, drift.IssueReplacedLink, drift.IssueGeneratedModified:
+		index, ok := entryIndex[status.RelativePath]
+		if !ok {
 			continue
-		case drift.IssueDriftedLink, drift.IssueMissingLink:
-			targetPath := filepath.Join(projectRoot, filepath.FromSlash(status.RelativePath))
-			if status.Generated {
-				if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
-					return result, statuses, err
-				}
-				if err := os.WriteFile(targetPath, []byte(generatedContent[status.RelativePath]), 0o644); err != nil {
-					return result, statuses, err
-				}
-				if _, err := workspace.AddExclusion(projectRoot, status.RelativePath); err != nil {
-					return result, statuses, err
-				}
-				result.Linked++
-				continue
+		}
+		entry := &state.Entries[index]
+		targetPath := filepath.Join(projectRoot, filepath.FromSlash(entry.RelativePath))
+
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
+			return result, statuses, err
+		}
+
+		switch {
+		case entry.Generated:
+			if err := os.WriteFile(targetPath, []byte(entry.Content), 0o644); err != nil {
+				return result, statuses, err
 			}
-			// Remove existing file/link if present
+		case entry.Mode == "copy":
+			// Remove a stale copy first so the rename cannot race a reader.
+			if _, err := os.Lstat(targetPath); err == nil {
+				if err := os.Remove(targetPath); err != nil {
+					return result, statuses, err
+				}
+			}
+			hash, err := workspace.CopyFile(entry.SourcePath, targetPath)
+			if err != nil {
+				return result, statuses, err
+			}
+			entry.ContentSHA256 = hash
+			entry.SourceSHA256 = hash
+			stateChanged = true
+		default:
 			if _, err := os.Lstat(targetPath); err == nil {
 				if err := os.Remove(targetPath); err != nil {
 					return result, statuses, err
@@ -355,17 +396,19 @@ func Repair(projectRoot string) (Result, []drift.Status, error) {
 			} else if !os.IsNotExist(err) {
 				return result, statuses, err
 			}
+			if err := linkmode.Create(lm, entry.SourcePath, targetPath); err != nil {
+				return result, statuses, err
+			}
+		}
+		if _, err := workspace.AddExclusion(projectRoot, status.RelativePath); err != nil {
+			return result, statuses, err
+		}
+		result.Linked++
+	}
 
-			if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
-				return result, statuses, err
-			}
-			if err := linkmode.Create(lm, status.ExpectedSource, targetPath); err != nil {
-				return result, statuses, err
-			}
-			if _, err := workspace.AddExclusion(projectRoot, status.RelativePath); err != nil {
-				return result, statuses, err
-			}
-			result.Linked++
+	if stateChanged {
+		if err := workspace.WriteMountState(projectRoot, state); err != nil {
+			return result, statuses, err
 		}
 	}
 
@@ -498,18 +541,34 @@ func filterMountedStateEntries(entries []workspace.MountedStateEntry, selection 
 	return filtered, nil
 }
 
-func toMountedStateEntry(entry SourceEntry) (workspace.MountedStateEntry, error) {
+// toMountedStateEntry records how an entry was placed. Copy entries carry the
+// hash of the bytes written (equal to the source hash at mount time);
+// symlink entries carry a source hash only when protected.
+func toMountedStateEntry(entry SourceEntry, mode MountMode) (workspace.MountedStateEntry, error) {
 	stateEntry := workspace.MountedStateEntry{
 		RelativePath: entry.RelativePath,
 		SourceName:   entry.SourceName,
 		SourcePath:   entry.FullPath,
+		Protected:    entry.Protected,
 	}
 	if entry.Generated {
 		stateEntry.Generated = true
 		stateEntry.Content = entry.Content
 		stateEntry.ContentSHA256 = workspace.ContentSHA256([]byte(entry.Content))
+		return stateEntry, nil
 	}
-	if !entry.Protected || entry.Generated {
+	if mode == ModeCopy {
+		hash, err := workspace.FileSHA256(entry.FullPath)
+		if err != nil {
+			return workspace.MountedStateEntry{}, err
+		}
+		stateEntry.Mode = string(ModeCopy)
+		stateEntry.ContentSHA256 = hash
+		stateEntry.SourceSHA256 = hash
+		return stateEntry, nil
+	}
+	stateEntry.Mode = string(ModeSymlink)
+	if !entry.Protected {
 		return stateEntry, nil
 	}
 
@@ -517,7 +576,31 @@ func toMountedStateEntry(entry SourceEntry) (workspace.MountedStateEntry, error)
 	if err != nil {
 		return workspace.MountedStateEntry{}, err
 	}
-	stateEntry.Protected = true
 	stateEntry.SourceSHA256 = hash
 	return stateEntry, nil
+}
+
+// PlannedState describes what ApplyWithOptions would record for entries,
+// without touching the project. Used to compare a planned mount against the
+// lock before anything changes.
+func PlannedState(entries []SourceEntry, mode MountMode) (workspace.MountState, error) {
+	resolved, err := resolveConflictsByPriority(entries)
+	if err != nil {
+		return workspace.MountState{}, err
+	}
+	if mode == "" {
+		mode = DefaultMountMode
+	}
+	var state workspace.MountState
+	for _, entry := range resolved {
+		stateEntry, err := toMountedStateEntry(entry, mode)
+		if err != nil {
+			return workspace.MountState{}, err
+		}
+		state = workspace.UpsertMountedEntry(state, stateEntry)
+	}
+	sort.Slice(state.Entries, func(i, j int) bool {
+		return state.Entries[i].RelativePath < state.Entries[j].RelativePath
+	})
+	return state, nil
 }

@@ -14,7 +14,8 @@
 - `internal/mount`: include or exclude selection, glob matching, and priority-based conflict resolution
 - `internal/workspace`: `.git/info/exclude`, `.csaw-stash`, and mounted link inspection
 - `internal/drift`: health classification for mounted links
-- `internal/linkmode`: cross-platform linking (symlinks with hardlink fallback on Windows)
+- `internal/linkmode`: cross-platform linking for symlink mode (symlinks with hardlink fallback on Windows)
+- `internal/lock`: `.csaw/lock.yml` (per-project record of mounted sources' commits and file hashes)
 - `internal/registry`: registry scaffolding (`csaw init`)
 - `internal/pinning`: per-project source pinning to branches/tags
 - `internal/fork`: file forking between sources
@@ -45,7 +46,9 @@ Implemented now:
 - kind classification (instructions, rules, agents, skills, mcp) with `--kind` filtering and per-kind grouping in `inspect`
 - workspace stash, exclude helpers (`csaw show`/`hide`), current mount state, and restore state
 - mounted-link discovery, drift inspection, and repair
-- cross-platform linking (symlinks with hardlink fallback on Windows)
+- copy mode by default: files are placed as hash-tracked copies, drift is classified as stale, edited locally, or both, `csaw update` refreshes what it can, and unmount preserves edits
+- symlink mode as an opt-in with cross-platform linking (symlinks with hardlink fallback on Windows)
+- `.csaw/lock.yml` written on every mount and update, verified by `csaw audit`, enforced by `csaw use --frozen`
 - per-project source pinning (`csaw pin`/`unpin`) via git worktrees
 - file forking between sources (`csaw fork`)
 - skill lifecycle promotion (`csaw promote` from `skills/experimental/` to `skills/`)

@@ -17,7 +17,7 @@ If a context file belongs to one repo and is safe to commit there, keep it in th
 
 ## How it works
 
-You declare one or more **sources** — git repos or local directories containing AI config — and activate named **profiles** with `csaw use source/profile`. csaw symlinks files from sources into your project, hidden from git via `.git/info/exclude`. You can:
+You declare one or more **sources** — git repos or local directories containing AI config — and activate named **profiles** with `csaw use source/profile`. csaw copies files from sources into your project (tracked by hash; symlinks are an opt-in), hidden from git via `.git/info/exclude`. You can:
 
 - Compose multiple sources with named profiles and **priority** — higher number wins on overlap.
 - **List and inspect profiles** before activating them.
@@ -29,7 +29,7 @@ You declare one or more **sources** — git repos or local directories containin
 - **Inspect** the resolved state — which sources, which mounted files grouped by kind, what's protected, what's pinned, what's healthy.
 - **Audit** active context against `.csaw/policy.yml` for required sources, blocked sources, required and blocked kinds, blocked mounted paths, mount health, and protected content drift.
 
-Update an already-mounted source file and every project sees the change instantly through the symlinks. Add a new source file, and remount the profile to add its symlink. Unmount, and originals stashed during mount are restored.
+Update a source file, then `csaw pull` and `csaw update` in each project to refresh the copies; `csaw check` shows what is stale and what you edited locally. Add a new source file, and remount the profile to add it. Unmount, and originals stashed during mount are restored while your edits are kept.
 
 ## The five kinds
 
@@ -45,13 +45,13 @@ csaw treats AI workspace artifacts as five distinct kinds, each with its own con
 
 ## Design principles
 
-- **Mount, not install.** Symlinks from a registry, not copies committed to your repo. Reversible, live, clean.
+- **Mount, not install.** Hash-tracked copies from a registry, hidden from git, never committed to your repo. Reversible and clean.
 - **Repo-local first.** Project-owned context belongs in the project. csaw manages context that crosses repo, tool, team, client, privacy, or provenance boundaries.
 - **No hidden defaults.** `csaw inspect` shows the full resolved state — what's mounted, where it came from, which source, whether it's protected, whether it's healthy.
 - **Files, not formats.** csaw manages standard files (AGENTS.md, SKILL.md, plain markdown). Every file in a source is usable without csaw.
 - **Multi-source composition with provenance.** Layer company, department, team, personal, client, and community sources. Priority and protection make the policy explicit. Every value annotated with its origin.
 - **Local assurance, not hard enforcement.** `csaw audit` detects active context drift and policy violations; it does not sandbox the machine or prevent manual edits outside csaw.
-- **Cross-platform.** Linux, macOS, and Windows (junctions for directory symlinks).
+- **Cross-platform.** Linux, macOS, and Windows; copy mode needs no symlink privilege.
 
 ## Where to learn more
 

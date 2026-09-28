@@ -1,6 +1,7 @@
 package audit
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,7 +15,9 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/NicholasCullenCooper/csaw/internal/drift"
+	"github.com/NicholasCullenCooper/csaw/internal/git"
 	"github.com/NicholasCullenCooper/csaw/internal/linkmode"
+	"github.com/NicholasCullenCooper/csaw/internal/lock"
 	"github.com/NicholasCullenCooper/csaw/internal/mount"
 	"github.com/NicholasCullenCooper/csaw/internal/output"
 	"github.com/NicholasCullenCooper/csaw/internal/pinning"
@@ -67,6 +70,11 @@ blocked_paths: []
 required_kinds: []
 #  - instructions
 #  - rules
+
+# Require a committed .csaw/lock.yml that matches the mounted context.
+# csaw writes the lock on every mount and update; audit reports lock.mismatch
+# when the mounted files or source commits differ from it.
+require_lock: false
 `
 
 type Severity string
@@ -89,6 +97,9 @@ type Policy struct {
 	BlockedKinds    []mount.Kind        `json:"blocked_kinds,omitempty"`
 	BlockedPaths    []string            `json:"blocked_paths,omitempty"`
 	RequiredKinds   []mount.Kind        `json:"required_kinds,omitempty"`
+	// RequireLock makes a missing .csaw/lock.yml an error instead of a
+	// warning when something is mounted.
+	RequireLock bool `json:"require_lock,omitempty"`
 }
 
 type Finding struct {
@@ -174,6 +185,9 @@ func Run(projectRoot string, paths runtime.Paths) (Report, error) {
 	}
 
 	report.checkMountHealth(statuses)
+	if err := report.checkLock(projectRoot, paths, policy.RequireLock, len(statuses)); err != nil {
+		return Report{}, err
+	}
 	if policyFound {
 		sourceIndex, pinState, err := loadSourceContext(projectRoot, paths, policy.RequiredSources)
 		if err != nil {
@@ -277,6 +291,14 @@ func parsePolicy(content []byte) (Policy, error) {
 		if err != nil {
 			return Policy{}, err
 		}
+	}
+
+	if value, ok := raw["require_lock"]; ok {
+		flag, isBool := value.(bool)
+		if !isBool {
+			return Policy{}, fmt.Errorf("require_lock: expected true or false, got %v", value)
+		}
+		policy.RequireLock = flag
 	}
 
 	return policy, nil
@@ -487,6 +509,65 @@ func sourceRequirementsNeedURL(requirements []SourceRequirement) bool {
 		}
 	}
 	return false
+}
+
+// checkLock compares .csaw/lock.yml with what is mounted now. With nothing
+// mounted there is nothing to compare and mount.none already warns.
+func (r *Report) checkLock(projectRoot string, paths runtime.Paths, required bool, mounted int) error {
+	if mounted == 0 {
+		return nil
+	}
+	lockPath := filepath.ToSlash(filepath.Join(lock.DirName, lock.FileName))
+	locked, found, err := lock.Read(projectRoot)
+	if err != nil {
+		return err
+	}
+	if !found {
+		severity := SeverityWarn
+		detail := "run csaw use or csaw mount to write it, then commit it to pin the mounted context"
+		if required {
+			severity = SeverityError
+			detail = "policy sets require_lock; " + detail
+		}
+		r.add(Finding{
+			ID:       "lock.missing",
+			Severity: severity,
+			Message:  "no project lock found",
+			Path:     lockPath,
+			Detail:   detail,
+		})
+		return nil
+	}
+
+	state, err := workspace.ReadMountState(projectRoot)
+	if err != nil {
+		return err
+	}
+	infos, err := lock.SourceInfos(context.Background(), git.ExecGit{}, paths, projectRoot)
+	if err != nil {
+		return err
+	}
+	current, err := lock.FromState(state, infos)
+	if err != nil {
+		return err
+	}
+	if diffs := lock.Diff(locked, current); len(diffs) > 0 {
+		r.add(Finding{
+			ID:       "lock.mismatch",
+			Severity: SeverityError,
+			Message:  fmt.Sprintf("mounted context differs from the lock in %d way(s)", len(diffs)),
+			Path:     lockPath,
+			Detail:   strings.Join(diffs, "; "),
+		})
+		return nil
+	}
+	r.add(Finding{
+		ID:       "lock.match",
+		Severity: SeverityOK,
+		Message:  "mounted context matches the lock",
+		Path:     lockPath,
+	})
+	return nil
 }
 
 func (r *Report) checkRequiredSources(requirements []SourceRequirement, statuses []drift.Status, sourceIndex map[string]sources.Source, pinState pinning.PinState) {

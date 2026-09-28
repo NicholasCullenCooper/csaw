@@ -37,6 +37,9 @@ type Config struct {
 	Sources           []Source `yaml:"sources,omitempty"`
 	DefaultForkTarget string   `yaml:"default_fork_target,omitempty"`
 	Tools             []string `yaml:"tools,omitempty"`
+	// MountMode is "copy" (default when empty) or "symlink". See
+	// internal/mount/mode.go for what each means.
+	MountMode string `yaml:"mount_mode,omitempty"`
 }
 
 type Manager struct {

@@ -157,15 +157,15 @@ func TestInspectMountStateClassifiesGeneratedFiles(t *testing.T) {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 	statuses = InspectMountState(project, state, linkmode.Symlink)
-	if statuses[0].Healthy || statuses[0].Issue != IssueGeneratedModified {
-		t.Fatalf("edited generated file should report %s: %#v", IssueGeneratedModified, statuses[0])
+	if statuses[0].Healthy || statuses[0].Issue != IssueModifiedLocally {
+		t.Fatalf("edited generated file should report %s: %#v", IssueModifiedLocally, statuses[0])
 	}
 
 	if err := os.Remove(target); err != nil {
 		t.Fatalf("Remove() error = %v", err)
 	}
 	statuses = InspectMountState(project, state, linkmode.Symlink)
-	if statuses[0].Healthy || statuses[0].Issue != IssueMissingLink {
-		t.Fatalf("missing generated file should report %s: %#v", IssueMissingLink, statuses[0])
+	if statuses[0].Healthy || statuses[0].Issue != IssueMissingFile {
+		t.Fatalf("missing generated file should report %s: %#v", IssueMissingFile, statuses[0])
 	}
 }

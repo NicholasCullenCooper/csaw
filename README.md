@@ -19,9 +19,9 @@
 
 ## Reversible by design
 
-csaw isn't a daemon, a database, or a wrapper around your AI tools. It's a mount tool: every file csaw creates in your project is a symlink to a file in one of your source repos. `csaw unmount` removes every symlink and restores any originals that were displaced. There's no state to clean up, no migration to undo, no runtime that has to keep working.
+csaw isn't a daemon, a database, or a wrapper around your AI tools. It's a mount tool: every file csaw places in your project is a plain copy of a file in one of your source repos, tracked by its SHA-256. `csaw unmount` removes exactly the bytes csaw wrote, restores any originals that were displaced, and moves anything you edited to `.csaw-stash/modified/` rather than deleting it. There's no state to clean up, no migration to undo, no runtime that has to keep working.
 
-Concretely: uninstall csaw entirely and your AI tools keep reading the symlinks until you delete them. Delete the symlinks and you're back to the project's original state. The cost of trying csaw is the cost of running `csaw mount` once and `csaw unmount` once.
+Concretely: uninstall csaw entirely and your AI tools keep reading the files. Run `csaw unmount` and you're back to the project's original state. The cost of trying csaw is the cost of running `csaw mount` once and `csaw unmount` once.
 
 This is the core promise — csaw fails open. If you stop trusting it, get out without paying a price.
 
@@ -54,7 +54,7 @@ csaw makes a different bet. It's a **federation and projection layer** for AI wo
 | Authoring | Publish step, version bump, lockfile resolve | Just commit to your source repo |
 | Composition | Linear dependency tree | 4-tier priority stack with protected files |
 | Trust model | Trust the registry + transitive policy | Trust the source repos you control |
-| Cleanup | Uninstall semantics vary by ecosystem | `csaw unmount` removes every symlink |
+| Cleanup | Uninstall semantics vary by ecosystem | `csaw unmount` removes every file it wrote and keeps your edits |
 
 The two bets aren't mutually exclusive. **Since v0.10.0, csaw can safely *consume* from any of those ecosystems via the [`csaw vendor`](docs/walkthrough.md#vendoring-external-catalogs-safely-csaw-vendor) command** — vendor an APM package, a skills.sh skill, an awesome-copilot fork, or any git repo into a hash-locked `vendor/` area, audit drift across three dimensions, then promote selected files into your own source registry. csaw doesn't replace package managers; it makes any ecosystem safely composable into your federated stack.
 
@@ -73,23 +73,29 @@ Multi-stakeholder AI config is a governance problem:
 
 ### The model
 
-A **source** is a git repo (or local directory) of AI config — instructions, rules, agents, skills, MCP files. A **project** mounts files from one or more sources via symlinks. The mount is reversible, live (edits to a mounted file propagate instantly), and invisible to the project's git.
+A **source** is a git repo (or local directory) of AI config — instructions, rules, agents, skills, MCP files. A **project** mounts files from one or more sources as hash-tracked copies. The mount is reversible, refreshable (`csaw pull` then `csaw update`), and invisible to the project's git.
 
 ```
 your-registry/                         your-project/
-  AGENTS.md                     ──→      AGENTS.md (symlink)
+  AGENTS.md                     ──→      AGENTS.md (copy)
                                          CLAUDE.md (generated: @AGENTS.md)
   rules/                                 .claude/rules/
-    go-conventions.md           ──→        go-conventions.md (symlink)
+    go-conventions.md           ──→        go-conventions.md (copy)
   agents/                                .claude/agents/
-    code-reviewer.md            ──→        code-reviewer.md (symlink)
+    code-reviewer.md            ──→        code-reviewer.md (copy)
   skills/                                .claude/skills/
-    code-review/                ──→        code-review/ (SKILL.md + references/, symlinked)
-  mcp/                                   .mcp.json (symlink)
+    code-review/                ──→        code-review/ (SKILL.md + references/, copied)
+  mcp/                                   .mcp.json (copy)
     claude-code.json            ──→
 ```
 
 csaw targets two tools: **Claude Code** reads `CLAUDE.md` and the `.claude/` directory; **Codex** reads `AGENTS.md` and the tool-neutral `.agents/skills/`. csaw writes each kind into the smallest set of directories that serves the tools you configure, so a Claude Code plus Codex setup gets skills in both `.claude/skills/` and `.agents/skills/`, and agents and rules under `.claude/` only, because Codex has no directory for them. Claude Code does not read `AGENTS.md`, so csaw generates a `CLAUDE.md` that imports it.
+
+### Mount modes
+
+By default csaw **copies** each file into the project and records its SHA-256. A copy is a plain file to every tool (Claude Code refuses to load rule symlinks that point outside the working directory), needs no symlink privilege on Windows, and can be pinned by a lockfile. `csaw check` tells copies apart three ways: **stale** (the source changed; `csaw update` refreshes it), **edited locally** (you changed it; csaw never overwrites it, and `csaw unmount` keeps it under `.csaw-stash/modified/`), or both.
+
+**Symlink** mode is an opt-in for people who want edits to flow both ways instantly: `csaw config set mount_mode symlink`, or `--mode symlink` on one mount. Its cost is the Claude Code rules limitation above.
 
 Layer multiple sources with priority. Mark files **protected** so lower-priority sources can't override them. **Pin** a source to a branch or tag for one project. **Fork** a file from one source into another. **Audit** a project to confirm the right context is active and nothing forbidden is mounted.
 
@@ -106,8 +112,8 @@ sources
                                                 │
                                                 │  composed into
                                                 ▼
-  your-project/        ← live symlinks into all four sources
-  your-other-project/  ← same composition, also live
+  your-project/        ← copies from all four sources, refreshed by csaw update
+  your-other-project/  ← same composition
   …every repo you work in
 ```
 
@@ -116,11 +122,11 @@ What each layer gives you:
 - **Company** (mandatory, protected). Engineering standards that apply to every repo. Marked protected so no lower layer can silently shadow them. Updated centrally — every repo you've mounted in sees the change on the next `csaw pull`.
 - **Department** (mandatory, protected). Cross-team conventions like a PR-workflow skill. Higher priority than team, also protected. Add it later without rewriting anything below it.
 - **Team** (shared, not protected). Your team's rules and skills, reused across every repo your team owns. Edit once in the team source, every team repo sees it instantly.
-- **Personal** (just you). Your own debugging skills, note-capture preferences, anything personal. Symlinked into every project but hidden from git — never committed, never visible to teammates, never in any repo.
+- **Personal** (just you). Your own debugging skills, note-capture preferences, anything personal. Copied into every project but hidden from git — never committed, never visible to teammates, never in any repo.
 
 Two properties emerge from stacking these that no single layer would give you on its own:
 
-- **Always in sync.** Because mounted files are symlinks, every layer updates live across every repo that consumes it. No PR fan-out, no manual copy, no "we forgot to update repo seven."
+- **Kept in sync.** `csaw pull` fetches every layer and `csaw update` refreshes each stale copy; `csaw check` shows what changed upstream and what you edited locally. No PR fan-out, no manual copy, no "we forgot to update repo seven."
 - **Properly governed.** Because layers have explicit priority and some files are protected, the company and department mandates can't be silently overridden by a team or personal layer. `csaw audit` proves it in CI.
 
 These four tiers form one **vertical** hierarchy — each layer nests inside the one above it (your team is in your department is in your company). They're not a fixed schema. You can also add **horizontal** sources that cut across the org chart, opted into by responsibility rather than position.
@@ -136,13 +142,14 @@ Other horizontal sources you might add: **client** (for consultants — must not
 
 A single person can play both roles across different sources (you maintain `personal`, you consume `team`). For csaw to work in your org, you need exactly one maintainer per shared source — everyone else can be passive.
 
-### The three config files
+### The four config files
 
 | File | Where | Purpose | Edited by |
 |---|---|---|---|
 | `csaw.yml` | inside a source registry | Defines that source's profiles and protected files | Source maintainer |
 | `.csaw/policy.yml` | inside a project repo (committed) | Declares what context the project requires/blocks/audits | Project lead |
-| `~/.csaw/config.yml` | each developer's machine | Personal: which AI tools you use, which sources you've added | Each user, locally |
+| `.csaw/lock.yml` | inside a project repo (commit it) | Records exactly what is mounted: each source's commit and each file's hash. Written by every mount and update; `csaw use --frozen` reproduces it and `csaw audit` verifies it | csaw |
+| `~/.csaw/config.yml` | each developer's machine | Personal: which AI tools you use, which sources you've added, mount mode | Each user, locally |
 
 When each file appears in the walkthrough below, this is what it is. They are three different files with three different lifecycles — don't conflate them.
 
@@ -156,7 +163,7 @@ If a context file belongs to one repo and is safe to commit there, **commit it**
 - **Non-overridable mandates** — a security or platform team publishing rules that lower layers can't silently shadow, with audit catching drift.
 - **Cross-tool projection** — write the file once, project it into `.claude/` for Claude Code and `.agents/` for Codex automatically.
 
-Each section below earns its keep against this question. Mounted files are invisible to the project's git; unmount removes every symlink and restores any originals.
+Each section below earns its keep against this question. Mounted files are invisible to the project's git; unmount removes every file csaw wrote and restores any originals.
 
 ---
 
@@ -265,12 +272,12 @@ Your project now looks like this:
 my-project/
   src/
   package.json
-  AGENTS.md                              ← symlink to ~/my-ai-config/AGENTS.md
+  AGENTS.md                              ← copy of ~/my-ai-config/AGENTS.md, hash-tracked
   CLAUDE.md                              ← generated: imports AGENTS.md for Claude Code
   .claude/
     skills/
-      code-review/SKILL.md               ← symlink
-      commit-message/SKILL.md            ← symlink
+      code-review/SKILL.md               ← copy
+      commit-message/SKILL.md            ← copy
 ```
 
 Open Claude Code or Codex and the files are picked up. Run `git status` — nothing shows up. The files are hidden via `.git/info/exclude`.
@@ -447,19 +454,19 @@ inside `personal`, while `team/backend` resolves inside the `team` source.
 | `csaw inspect` | Full state: sources, mounts, priorities, pins. |
 | `csaw audit [path]` | Audit active context against `.csaw/policy.yml`. |
 | `csaw audit --init [path]` | Write a starter `.csaw/policy.yml`. |
-| `csaw check` | Detect broken links, drifted links, and protected content drift. |
-| `csaw update` | Repair drifted links. |
-| `csaw diff path` | Diff a mounted file against its source. |
+| `csaw check` | Detect stale copies, local edits, missing files, and protected content drift. |
+| `csaw update` | Refresh stale and missing copies from their sources (never overwrites a local edit); rewrites the lock. |
+| `csaw diff path` | Diff a mounted copy against its source. |
 | `csaw pull [source]` | Pull latest from remote sources. `--stash` for dirty state. |
 | `csaw push [source] -m "msg"` | Commit and push source changes. |
 | `csaw pin source@ref` | Pin source to a branch/tag for this project. |
 | `csaw unpin source` | Unpin, return to default branch. |
 | `csaw fork source/path` | Copy a file into another source. `--into target`. |
 | `csaw promote source/skills/experimental/name` | Promote experimental skill to stable. |
-| `csaw config set key value` | Set config (tools, default_fork_target). |
+| `csaw config set key value` | Set config (tools, default_fork_target, mount_mode). |
 | `csaw config list` | Show configuration. |
 | `csaw show / hide path` | Control git visibility of mounted files. |
-| `csaw status` | Quick summary + flags uncommitted edits in source checkouts (so editing a mounted symlink target doesn't go silent). |
+| `csaw status` | Quick summary: mounted count, stale and locally edited copies, uncommitted edits in source checkouts. |
 | `csaw mcp sync <target> --from <source>` | Merge MCP entries from a source into a tool's shared-config file (e.g., Codex's `.codex/config.toml`) using a bounded section. Dry-run by default; `--apply` to write; `--remove` to roll back. See [csaw mcp sync](docs/walkthrough.md#sharing-mcp-with-codex-csaw-mcp-sync) walkthrough. |
 | `csaw vendor add/sync/list/audit/promote/remove` | Safely consume external agent-context catalogs (skills.sh, APM packages, awesome-copilot, any git repo). Fetches upstream into a hash-locked `vendor/` area; nothing under `vendor/` ever projects until explicitly promoted into a real kind directory. Three drift detectors: vendor-local, upstream, promotion. See [`csaw vendor`](docs/walkthrough.md#vendoring-external-catalogs-safely-csaw-vendor) walkthrough and [`docs/planning/vendors-design.md`](docs/planning/vendors-design.md). |
 
@@ -471,6 +478,8 @@ inside `personal`, while `team/backend` resolves inside the `team` source.
 | `--kind list` | use, mount | Filter by kind: `agents`, `skills`, `rules`, `mcp`, `instructions` (repeatable). |
 | `--force` | use, mount | Overwrite conflicts, stash originals. |
 | `--keep` | use, mount | Add to existing mount instead of replacing. |
+| `--mode copy\|symlink` | use, mount | Place files as hash-tracked copies (default) or symlinks; overrides `mount_mode` config. |
+| `--frozen` | use, mount | Refuse to mount anything that differs from the committed `.csaw/lock.yml`. |
 | `--tools list` | use, mount | Target tools: `claude`, `codex`, or both (e.g., `--tools claude,codex`). |
 | `--restore` | mount | Re-mount previous selection. |
 | `--include-experimental` | use, mount | Mount files under any `experimental/` path segment (built-in convention; applies to rules, skills, agents, hooks). |

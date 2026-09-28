@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/NicholasCullenCooper/csaw/internal/workspace"
 )
 
 // e2eEnv sets up an isolated csaw environment for end-to-end testing.
@@ -25,9 +27,6 @@ func newE2EEnv(t *testing.T) *e2eEnv {
 
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")
-	}
-	if canSymlink, reason := canCreateDiffSymlink(); !canSymlink {
-		t.Skip(reason)
 	}
 
 	root := t.TempDir()
@@ -106,6 +105,19 @@ func (e *e2eEnv) runExpectError(args ...string) string {
 			strings.Join(args, " "), stdout.String())
 	}
 	return stderr.String()
+}
+
+// runAllowError executes a csaw subcommand and returns stdout plus the
+// returned error, for tests that need to inspect a failure's message.
+func (e *e2eEnv) runAllowError(args ...string) (string, error) {
+	e.t.Helper()
+	var stdout, stderr bytes.Buffer
+	cmd := newRootCommand()
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stderr)
+	cmd.SetArgs(args)
+	err := cmd.Execute()
+	return stdout.String(), err
 }
 
 // createRegistry creates a registry directory with given files.
@@ -628,6 +640,9 @@ func TestE2EInitAdopt(t *testing.T) {
 }
 
 func TestE2EPinMainAndUnpinRemapsActiveMounts(t *testing.T) {
+	if canSymlink, reason := canCreateDiffSymlink(); !canSymlink {
+		t.Skip(reason)
+	}
 	env := newE2EEnv(t)
 
 	sourceDir := env.createRegistry("team-src", map[string]string{
@@ -645,7 +660,7 @@ func TestE2EPinMainAndUnpinRemapsActiveMounts(t *testing.T) {
 
 	env.run("source", "add", "team", "file://"+filepath.ToSlash(bareDir))
 	env.run("pin", "team@main")
-	env.run("mount", "--profile", "team/default")
+	env.run("mount", "--profile", "team/default", "--mode", "symlink")
 
 	target, err := os.Readlink(filepath.Join(env.projectDir, "AGENTS.md"))
 	if err != nil {
@@ -774,5 +789,192 @@ func TestE2EUnmountKeepsEditedBridge(t *testing.T) {
 	}
 	if got := env.readFile(".csaw-stash/modified/CLAUDE.md"); got != edited {
 		t.Fatalf("edits should be preserved under .csaw-stash/modified/, got %q", got)
+	}
+}
+
+func TestE2EDefaultMountWritesCopies(t *testing.T) {
+	env := newE2EEnv(t)
+
+	reg := env.createRegistry("reg", map[string]string{
+		"csaw.yml":    "default:\n  include:\n    - AGENTS.md\n    - rules/**\n",
+		"AGENTS.md":   "instructions v1",
+		"rules/go.md": "rule v1",
+	})
+	env.run("source", "add", "reg", reg)
+	env.run("mount", "--profile", "reg/default", "--tools", "claude")
+
+	info, err := os.Lstat(filepath.Join(env.projectDir, ".claude", "rules", "go.md"))
+	if err != nil {
+		t.Fatalf("Lstat() error = %v", err)
+	}
+	if !info.Mode().IsRegular() {
+		t.Fatal("default mount should write a plain file, not a link")
+	}
+	if got := env.readFile("AGENTS.md"); got != "instructions v1" {
+		t.Fatalf("AGENTS.md = %q", got)
+	}
+
+	// A source change makes the copy stale; update refreshes it.
+	if err := os.WriteFile(filepath.Join(reg, "rules", "go.md"), []byte("rule v2"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	if got := env.readFile(".claude/rules/go.md"); got != "rule v1" {
+		t.Fatalf("copy should not change until update, got %q", got)
+	}
+	env.runExpectError("check")
+	if out := env.run("diff", ".claude/rules/go.md"); !strings.Contains(out, "+rule v2") || !strings.Contains(out, "-rule v1") {
+		t.Fatalf("diff should show the project copy against the source:\n%s", out)
+	}
+	env.run("update")
+	if got := env.readFile(".claude/rules/go.md"); got != "rule v2" {
+		t.Fatalf("update should refresh the stale copy, got %q", got)
+	}
+	env.run("check")
+
+	// A local edit is never overwritten and survives unmount.
+	if err := os.WriteFile(filepath.Join(env.projectDir, "AGENTS.md"), []byte("instructions v1 + mine"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	env.run("update")
+	if got := env.readFile("AGENTS.md"); got != "instructions v1 + mine" {
+		t.Fatalf("update must not overwrite a local edit, got %q", got)
+	}
+	env.run("unmount")
+	if env.fileExists("AGENTS.md") {
+		t.Fatal("edited copy should leave the project root on unmount")
+	}
+	if got := env.readFile(".csaw-stash/modified/AGENTS.md"); got != "instructions v1 + mine" {
+		t.Fatalf("edit should be preserved, got %q", got)
+	}
+	if env.fileExists(".claude/rules/go.md") {
+		t.Fatal("unmodified copy should be removed on unmount")
+	}
+}
+
+func TestE2ESymlinkModeOptIn(t *testing.T) {
+	if canSymlink, reason := canCreateDiffSymlink(); !canSymlink {
+		t.Skip(reason)
+	}
+	env := newE2EEnv(t)
+
+	reg := env.createRegistry("reg", map[string]string{
+		"csaw.yml":  "default:\n  include:\n    - AGENTS.md\n",
+		"AGENTS.md": "instructions",
+	})
+	env.run("source", "add", "reg", reg)
+	env.run("config", "set", "mount_mode", "symlink")
+	env.run("mount", "--profile", "reg/default", "--tools", "codex")
+
+	info, err := os.Lstat(filepath.Join(env.projectDir, "AGENTS.md"))
+	if err != nil {
+		t.Fatalf("Lstat() error = %v", err)
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		t.Fatal("symlink mode should create a link")
+	}
+
+	// --mode overrides the configured mode for one mount.
+	env.run("mount", "--profile", "reg/default", "--tools", "codex", "--mode", "copy")
+	info, err = os.Lstat(filepath.Join(env.projectDir, "AGENTS.md"))
+	if err != nil {
+		t.Fatalf("Lstat() error = %v", err)
+	}
+	if !info.Mode().IsRegular() {
+		t.Fatal("--mode copy should write a plain file")
+	}
+	env.runExpectError("config", "set", "mount_mode", "hardlink")
+}
+
+func TestE2EUnpinRefreshesCopiesFromDefaultCheckout(t *testing.T) {
+	env := newE2EEnv(t)
+
+	sourceDir := env.createRegistry("team-src", map[string]string{
+		"csaw.yml":  "default:\n  include:\n    - AGENTS.md\n",
+		"AGENTS.md": "team instructions",
+	})
+	runGit(t, sourceDir, "config", "user.email", "audit@example.com")
+	runGit(t, sourceDir, "config", "user.name", "csaw audit")
+	runGit(t, sourceDir, "branch", "-M", "main")
+	runGit(t, sourceDir, "add", "-A")
+	runGit(t, sourceDir, "commit", "-m", "seed team source")
+
+	bareDir := filepath.Join(filepath.Dir(env.projectDir), "team-src.git")
+	runGit(t, filepath.Dir(env.projectDir), "clone", "--bare", sourceDir, bareDir)
+
+	env.run("source", "add", "team", "file://"+filepath.ToSlash(bareDir))
+	env.run("pin", "team@main")
+	env.run("mount", "--profile", "team/default")
+
+	state, err := workspace.ReadMountState(env.projectDir)
+	if err != nil || len(state.Entries) != 1 {
+		t.Fatalf("mount state = %#v, err %v", state, err)
+	}
+	if !strings.Contains(filepath.ToSlash(state.Entries[0].SourcePath), "/.worktrees/") {
+		t.Fatalf("pinned copy should record the worktree source, got %q", state.Entries[0].SourcePath)
+	}
+
+	env.run("unpin", "team")
+	env.run("check")
+
+	state, _ = workspace.ReadMountState(env.projectDir)
+	if strings.Contains(filepath.ToSlash(state.Entries[0].SourcePath), "/.worktrees/") {
+		t.Fatalf("unpinned copy still records the worktree: %q", state.Entries[0].SourcePath)
+	}
+	if got := env.readFile("AGENTS.md"); got != "team instructions" {
+		t.Fatalf("AGENTS.md = %q after unpin", got)
+	}
+}
+
+func TestE2ELockIsWrittenVerifiedAndFrozen(t *testing.T) {
+	env := newE2EEnv(t)
+
+	reg := env.createRegistry("reg", map[string]string{
+		"csaw.yml":    "default:\n  include:\n    - AGENTS.md\n    - rules/**\n",
+		"AGENTS.md":   "instructions",
+		"rules/go.md": "rule v1",
+	})
+	env.run("source", "add", "reg", reg)
+	env.run("mount", "--profile", "reg/default", "--tools", "claude")
+
+	lockText := env.readFile(".csaw/lock.yml")
+	for _, want := range []string{"version: 1", "name: reg", "path: .claude/rules/go.md", "mode: copy", "path: CLAUDE.md", "mode: generated"} {
+		if !strings.Contains(lockText, want) {
+			t.Fatalf("lock missing %q:\n%s", want, lockText)
+		}
+	}
+
+	out := env.run("audit", "--json")
+	if !strings.Contains(out, `"id": "lock.match"`) {
+		t.Fatalf("audit should report lock.match:\n%s", out)
+	}
+
+	// A frozen mount of the same content passes.
+	env.run("mount", "--profile", "reg/default", "--tools", "claude", "--frozen")
+
+	// A source change makes the frozen mount refuse, and the lock keeps the
+	// old hash until a normal mount or update rewrites it.
+	if err := os.WriteFile(filepath.Join(reg, "rules", "go.md"), []byte("rule v2"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	if _, err := env.runAllowError("mount", "--profile", "reg/default", "--tools", "claude", "--frozen"); err == nil || !strings.Contains(err.Error(), ".claude/rules/go.md") {
+		t.Fatalf("frozen mount should fail naming the changed file, got %v", err)
+	}
+	if got := env.readFile(".claude/rules/go.md"); got != "rule v1" {
+		t.Fatal("a refused frozen mount must not change the project")
+	}
+	env.run("update")
+	if !strings.Contains(env.readFile(".claude/rules/go.md"), "rule v2") {
+		t.Fatal("update should refresh the stale copy")
+	}
+	env.run("mount", "--profile", "reg/default", "--tools", "claude", "--frozen")
+
+	// Policy can require the lock.
+	os.MkdirAll(filepath.Join(env.projectDir, ".csaw"), 0o755)
+	os.WriteFile(filepath.Join(env.projectDir, ".csaw", "policy.yml"), []byte("require_lock: true\n"), 0o644)
+	env.run("audit", "--strict")
+	os.Remove(filepath.Join(env.projectDir, ".csaw", "lock.yml"))
+	stdout, err := env.runAllowError("audit", "--json")
+	if err == nil || !strings.Contains(stdout, `"id": "lock.missing"`) {
+		t.Fatalf("audit should fail with lock.missing when the policy requires a lock: err %v\n%s", err, stdout)
 	}
 }

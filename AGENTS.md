@@ -2,7 +2,7 @@
 
 ## Purpose
 
-`csaw` is a Go CLI that mounts AI workspace files from one or more registries into a project using symlinks, local git excludes, and reversible stash or restore behavior.
+`csaw` is a Go CLI that mounts AI workspace files from one or more registries into a project as hash-tracked copies (symlinks opt-in), with local git excludes, a per-project lockfile, and reversible stash or restore behavior.
 
 This file is the agent map, not the whole manual. Read the linked docs before making non-trivial changes.
 
@@ -44,8 +44,9 @@ Do not create a repo-root `TODO.md` backlog.
 - `internal/profiles/`: `csaw.yml` parsing and inheritance
 - `internal/mount/`: mount selection, glob planning, priority resolution, tool projection
 - `internal/workspace/`: stash state, exclude file management, mounted-link discovery
-- `internal/drift/`: mounted link health inspection
-- `internal/linkmode/`: cross-platform linking (symlinks with hardlink fallback on Windows)
+- `internal/drift/`: mounted file health inspection (stale, edited, missing, drifted)
+- `internal/linkmode/`: cross-platform linking for symlink mode (symlinks with hardlink fallback on Windows)
+- `internal/lock/`: `.csaw/lock.yml` writing, reading, and comparison
 - `internal/registry/`: registry scaffolding (`csaw init`, `--adopt`)
 - `internal/pinning/`: per-project source pinning to branches/tags
 - `internal/fork/`: file forking between sources
@@ -97,7 +98,7 @@ Solo development commits directly to `main`. For collaborative work or risky cha
 
 ### Test style
 
-- Use real filesystems (`t.TempDir()`), not in-memory abstractions. Symlinks are a core mechanism and must be tested against real OS behavior.
+- Use real filesystems (`t.TempDir()`), not in-memory abstractions. Copies, hashes, and symlinks must be tested against real OS behavior; tests that need symlinks skip when the OS forbids them.
 - Use `recordingGit` (in `internal/sources/catalog_test.go`) to mock git operations without hitting the network.
 - Table-driven tests for functions with multiple input/output cases.
 - No assertion libraries — use stdlib `testing` with `t.Fatalf`/`t.Errorf`.
@@ -157,4 +158,4 @@ Do not tag without the user's approval. Do not skip the version bump rationale.
 - Prefer stdlib unless explicitly justified. Current approved deps: cobra, lipgloss, bubbletea, bubbles, glamour, doublestar, yaml.v3.
 - All new logic must have tests. All tests must pass before commit.
 - Do not silently invent new configuration formats.
-- Cross-platform: all code must work on Linux, macOS, and Windows. Use `internal/linkmode` for symlink/hardlink abstraction.
+- Cross-platform: all code must work on Linux, macOS, and Windows. Copy mode must work without any symlink privilege; use `internal/linkmode` for the symlink/hardlink abstraction in symlink mode.

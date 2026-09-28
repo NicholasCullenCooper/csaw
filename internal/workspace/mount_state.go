@@ -22,12 +22,23 @@ type MountedStateEntry struct {
 	SourcePath   string `json:"source_path"`
 	Protected    bool   `json:"protected,omitempty"`
 	SourceSHA256 string `json:"source_sha256,omitempty"`
+	// Mode is "copy" for entries csaw wrote as plain files and empty or
+	// "symlink" for links. Copy entries record ContentSHA256 (the bytes
+	// written) and SourceSHA256 (the source at mount time; equal at first)
+	// so drift can tell local edits from source updates.
+	Mode string `json:"mode,omitempty"`
 	// Generated entries are real files csaw wrote from Content (e.g., the
 	// CLAUDE.md bridge). ContentSHA256 lets unmount and drift tell csaw's
 	// bytes apart from a user's later edits.
 	Generated     bool   `json:"generated,omitempty"`
 	Content       string `json:"content,omitempty"`
 	ContentSHA256 string `json:"content_sha256,omitempty"`
+}
+
+// IsCopy reports whether the entry was written as a plain file rather than
+// linked. Generated entries are always plain files.
+func (e MountedStateEntry) IsCopy() bool {
+	return e.Generated || e.Mode == "copy"
 }
 
 type MountState struct {
