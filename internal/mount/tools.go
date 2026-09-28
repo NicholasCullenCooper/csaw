@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/NicholasCullenCooper/csaw/internal/hooks"
 )
 
 // Kind classifies a registry entry by what kind of AI workspace artifact it is.
@@ -161,8 +163,11 @@ type ToolSpec struct {
 	// BridgeImport, when set, lets csaw generate InstructionFile from a
 	// registry's AGENTS.md using the tool's import syntax (e.g. "@AGENTS.md").
 	BridgeImport string
-	Reads        map[Kind][]string
-	Writes       map[Kind]string
+	// HooksMerge names the hooks.Targets entry a registry hooks/hooks.json is
+	// merged into for this tool. Empty means the tool has no hooks file.
+	HooksMerge string
+	Reads      map[Kind][]string
+	Writes     map[Kind]string
 }
 
 // ReadsKind reports whether the tool reads any project directory for kind.
@@ -195,6 +200,7 @@ var ToolRegistry = map[string]ToolSpec{
 		DetectPaths:     []string{".claude"},
 		InstructionFile: "CLAUDE.md",
 		BridgeImport:    "@AGENTS.md",
+		HooksMerge:      "claude",
 		Reads: map[Kind][]string{
 			KindSkill: {".claude/skills"},
 			KindAgent: {".claude/agents"},
@@ -213,14 +219,21 @@ var ToolRegistry = map[string]ToolSpec{
 		DisplayName:     "Codex (OpenAI / ChatGPT)",
 		DetectPaths:     []string{".codex"},
 		InstructionFile: "AGENTS.md",
+		HooksMerge:      "codex",
 		Reads: map[Kind][]string{
 			KindSkill: {neutralSkills},
+			KindHook:  {".codex/hooks"},
 		},
 		Writes: map[Kind]string{
 			KindSkill: neutralSkills,
+			KindHook:  ".codex/hooks",
 		},
 	},
 }
+
+// hooksConfigPath is the registry file whose contents csaw merges into each
+// tool's hooks file rather than copying.
+const hooksConfigPath = "hooks/hooks.json"
 
 // StandardFallback is used when no tool is configured or detected: skills
 // land in the tool-neutral .agents/ directory that Codex (and most other
@@ -453,12 +466,23 @@ func ExpandToolTargets(entries []SourceEntry, tools []ToolSpec) []SourceEntry {
 		}
 
 		switch {
+		case entry.RelativePath == hooksConfigPath:
+			expanded = append(expanded, planHookMerges(entry, tools)...)
 		case isAgentEntry(entry):
 			expanded = appendProjected(expanded, entry, targets[KindAgent])
 		case isRuleEntry(entry):
 			expanded = appendProjected(expanded, entry, targets[KindRule])
 		case isHookEntry(entry):
-			expanded = appendProjected(expanded, entry, targets[KindHook])
+			// Scripts keep their path under hooks/ (hooks/scripts/x.sh →
+			// .claude/hooks/scripts/x.sh) so rewritten commands find them.
+			rest := strings.TrimPrefix(entry.RelativePath, "hooks/")
+			if len(targets[KindHook]) == 0 {
+				expanded = append(expanded, entry)
+				continue
+			}
+			for _, dir := range targets[KindHook] {
+				expanded = append(expanded, projectEntry(entry, path.Join(dir, rest)))
+			}
 		default:
 			if isInstructionEntry(entry) {
 				present[entry.RelativePath] = entry
@@ -492,6 +516,46 @@ func ExpandToolTargets(entries []SourceEntry, tools []ToolSpec) []SourceEntry {
 	}
 
 	return expanded
+}
+
+// planHookMerges turns a registry hooks/hooks.json into one merge entry per
+// configured tool that has a hooks file. The registry file is read here so
+// the plan can drop events and handler types a tool does not support; those
+// decisions are returned as Notes on the entries. A registry file that does
+// not parse becomes a single note and no merge.
+func planHookMerges(entry SourceEntry, tools []ToolSpec) []SourceEntry {
+	cfg, err := hooks.Load(entry.FullPath)
+	if err != nil {
+		return []SourceEntry{{
+			SourceName:    entry.SourceName,
+			RelativePath:  entry.RelativePath,
+			QualifiedPath: entry.QualifiedPath,
+			FullPath:      entry.FullPath,
+			Priority:      entry.Priority,
+			Protected:     entry.Protected,
+			MergeHooks:    true,
+			Notes:         []string{fmt.Sprintf("%s: %v; hooks not projected", entry.QualifiedPath, err)},
+		}}
+	}
+	var out []SourceEntry
+	for _, tool := range sortedTools(tools) {
+		target, ok := hooks.Targets[tool.HooksMerge]
+		if !ok {
+			continue
+		}
+		owned, notes := hooks.Plan(cfg, target)
+		if hooks.Count(owned) == 0 {
+			notes = append(notes, fmt.Sprintf("%s: nothing %s can run; skipped", entry.QualifiedPath, tool.DisplayName))
+			out = append(out, SourceEntry{RelativePath: target.Path, MergeHooks: true, Notes: notes, Content: ""})
+			continue
+		}
+		merged := projectEntry(entry, target.Path)
+		merged.MergeHooks = true
+		merged.Content = hooks.Encode(owned)
+		merged.Notes = notes
+		out = append(out, merged)
+	}
+	return out
 }
 
 func sortedTools(tools []ToolSpec) []ToolSpec {
@@ -548,6 +612,12 @@ func KindOfProjectPath(rel string) Kind {
 	base := filepath.Base(rel)
 	if base == "mcp.json" || base == ".mcp.json" {
 		return KindMCP
+	}
+
+	for _, target := range hooks.Targets {
+		if rel == target.Path {
+			return KindHook
+		}
 	}
 
 	for _, dk := range projectDirKinds() {

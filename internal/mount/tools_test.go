@@ -59,6 +59,9 @@ func TestKindOfProjectPath(t *testing.T) {
 		{".cursor/mcp.json", KindMCP},
 		{".vscode/mcp.json", KindMCP},
 		{".claude/hooks/pre-commit.sh", KindHook},
+		{".codex/hooks/scripts/guard.sh", KindHook},
+		{".claude/settings.local.json", KindHook},
+		{".codex/hooks.json", KindHook},
 		{".cursorignore", KindIgnore},
 		{".cody/ignore", KindIgnore},
 		{".aiderignore", KindIgnore},
@@ -224,7 +227,7 @@ func TestPlanTargetsForSupportedTools(t *testing.T) {
 		{"claude+codex skills", []string{"claude", "codex"}, KindSkill, []string{".agents/skills", ".claude/skills"}},
 		{"claude+codex agents", []string{"claude", "codex"}, KindAgent, []string{".claude/agents"}},
 		{"claude+codex rules", []string{"claude", "codex"}, KindRule, []string{".claude/rules"}},
-		{"claude+codex hooks", []string{"claude", "codex"}, KindHook, []string{".claude/hooks"}},
+		{"claude+codex hooks", []string{"claude", "codex"}, KindHook, []string{".claude/hooks", ".codex/hooks"}},
 		{"codex rules (unsupported)", []string{"codex"}, KindRule, nil},
 		{"codex agents (unsupported)", []string{"codex"}, KindAgent, nil},
 	}
@@ -304,6 +307,7 @@ func TestExpandToolTargetsAllProjections(t *testing.T) {
 		".claude/skills/code-review/SKILL.md", // skill → .claude/skills/
 		".agents/skills/code-review/SKILL.md", // skill → .agents/skills/ for Codex
 		".claude/hooks/pre-commit.sh",         // hook script → .claude/hooks/
+		".codex/hooks/pre-commit.sh",          // hook script → .codex/hooks/
 	} {
 		if _, ok := paths[want]; !ok {
 			t.Errorf("expected path %q not found in %v", want, sortedPaths(paths))
@@ -314,8 +318,8 @@ func TestExpandToolTargetsAllProjections(t *testing.T) {
 			t.Errorf("path %q should not be present", gone)
 		}
 	}
-	if len(expanded) != 7 {
-		t.Fatalf("ExpandToolTargets() returned %d entries, want 7: %v", len(expanded), sortedPaths(paths))
+	if len(expanded) != 8 {
+		t.Fatalf("ExpandToolTargets() returned %d entries, want 8: %v", len(expanded), sortedPaths(paths))
 	}
 }
 
@@ -426,15 +430,55 @@ func TestExpandToolTargetsPreservesProtectedMetadata(t *testing.T) {
 func TestExpandToolTargetsKeepsUnsupportedKindsAtRegistryPath(t *testing.T) {
 	entries := []SourceEntry{
 		{SourceName: "reg", RelativePath: "rules/go.md", FullPath: "/r/rules/go.md"},
-		{SourceName: "reg", RelativePath: "hooks/pre-commit.sh", FullPath: "/r/hooks/pre-commit.sh"},
+		{SourceName: "reg", RelativePath: "agents/reviewer.md", FullPath: "/r/agents/reviewer.md"},
 	}
-	// Codex has no rules or hooks directory, so with Codex alone the files
+	// Codex has no rules or agents directory, so with Codex alone the files
 	// stay where the registry put them.
 	paths := relPaths(ExpandToolTargets(entries, specs("codex")))
-	for _, want := range []string{"rules/go.md", "hooks/pre-commit.sh"} {
+	for _, want := range []string{"rules/go.md", "agents/reviewer.md"} {
 		if _, ok := paths[want]; !ok {
 			t.Errorf("expected %q to stay at its registry path, got %v", want, sortedPaths(paths))
 		}
+	}
+}
+
+func TestExpandToolTargetsMergesHooksConfigPerTool(t *testing.T) {
+	dir := t.TempDir()
+	hooksFile := filepath.Join(dir, "hooks.json")
+	os.WriteFile(hooksFile, []byte(`{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"scripts/guard.sh"}]}],"Notification":[{"hooks":[{"type":"command","command":"notify"}]}]}}`), 0o644)
+
+	entries := []SourceEntry{
+		{SourceName: "team", RelativePath: "hooks/hooks.json", QualifiedPath: "team/hooks/hooks.json", FullPath: hooksFile},
+		{SourceName: "team", RelativePath: "hooks/scripts/guard.sh", QualifiedPath: "team/hooks/scripts/guard.sh", FullPath: "/team/hooks/scripts/guard.sh"},
+	}
+	paths := relPaths(ExpandToolTargets(entries, specs("claude", "codex")))
+
+	claude, ok := paths[".claude/settings.local.json"]
+	if !ok || !claude.MergeHooks || !strings.Contains(claude.Content, "${CLAUDE_PROJECT_DIR}/.claude/hooks/scripts/guard.sh") {
+		t.Fatalf("claude merge entry = %+v", claude)
+	}
+	codex, ok := paths[".codex/hooks.json"]
+	if !ok || !codex.MergeHooks || !strings.Contains(codex.Content, ".codex/hooks/scripts/guard.sh") {
+		t.Fatalf("codex merge entry = %+v", codex)
+	}
+	if strings.Contains(codex.Content, "Notification") || len(codex.Notes) == 0 {
+		t.Fatalf("codex should drop the unsupported event with a note: %+v", codex)
+	}
+	if _, ok := paths["hooks/hooks.json"]; ok {
+		t.Error("hooks.json must not be placed as a file")
+	}
+	for _, want := range []string{".claude/hooks/scripts/guard.sh", ".codex/hooks/scripts/guard.sh"} {
+		if _, ok := paths[want]; !ok {
+			t.Errorf("script should keep its scripts/ subpath: missing %q in %v", want, sortedPaths(paths))
+		}
+	}
+
+	// A registry hooks.json that does not parse yields a note and no merge.
+	os.WriteFile(hooksFile, []byte("{nope"), 0o644)
+	entries = []SourceEntry{{SourceName: "team", RelativePath: "hooks/hooks.json", QualifiedPath: "team/hooks/hooks.json", FullPath: hooksFile}}
+	expanded := ExpandToolTargets(entries, specs("claude"))
+	if len(expanded) != 1 || expanded[0].Content != "" || len(expanded[0].Notes) != 1 {
+		t.Fatalf("expected one note-only entry, got %+v", expanded)
 	}
 }
 
@@ -604,7 +648,7 @@ func TestSkillParts(t *testing.T) {
 
 func TestKnownTopLevelDirs(t *testing.T) {
 	got := KnownTopLevelDirs()
-	if want := []string{".agents", ".claude"}; !reflect.DeepEqual(got, want) {
+	if want := []string{".agents", ".claude", ".codex"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("KnownTopLevelDirs() = %v, want %v", got, want)
 	}
 }

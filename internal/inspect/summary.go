@@ -249,7 +249,7 @@ var kindDisplayOrder = []mount.Kind{
 // that tool's settings.
 func kindGroupLabel(kind mount.Kind) string {
 	if kind == mount.KindHook {
-		return mount.KindLabel(kind) + " · scripts only; wire them in the tool's settings"
+		return mount.KindLabel(kind) + " · scripts + declarations merged into the tool's hooks file"
 	}
 	return mount.KindLabel(kind)
 }

@@ -588,3 +588,95 @@ func mustState(t *testing.T, project string) workspace.MountState {
 	}
 	return state
 }
+
+func TestApplyMergesHooksAndUnmountRemovesOnlyOwnedGroups(t *testing.T) {
+	root := t.TempDir()
+	paths := runtime.BuildPaths(filepath.Join(root, ".csaw"))
+	project := filepath.Join(root, "project")
+	os.MkdirAll(filepath.Join(project, ".git", "info"), 0o755)
+	os.MkdirAll(filepath.Join(project, ".claude"), 0o755)
+	settings := filepath.Join(project, ".claude", "settings.local.json")
+	os.WriteFile(settings, []byte(`{"permissions":{"allow":["Bash(ls *)"]},"hooks":{"Stop":[{"hooks":[{"type":"command","command":"mine.sh"}]}]}}`), 0o644)
+
+	entry := SourceEntry{
+		SourceName:   "team",
+		RelativePath: ".claude/settings.local.json",
+		FullPath:     filepath.Join(root, "team", "hooks", "hooks.json"),
+		MergeHooks:   true,
+		Content:      `{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"guard.sh"}]}]}}`,
+	}
+	result, err := Apply(project, paths, []SourceEntry{entry}, staticResolver{action: ConflictSkip})
+	if err != nil || result.Linked != 1 {
+		t.Fatalf("Apply() = %#v, err %v", result, err)
+	}
+	content, _ := os.ReadFile(settings)
+	if !strings.Contains(string(content), "guard.sh") || !strings.Contains(string(content), "mine.sh") || !strings.Contains(string(content), "permissions") {
+		t.Fatalf("merge should add csaw's group and keep the user's:\n%s", content)
+	}
+	state := mustState(t, project)
+	if len(state.Entries) != 1 || state.Entries[0].Mode != workspace.ModeMergeHooks || state.Entries[0].CreatedFile {
+		t.Fatalf("state = %#v", state.Entries)
+	}
+
+	again, err := Apply(project, paths, []SourceEntry{entry}, staticResolver{action: ConflictSkip})
+	if err != nil || again.AlreadyLinked != 1 {
+		t.Fatalf("second Apply() = %#v, err %v", again, err)
+	}
+
+	statuses := drift.InspectMountState(project, state, linkmode.Detect())
+	if !statuses[0].Healthy {
+		t.Fatalf("merged hooks should be healthy: %#v", statuses[0])
+	}
+
+	// Removing csaw's group by hand is reported and repaired.
+	os.WriteFile(settings, []byte(`{"permissions":{"allow":["Bash(ls *)"]},"hooks":{"Stop":[{"hooks":[{"type":"command","command":"mine.sh"}]}]}}`), 0o644)
+	statuses = drift.InspectMountState(project, state, linkmode.Detect())
+	if statuses[0].Issue != drift.IssueHooksMissing {
+		t.Fatalf("expected hooks-missing, got %#v", statuses[0])
+	}
+	repaired, after, err := Repair(project)
+	if err != nil || repaired.Linked != 1 || !after[0].Healthy {
+		t.Fatalf("Repair() = %#v, statuses %#v, err %v", repaired, after, err)
+	}
+
+	unmountResult, err := Unmount(project, Selection{})
+	if err != nil || unmountResult.Removed != 1 {
+		t.Fatalf("Unmount() = %#v, err %v", unmountResult, err)
+	}
+	content, _ = os.ReadFile(settings)
+	if strings.Contains(string(content), "guard.sh") || !strings.Contains(string(content), "mine.sh") {
+		t.Fatalf("unmount should remove only csaw's group:\n%s", content)
+	}
+}
+
+func TestApplyCreatesHooksFileAndUnmountDeletesIt(t *testing.T) {
+	root := t.TempDir()
+	paths := runtime.BuildPaths(filepath.Join(root, ".csaw"))
+	project := filepath.Join(root, "project")
+	os.MkdirAll(filepath.Join(project, ".git", "info"), 0o755)
+	target := filepath.Join(project, ".codex", "hooks.json")
+
+	entry := SourceEntry{
+		SourceName:   "team",
+		RelativePath: ".codex/hooks.json",
+		FullPath:     filepath.Join(root, "team", "hooks", "hooks.json"),
+		MergeHooks:   true,
+		Content:      `{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"done.sh"}]}]}}`,
+	}
+	if _, err := Apply(project, paths, []SourceEntry{entry}, staticResolver{action: ConflictSkip}); err != nil {
+		t.Fatalf("Apply() error = %v", err)
+	}
+	if _, err := os.Stat(target); err != nil {
+		t.Fatalf("hooks file should be created: %v", err)
+	}
+	state := mustState(t, project)
+	if !state.Entries[0].CreatedFile {
+		t.Fatal("state should record that csaw created the file")
+	}
+	if _, err := Unmount(project, Selection{}); err != nil {
+		t.Fatalf("Unmount() error = %v", err)
+	}
+	if _, err := os.Stat(target); !os.IsNotExist(err) {
+		t.Fatal("a hooks file csaw created and emptied should be deleted on unmount")
+	}
+}

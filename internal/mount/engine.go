@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/NicholasCullenCooper/csaw/internal/drift"
+	"github.com/NicholasCullenCooper/csaw/internal/hooks"
 	"github.com/NicholasCullenCooper/csaw/internal/linkmode"
 	"github.com/NicholasCullenCooper/csaw/internal/runtime"
 	"github.com/NicholasCullenCooper/csaw/internal/workspace"
@@ -76,6 +77,23 @@ func ApplyWithOptions(projectRoot string, paths runtime.Paths, entries []SourceE
 		targetPath := filepath.Join(projectRoot, filepath.FromSlash(entry.RelativePath))
 		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
 			return result, err
+		}
+
+		if entry.MergeHooks {
+			if entry.Content == "" {
+				continue // nothing this tool can run; notes explain why
+			}
+			stateEntry, merged, err := mergeHooksEntry(projectRoot, targetPath, entry)
+			if err != nil {
+				return result, err
+			}
+			currentState = workspace.UpsertMountedEntry(currentState, stateEntry)
+			if merged {
+				result.Linked++
+			} else {
+				result.AlreadyLinked++
+			}
+			continue
 		}
 
 		if _, err := os.Lstat(targetPath); err == nil {
@@ -162,6 +180,41 @@ func ApplyWithOptions(projectRoot string, paths runtime.Paths, entries []SourceE
 	return result, nil
 }
 
+// mergeHooksEntry merges an owned hooks fragment into the tool's hooks file.
+// The target existing is normal, not a conflict: user groups stay, csaw's
+// are appended. Git exclusion is added only for a file csaw created.
+func mergeHooksEntry(projectRoot string, targetPath string, entry SourceEntry) (workspace.MountedStateEntry, bool, error) {
+	owned, err := hooks.Decode(entry.Content)
+	if err != nil {
+		return workspace.MountedStateEntry{}, false, err
+	}
+	stateEntry := workspace.MountedStateEntry{
+		RelativePath:  entry.RelativePath,
+		SourceName:    entry.SourceName,
+		SourcePath:    entry.FullPath,
+		Protected:     entry.Protected,
+		Mode:          workspace.ModeMergeHooks,
+		Content:       entry.Content,
+		ContentSHA256: workspace.ContentSHA256([]byte(entry.Content)),
+	}
+	if _, missing, err := hooks.Inspect(targetPath, owned); err == nil && missing == 0 {
+		return stateEntry, false, nil
+	}
+	created, err := hooks.Merge(targetPath, owned)
+	if err != nil {
+		return workspace.MountedStateEntry{}, false, err
+	}
+	if created {
+		stateEntry.CreatedFile = true
+		if !workspace.IsGitIgnored(projectRoot, entry.RelativePath) {
+			if _, err := workspace.AddExclusion(projectRoot, entry.RelativePath); err != nil {
+				return workspace.MountedStateEntry{}, false, err
+			}
+		}
+	}
+	return stateEntry, true, nil
+}
+
 // placeEntry writes a generated file, copies the source, or creates a link,
 // depending on the entry and mode.
 func placeEntry(lm linkmode.Mode, mode MountMode, entry SourceEntry, targetPath string) error {
@@ -223,6 +276,24 @@ func Unmount(projectRoot string, selection Selection) (Result, error) {
 
 	for _, entry := range selected {
 		targetPath := filepath.Join(projectRoot, filepath.FromSlash(entry.RelativePath))
+		if entry.IsMerge() {
+			owned, err := hooks.Decode(entry.Content)
+			if err != nil {
+				return result, err
+			}
+			deleted, err := hooks.Remove(targetPath, owned)
+			if err != nil {
+				return result, err
+			}
+			result.Removed++
+			if deleted || entry.CreatedFile {
+				if _, err := workspace.RemoveExclusion(projectRoot, entry.RelativePath); err != nil {
+					return result, err
+				}
+			}
+			removedPaths = append(removedPaths, entry.RelativePath)
+			continue
+		}
 		if info, err := os.Lstat(targetPath); err == nil {
 			switch {
 			case entry.IsCopy() && info.Mode().IsRegular():
@@ -328,6 +399,7 @@ func EntriesFromMountedState(state workspace.MountState) []SourceEntry {
 			Protected:     entry.Protected,
 			Generated:     entry.Generated,
 			Content:       entry.Content,
+			MergeHooks:    entry.IsMerge(),
 		})
 	}
 	return entries
@@ -370,6 +442,21 @@ func Repair(projectRoot string) (Result, []drift.Status, error) {
 		}
 
 		switch {
+		case entry.IsMerge():
+			owned, err := hooks.Decode(entry.Content)
+			if err != nil {
+				return result, statuses, err
+			}
+			created, err := hooks.Merge(targetPath, owned)
+			if err != nil {
+				return result, statuses, err
+			}
+			if created {
+				entry.CreatedFile = true
+				stateChanged = true
+			}
+			result.Linked++
+			continue
 		case entry.Generated:
 			if err := os.WriteFile(targetPath, []byte(entry.Content), 0o644); err != nil {
 				return result, statuses, err
@@ -551,6 +638,12 @@ func toMountedStateEntry(entry SourceEntry, mode MountMode) (workspace.MountedSt
 		SourcePath:   entry.FullPath,
 		Protected:    entry.Protected,
 	}
+	if entry.MergeHooks {
+		stateEntry.Mode = workspace.ModeMergeHooks
+		stateEntry.Content = entry.Content
+		stateEntry.ContentSHA256 = workspace.ContentSHA256([]byte(entry.Content))
+		return stateEntry, nil
+	}
 	if entry.Generated {
 		stateEntry.Generated = true
 		stateEntry.Content = entry.Content
@@ -593,6 +686,9 @@ func PlannedState(entries []SourceEntry, mode MountMode) (workspace.MountState, 
 	}
 	var state workspace.MountState
 	for _, entry := range resolved {
+		if entry.MergeHooks && entry.Content == "" {
+			continue
+		}
 		stateEntry, err := toMountedStateEntry(entry, mode)
 		if err != nil {
 			return workspace.MountState{}, err

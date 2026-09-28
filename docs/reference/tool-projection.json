@@ -20,7 +20,7 @@
     "agents": "Subagent / persona / mode definitions. [csaw projects: YES]",
     "skills": "On-demand procedural workflows: SKILL.md folders including their references/, scripts/, and assets/ (Agent Skills standard). [csaw projects: YES, whole directory]",
     "mcp": "MCP server configs. Per-tool schema varies widely. [csaw projects: YES (via per-tool registry files)]",
-    "hooks": "Lifecycle scripts triggered by tool events. Tools run hooks declared in their settings files (settings.json, hooks.json); none scans a directory. [csaw projects: scripts only, into .claude/hooks/; declaring them is manual until the hooks kind is reworked]",
+    "hooks": "Lifecycle handlers triggered by tool events. A registry hooks/hooks.json (Claude Code / Codex shape) is merged into each tool's hooks file (.claude/settings.local.json, .codex/hooks.json) as csaw-owned matcher groups; scripts under hooks/scripts/ are copied beside them and commands rewritten. [csaw projects: YES]",
     "ignore": "Context exclusion patterns (.cody/ignore, .cursorignore, .tongyiignore). [csaw projects: YES — planned v0.6.0]",
     "memory": "Persistent context across sessions. [csaw projects: NEVER for now — most memory is session state or user-private. Revisit if a portable memory standard emerges.]",
     "settings": "General tool config that may contain multiple kinds. [csaw projects: NEVER — settings files contain API keys and personal credentials; mounting them to a team source would leak secrets. Documented as reference only.]"
@@ -156,11 +156,12 @@
             "~/.claude/settings.json"
           ],
           "format": "json (settings) + scripts",
-          "notes": "Hooks are declared in settings JSON (user, project, local, managed), plugin hooks/hooks.json, or skill/agent frontmatter. No hooks directory is scanned: .claude/hooks/ is only csaw's script drop location.",
+          "notes": "Hooks are declared in settings JSON (user, project, local, managed), plugin hooks/hooks.json, or skill/agent frontmatter; entries merge across levels. No hooks directory is scanned. csaw merges owned matcher groups into .claude/settings.local.json and copies scripts to .claude/hooks/scripts/, rewriting commands to ${CLAUDE_PROJECT_DIR}.",
           "confidence": "verified",
           "sources": [
             "https://code.claude.com/docs/en/hooks"
-          ]
+          ],
+          "checked_at": "2026-09-28"
         },
         "memory": {
           "project_paths": [
@@ -294,17 +295,19 @@
         },
         "hooks": {
           "project_paths": [
-            ".codex/hooks.json"
+            ".codex/hooks.json",
+            ".codex/hooks/"
           ],
           "user_paths": [
             "~/.codex/hooks.json"
           ],
           "format": "json",
-          "notes": "Same JSON shape as Claude Code hooks; 12 events; non-managed hooks trusted by hash.",
+          "notes": "Same JSON shape as Claude Code hooks; 12 events (PreToolUse, PostToolUse, PermissionRequest, PreCompact, PostCompact, UserPromptSubmit, SubagentStart, SubagentStop, Stop, SessionStart, SessionEnd, Interrupt); handler types command and mcp_tool. Commands run in the session cwd; docs recommend resolving from the git root. Non-managed hooks are trusted by hash and re-reviewed when they change. csaw merges owned groups into .codex/hooks.json and copies scripts to .codex/hooks/scripts/.",
           "confidence": "verified",
           "sources": [
             "https://learn.chatgpt.com/docs/hooks"
-          ]
+          ],
+          "checked_at": "2026-09-28"
         },
         "memory": {
           "confidence": "unsupported"

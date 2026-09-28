@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/NicholasCullenCooper/csaw/internal/hooks"
 	"github.com/NicholasCullenCooper/csaw/internal/mount"
 )
 
@@ -165,13 +166,17 @@ func renderCsawProjection(w io.Writer) {
 			}
 			write := "`" + spec.Writes[kind] + "/`"
 			if kind == mount.KindHook {
-				write += " (scripts only; declare them in the tool's settings)"
+				if target, ok := hooks.Targets[spec.HooksMerge]; ok {
+					write += " for scripts; `hooks/hooks.json` groups merged into `" + target.Path + "`"
+				} else {
+					write += " (scripts only)"
+				}
 			}
 			fmt.Fprintf(w, "| `%s` | %s | %s | %s |\n", name, mount.KindLabel(kind), write, codeJoin(reads))
 		}
 	}
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Codex keeps MCP servers inside `.codex/config.toml`; `csaw mcp sync codex` merges them there. Codex has no rules, agents, or hooks directory, so those kinds reach Codex only through `AGENTS.md` and, for hooks, the planned `.codex/hooks.json` merge. With no tool configured or detected, skills go to the neutral `.agents/skills/` directory.")
+	fmt.Fprintln(w, "Codex keeps MCP servers inside `.codex/config.toml`; `csaw mcp sync codex` merges them there. Codex has no rules or agents directory, so those kinds reach Codex only through `AGENTS.md`. Hook declarations are merged as csaw-owned matcher groups (user groups untouched; unmount removes only csaw's); events or handler types a tool does not support are skipped with a note at mount time. With no tool configured or detected, skills go to the neutral `.agents/skills/` directory.")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Examples of the minimal-set rule:")
 	fmt.Fprintln(w)

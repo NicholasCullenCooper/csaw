@@ -501,27 +501,17 @@ csaw use personal/extras --keep
 
 ## Lifecycle Hooks
 
-Your team ships a pre-commit script that runs `go test ./...` on changed packages before allowing a commit. You want every project using `team/` to run it without each engineer copy-pasting.
+Your team ships a guard script that must run before every shell command, and wants every project using `team/` to run it without each engineer editing their settings by hand.
 
-In your team source:
+In your team source, hooks are one declaration file plus the scripts it calls:
 
 ```
 team/
-├── AGENTS.md
 └── hooks/
-    └── pre-commit-test.sh
+    ├── hooks.json                 ← Claude Code / Codex hook shape
+    └── scripts/
+        └── guard.sh
 ```
-
-In a project with claude configured, after `csaw mount`:
-
-```
-project/
-├── .claude/
-│   └── hooks/
-│       └── pre-commit-test.sh    ← copy of team/hooks/pre-commit-test.sh
-```
-
-csaw places the script. It does not run by itself: no AI tool scans a hooks directory. Claude Code runs hooks declared in its settings files and Codex runs hooks declared in `.codex/hooks.json` (same JSON shape). To wire the mounted script into Claude Code, declare it once in `.claude/settings.json` (or `.claude/settings.local.json` to keep it out of git):
 
 ```json
 {
@@ -529,20 +519,32 @@ csaw places the script. It does not run by itself: no AI tool scans a hooks dire
     "PreToolUse": [
       {
         "matcher": "Bash",
-        "hooks": [
-          { "type": "command", "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/pre-commit-test.sh" }
-        ]
+        "hooks": [{ "type": "command", "command": "scripts/guard.sh --strict" }]
       }
     ]
   }
 }
 ```
 
-Today `.claude/hooks/` is the only script target. Projecting the declaration itself into Claude Code's settings and Codex's `.codex/hooks.json` is planned as the hooks rework in [`docs/exec-plans/active/relaunch-2026-09.md`](exec-plans/active/relaunch-2026-09.md).
+No AI tool scans a directory of scripts; Claude Code runs hooks declared in its settings files and Codex runs hooks declared in `.codex/hooks.json`, both in the same JSON shape. So after `csaw mount` with claude and codex configured:
 
-`csaw inspect` shows hooks under the **Hooks** group with a "scripts only" reminder, alongside the source they came from.
+```
+project/
+├── .claude/
+│   ├── settings.local.json        ← csaw's matcher group merged in; your own groups untouched
+│   └── hooks/scripts/guard.sh     ← copy of team/hooks/scripts/guard.sh
+└── .codex/
+    ├── hooks.json                 ← created by csaw (or merged into, if you had one)
+    └── hooks/scripts/guard.sh
+```
 
----
+Commands that start with `scripts/` are rewritten per tool: `${CLAUDE_PROJECT_DIR}/.claude/hooks/scripts/guard.sh --strict` for Claude Code and `"$(git rev-parse --show-toplevel)"/.codex/hooks/scripts/guard.sh --strict` for Codex, which runs hooks from the session directory. Everything else in a handler (`timeout`, `async`, `if`, ...) passes through unchanged.
+
+csaw owns only the matcher groups it added, identified by their exact content. `csaw unmount` removes those groups and nothing else, and deletes a hooks file only if csaw created it and nothing remains. If you delete one of csaw's groups by hand, `csaw check` reports `hooks-missing` and `csaw update` merges it again. Events or handler types a tool does not support (Codex has 12 events and no `prompt` handlers) are skipped with a note at mount time.
+
+Codex trusts non-managed hooks by their hash, so it asks you to review a newly merged or changed hook once via `/hooks` before running it. Claude Code applies local settings hooks after you trust the workspace.
+
+Plain scripts without a `hooks.json` still mount under `.claude/hooks/` and `.codex/hooks/`; you declare those yourself.
 
 ## Ignore Patterns
 

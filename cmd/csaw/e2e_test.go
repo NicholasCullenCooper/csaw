@@ -978,3 +978,53 @@ func TestE2ELockIsWrittenVerifiedAndFrozen(t *testing.T) {
 		t.Fatalf("audit should fail with lock.missing when the policy requires a lock: err %v\n%s", err, stdout)
 	}
 }
+
+func TestE2EHooksMergeIntoClaudeAndCodex(t *testing.T) {
+	env := newE2EEnv(t)
+
+	reg := env.createRegistry("reg", map[string]string{
+		"csaw.yml":               "default:\n  include:\n    - hooks/**\n",
+		"hooks/hooks.json":       `{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"scripts/guard.sh"}]}],"Notification":[{"hooks":[{"type":"command","command":"notify"}]}]}}`,
+		"hooks/scripts/guard.sh": "#!/bin/sh\necho guard\n",
+	})
+	env.run("source", "add", "reg", reg)
+
+	// A pre-existing local settings file with the user's own hook survives.
+	os.MkdirAll(filepath.Join(env.projectDir, ".claude"), 0o755)
+	userSettings := filepath.Join(env.projectDir, ".claude", "settings.local.json")
+	os.WriteFile(userSettings, []byte(`{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"mine.sh"}]}]}}`), 0o644)
+
+	env.run("mount", "--profile", "reg/default", "--tools", "claude,codex")
+
+	claude := env.readFile(".claude/settings.local.json")
+	if !strings.Contains(claude, "${CLAUDE_PROJECT_DIR}/.claude/hooks/scripts/guard.sh") || !strings.Contains(claude, "mine.sh") {
+		t.Fatalf("Claude settings should hold csaw's rewritten hook and the user's:\n%s", claude)
+	}
+	codex := env.readFile(".codex/hooks.json")
+	if !strings.Contains(codex, ".codex/hooks/scripts/guard.sh") || strings.Contains(codex, "Notification") {
+		t.Fatalf("Codex hooks should hold the rewritten hook and drop the unsupported event:\n%s", codex)
+	}
+	for _, want := range []string{".claude/hooks/scripts/guard.sh", ".codex/hooks/scripts/guard.sh"} {
+		if !env.fileExists(want) {
+			t.Fatalf("%s should be copied", want)
+		}
+	}
+	env.run("check")
+
+	// Hand-removing csaw's group is reported and restored by update.
+	os.WriteFile(userSettings, []byte(`{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"mine.sh"}]}]}}`), 0o644)
+	env.runExpectError("check")
+	env.run("update")
+	if !strings.Contains(env.readFile(".claude/settings.local.json"), "guard.sh") {
+		t.Fatal("update should merge the missing group again")
+	}
+
+	env.run("unmount")
+	claude = env.readFile(".claude/settings.local.json")
+	if strings.Contains(claude, "guard.sh") || !strings.Contains(claude, "mine.sh") {
+		t.Fatalf("unmount should remove only csaw's group:\n%s", claude)
+	}
+	if env.fileExists(".codex/hooks.json") || env.fileExists(".codex/hooks/scripts/guard.sh") {
+		t.Fatal("files csaw created should be gone after unmount")
+	}
+}

@@ -47,6 +47,13 @@ type SourceEntry struct {
 	// the CLAUDE.md bridge that imports AGENTS.md. Content holds its bytes.
 	Generated bool
 	Content   string
+	// MergeHooks marks an entry whose Content is an owned hooks fragment
+	// (hooks.Encode) to merge into the tool's hooks file at RelativePath
+	// instead of placing a file there.
+	MergeHooks bool
+	// Notes carry projection warnings for the user (e.g. hook events a tool
+	// does not support).
+	Notes []string
 }
 
 func NewPlanner() Planner {

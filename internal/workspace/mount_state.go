@@ -33,6 +33,20 @@ type MountedStateEntry struct {
 	Generated     bool   `json:"generated,omitempty"`
 	Content       string `json:"content,omitempty"`
 	ContentSHA256 string `json:"content_sha256,omitempty"`
+	// CreatedFile marks a merge target file that did not exist before csaw
+	// merged into it, so unmount can drop its git exclusion when it deletes
+	// the file again.
+	CreatedFile bool `json:"created_file,omitempty"`
+}
+
+// ModeMergeHooks marks an entry whose Content is an owned hooks fragment
+// merged into a tool's hooks file.
+const ModeMergeHooks = "merge-hooks"
+
+// IsMerge reports whether the entry is merged into a shared file rather
+// than placed as its own file.
+func (e MountedStateEntry) IsMerge() bool {
+	return e.Mode == ModeMergeHooks
 }
 
 // IsCopy reports whether the entry was written as a plain file rather than

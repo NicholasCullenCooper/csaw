@@ -28,22 +28,23 @@ csaw projects for **Claude Code and Codex**. Derived from the Go `ToolRegistry` 
 | `claude` | skills | `.claude/skills/` | `.claude/skills` |
 | `claude` | agents | `.claude/agents/` | `.claude/agents` |
 | `claude` | rules | `.claude/rules/` | `.claude/rules` |
-| `claude` | hooks | `.claude/hooks/` (scripts only; declare them in the tool's settings) | `.claude/hooks` |
+| `claude` | hooks | `.claude/hooks/` for scripts; `hooks/hooks.json` groups merged into `.claude/settings.local.json` | `.claude/hooks` |
 | `codex` | instructions | `AGENTS.md` | `AGENTS.md` |
 | `codex` | skills | `.agents/skills/` | `.agents/skills` |
+| `codex` | hooks | `.codex/hooks/` for scripts; `hooks/hooks.json` groups merged into `.codex/hooks.json` | `.codex/hooks` |
 
-Codex keeps MCP servers inside `.codex/config.toml`; `csaw mcp sync codex` merges them there. Codex has no rules, agents, or hooks directory, so those kinds reach Codex only through `AGENTS.md` and, for hooks, the planned `.codex/hooks.json` merge. With no tool configured or detected, skills go to the neutral `.agents/skills/` directory.
+Codex keeps MCP servers inside `.codex/config.toml`; `csaw mcp sync codex` merges them there. Codex has no rules or agents directory, so those kinds reach Codex only through `AGENTS.md`. Hook declarations are merged as csaw-owned matcher groups (user groups untouched; unmount removes only csaw's); events or handler types a tool does not support are skipped with a note at mount time. With no tool configured or detected, skills go to the neutral `.agents/skills/` directory.
 
 Examples of the minimal-set rule:
 
 - `claude`: skills → `.claude/skills/`; agents → `.claude/agents/`; rules → `.claude/rules/`; hooks → `.claude/hooks/`
-- `codex`: skills → `.agents/skills/`
-- `claude,codex`: skills → `.agents/skills/`, `.claude/skills/`; agents → `.claude/agents/`; rules → `.claude/rules/`; hooks → `.claude/hooks/`
+- `codex`: skills → `.agents/skills/`; hooks → `.codex/hooks/`
+- `claude,codex`: skills → `.agents/skills/`, `.claude/skills/`; agents → `.claude/agents/`; rules → `.claude/rules/`; hooks → `.claude/hooks/`, `.codex/hooks/`
 
 ## Kinds
 
 - **agents** — Subagent / persona / mode definitions. [csaw projects: YES]
-- **hooks** — Lifecycle scripts triggered by tool events. Tools run hooks declared in their settings files (settings.json, hooks.json); none scans a directory. [csaw projects: scripts only, into .claude/hooks/; declaring them is manual until the hooks kind is reworked]
+- **hooks** — Lifecycle handlers triggered by tool events. A registry hooks/hooks.json (Claude Code / Codex shape) is merged into each tool's hooks file (.claude/settings.local.json, .codex/hooks.json) as csaw-owned matcher groups; scripts under hooks/scripts/ are copied beside them and commands rewritten. [csaw projects: YES]
 - **ignore** — Context exclusion patterns (.cody/ignore, .cursorignore, .tongyiignore). [csaw projects: YES — planned v0.6.0]
 - **instructions** — Always-on project guidance. AGENTS.md is the cross-tool file; CLAUDE.md, GEMINI.md, .hermes.md, .goosehints are tool-specific. [csaw projects: YES; generates CLAUDE.md and GEMINI.md bridges that import AGENTS.md when the registry has none]
 - **mcp** — MCP server configs. Per-tool schema varies widely. [csaw projects: YES (via per-tool registry files)]
@@ -151,7 +152,7 @@ Ordered by number of tools that read each path.
 | Kind | Project paths | User paths | Confidence |
 |---|---|---|---|
 | agents | `.codex/config.toml` | `~/.codex/config.toml` | verified |
-| hooks | `.codex/hooks.json` | `~/.codex/hooks.json` | verified |
+| hooks | `.codex/hooks.json`, `.codex/hooks/` | `~/.codex/hooks.json` | verified |
 | ignore | `.gitignore` | — | inferred |
 | instructions | `AGENTS.md` | `~/.codex/AGENTS.md`, `~/.codex/AGENTS.override.md` | verified |
 | mcp | `.codex/config.toml` | `~/.codex/config.toml` | verified |

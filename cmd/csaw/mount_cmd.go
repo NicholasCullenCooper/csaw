@@ -238,6 +238,11 @@ func runMountCommand(cmd *cobra.Command, args []string, options mountRunOptions)
 	tools := mount.ResolveTools(projectRoot, configuredTools)
 	if !options.restore {
 		entries = mount.ExpandToolTargets(entries, tools)
+		for _, entry := range entries {
+			for _, note := range entry.Notes {
+				output.Warnf("%s", note)
+			}
+		}
 	}
 
 	mode, err := resolveMountMode(manager, options.modeFlag)

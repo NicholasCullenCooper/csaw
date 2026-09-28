@@ -166,6 +166,7 @@ required_kinds:
 | `modified-locally` | The project copy was edited after csaw wrote it; csaw never overwrites it. |
 | `stale-and-modified` | Both the source and the project copy changed. |
 | `unreadable` | The project file could not be hashed. |
+| `hooks-missing` | A hook group csaw merged into a tool's hooks file was removed; `csaw update` merges it again. |
 
 `missing-link`, `replaced-link`, and `drifted-link` apply to symlink-mode mounts; the file issues apply to copies and generated files.
 | `protected-hash-unreadable` | csaw could not read a protected mounted file to verify its hash. |

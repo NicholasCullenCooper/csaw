@@ -95,6 +95,9 @@ func preflightAutoUnmountConflicts(projectRoot string, entries []mount.SourceEnt
 	lm := linkmode.Detect()
 	conflicts := map[string]bool{}
 	for _, entry := range entries {
+		if entry.MergeHooks {
+			continue // merging into an existing hooks file is the normal case
+		}
 		relPath := runtime.NormalizeRegistryPath(entry.RelativePath)
 		if mountedEntry, ok := mounted[relPath]; ok {
 			targetPath := filepath.Join(projectRoot, filepath.FromSlash(relPath))
@@ -137,6 +140,9 @@ func preflightAutoUnmountConflicts(projectRoot string, entries []mount.SourceEnt
 // bytes. A generated file the user edited is preserved by unmount rather
 // than treated as a conflict.
 func mountedEntryIntact(lm linkmode.Mode, targetPath string, entry workspace.MountedStateEntry) bool {
+	if entry.IsMerge() {
+		return true // user groups may coexist; Apply re-merges what is missing
+	}
 	if !entry.IsCopy() {
 		return linkmode.IsLink(lm, targetPath, entry.SourcePath)
 	}

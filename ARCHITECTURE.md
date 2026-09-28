@@ -16,6 +16,7 @@
 - `internal/drift`: health classification for mounted links
 - `internal/linkmode`: cross-platform linking for symlink mode (symlinks with hardlink fallback on Windows)
 - `internal/lock`: `.csaw/lock.yml` (per-project record of mounted sources' commits and file hashes)
+- `internal/hooks`: merges a registry `hooks/hooks.json` into Claude Code settings and Codex `hooks.json` as csaw-owned matcher groups
 - `internal/registry`: registry scaffolding (`csaw init`)
 - `internal/pinning`: per-project source pinning to branches/tags
 - `internal/fork`: file forking between sources
@@ -49,6 +50,7 @@ Implemented now:
 - copy mode by default: files are placed as hash-tracked copies, drift is classified as stale, edited locally, or both, `csaw update` refreshes what it can, and unmount preserves edits
 - symlink mode as an opt-in with cross-platform linking (symlinks with hardlink fallback on Windows)
 - `.csaw/lock.yml` written on every mount and update, verified by `csaw audit`, enforced by `csaw use --frozen`
+- hooks as a merged kind: `hooks/hooks.json` groups merged into `.claude/settings.local.json` and `.codex/hooks.json`, scripts copied with commands rewritten, only csaw's groups removed on unmount
 - per-project source pinning (`csaw pin`/`unpin`) via git worktrees
 - file forking between sources (`csaw fork`)
 - skill lifecycle promotion (`csaw promote` from `skills/experimental/` to `skills/`)

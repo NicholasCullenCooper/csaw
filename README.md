@@ -309,7 +309,7 @@ csaw treats AI workspace artifacts as seven distinct kinds, each with its own co
 | **Agents** | `agents/*.md` | `.claude/agents/` (Codex defines agents in `config.toml`, not files) | When invoked — specialized subagent personas |
 | **Skills** | `skills/<name>/` (whole directory: `SKILL.md`, `references/`, `scripts/`) | `.claude/skills/` for Claude Code and `.agents/skills/` for Codex | When relevant — on-demand procedural workflows |
 | **MCP** | `mcp/*.json`, `mcp/codex.toml` | `.mcp.json` for Claude Code; `csaw mcp sync codex` merges into `.codex/config.toml` | Session start — tool/data connectivity |
-| **Hooks** | `hooks/*` | `.claude/hooks/` (scripts only; declare them in Claude Code's settings) | Tool lifecycle events |
+| **Hooks** | `hooks/hooks.json` + `hooks/scripts/*` | Declarations merged as csaw-owned groups into `.claude/settings.local.json` and `.codex/hooks.json`; scripts copied to `.claude/hooks/scripts/` and `.codex/hooks/scripts/` with commands rewritten | Tool lifecycle events |
 | **Ignore** | `ignore/*` | `.cursorignore`, `.cody/ignore`, `.aiderignore`, `.tongyiignore`, `.geminiignore` (for registries that also carry files for other tools) | Always — context exclusion |
 
 > csaw does **not** project `settings` (they contain API keys/credentials) or `memory` (session-state, user-private). See [`docs/planning/projection-roadmap.md`](docs/planning/projection-roadmap.md).
@@ -357,7 +357,7 @@ csaw config set tools claude,codex
 > - **Supported tools: Claude Code and Codex.** Each declares the directories it reads, and csaw writes each kind into the smallest set that serves both. Everything else (Cursor, Copilot, OpenCode, Gemini CLI, Antigravity, goose, Windsurf/Devin, Kiro, Cline, Continue) is catalogued with research in the JSON below but is not projected; `AGENTS.md` and `.agents/skills/` already reach most of them, and adding one back is a single registry entry.
 > - **Claude Code and instructions:** Claude Code reads `CLAUDE.md`, not `AGENTS.md`. When claude is a configured tool and your registry ships only `AGENTS.md`, csaw generates a `CLAUDE.md` containing `@AGENTS.md`. Ship your own `CLAUDE.md` in the registry to override it. If you edit the generated file, `csaw unmount` keeps your edits under `.csaw-stash/modified/`.
 > - **Codex:** reads `AGENTS.md` at the root (nested files allowed, 32 KiB cap) and skills from `.agents/skills/`. It has no rules, agents, or hooks directories; MCP lives in `.codex/config.toml`, which `csaw mcp sync codex` merges into a bounded section.
-> - **Hooks:** csaw places scripts under `.claude/hooks/`; no tool runs them until they are declared in that tool's settings. Projecting the declaration itself is the next phase of the [relaunch plan](docs/exec-plans/active/relaunch-2026-09.md).
+> - **Hooks:** a registry `hooks/hooks.json` in the shared Claude Code / Codex shape is merged into each tool's hooks file as matcher groups csaw owns; your own groups are never touched and `csaw unmount` removes only csaw's. Unsupported events or handler types are skipped with a note. Codex asks you to trust a new hook once.
 >
 > Full per-tool projection details — paths, fallbacks, MCP schemas, and tools we don't yet target — are catalogued in [docs/reference/tool-projection.json](docs/reference/tool-projection.json).
 

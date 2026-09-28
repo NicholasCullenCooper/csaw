@@ -118,7 +118,10 @@ Landed in the working tree on 2026-09-28: `ToolSpec` reads/writes table with `Pl
 
 **1.6 Docs for Phase 1.** README "Reversible by design" rewritten around ownership hashes; a "Mount modes" section; `docs/reference/audit-json.md` gains the lock findings; `docs/curriculum.md` lab on `check`/`update`/`diff`; `ARCHITECTURE.md` package map adds `lock`.
 
-### Phase 2: hooks as a merged kind (v0.13.0)
+### Phase 2: hooks as a merged kind (v0.13.0) — implemented
+
+**Status (2026-09-28): implemented in the working tree, not yet tagged.** `internal/hooks` parses a registry `hooks/hooks.json`, plans per-tool owned groups (unsupported events and handler types dropped with notes; `scripts/...` commands rewritten to `${CLAUDE_PROJECT_DIR}/.claude/hooks/...` and `"$(git rev-parse --show-toplevel)"/.codex/hooks/...`), and merges them into `.claude/settings.local.json` and `.codex/hooks.json` by canonical-JSON identity. The mount engine treats these as `merge-hooks` entries: idempotent on re-mount, `hooks-missing` drift when a group is removed by hand, re-merged by `csaw update`, removed on unmount without touching user groups, file deleted only when csaw created it and nothing remains. Scripts project with their `scripts/` subpath to `.claude/hooks/` and `.codex/hooks/`. The generalized `configmerge` package in 2.1 was not needed: TOML sections stay in `mcpmerge`, and hook merging has its own identity-based JSON strategy. `hook.unmanaged` was not added; `blocked_kinds: [hooks]` already covers merged entries because the hooks files classify as the hooks kind.
+
 
 **2.1 Generalize the merge engine.** `internal/mcpmerge` → `internal/configmerge` (keep `mcpmerge` as a thin wrapper for the existing CLI)
 

@@ -47,6 +47,7 @@ Do not create a repo-root `TODO.md` backlog.
 - `internal/drift/`: mounted file health inspection (stale, edited, missing, drifted)
 - `internal/linkmode/`: cross-platform linking for symlink mode (symlinks with hardlink fallback on Windows)
 - `internal/lock/`: `.csaw/lock.yml` writing, reading, and comparison
+- `internal/hooks/`: hook declaration merging into Claude Code settings and Codex `hooks.json`
 - `internal/registry/`: registry scaffolding (`csaw init`, `--adopt`)
 - `internal/pinning/`: per-project source pinning to branches/tags
 - `internal/fork/`: file forking between sources

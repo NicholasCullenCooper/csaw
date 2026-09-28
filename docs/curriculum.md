@@ -297,7 +297,7 @@ csaw classifies AI workspace files by kind:
 | Agents       | `agents/*.md`                                                | `.claude/agents/` (Codex has no agents directory) |
 | Skills       | `skills/<name>/` (whole directory: `SKILL.md`, `references/`, `scripts/`) | `.claude/skills/` for Claude Code, `.agents/skills/` for Codex |
 | MCP          | `mcp/*.json`, `mcp/codex.toml`                               | `.mcp.json`; `.codex/config.toml` via `csaw mcp sync codex` |
-| Hooks        | `hooks/*`                                                    | `.claude/hooks/` scripts only; you declare them in Claude Code's settings |
+| Hooks        | `hooks/hooks.json` + `hooks/scripts/*`                       | Declarations merged into `.claude/settings.local.json` and `.codex/hooks.json`; scripts copied beside them |
 | Ignore       | `ignore/*` (one file per tool)                               | Tool-specific ignore paths (other tools; Claude Code and Codex have none) |
 
 csaw deliberately does **not** project two additional kinds you might expect: `settings` (contains API keys and credentials — never project to a team source) and `memory` (today this is session state or user-private — revisit if a portable standard emerges). See [planning/projection-roadmap.md](planning/projection-roadmap.md).
@@ -349,7 +349,8 @@ personal-ai/
 ├── agents/code-reviewer.md            # agents
 ├── skills/code-review/SKILL.md        # skills
 ├── mcp/claude-code.json               # mcp
-├── hooks/pre-commit.sh                # hooks
+├── hooks/hooks.json                   # hooks (declarations)
+├── hooks/scripts/pre-commit.sh        # hooks (scripts)
 └── ignore/cursor                      # ignore (gitignore-style patterns)
 ```
 
@@ -357,7 +358,7 @@ Mount the starter profile for instructions, rules, agents, and skills. Then moun
 
 The interesting projections to predict:
 - `AGENTS.md` → `AGENTS.md` (Codex reads it) plus a generated `CLAUDE.md` if claude is one of your tools.
-- `hooks/pre-commit.sh` → `.claude/hooks/pre-commit.sh` (scripts only; only claude has a hooks directory today, and you still declare the hook in settings).
+- `hooks/hooks.json` → csaw-owned groups inside `.claude/settings.local.json` and `.codex/hooks.json`; `hooks/scripts/pre-commit.sh` → `.claude/hooks/scripts/pre-commit.sh` and `.codex/hooks/scripts/pre-commit.sh`, with `scripts/...` commands rewritten per tool.
 - `ignore/cursor` → `.cursorignore` (single-file alias, like MCP; neither Claude Code nor Codex reads one, so this only matters for registries that also serve other tools).
 - With `claude,codex`, the skill lands in `.claude/skills/` and `.agents/skills/` (Codex reads the neutral directory, not `.codex/skills/`).
 
@@ -816,6 +817,7 @@ Common issues:
 | `modified-locally`          | You edited the copy.                       | `csaw diff` to review; keep it with `csaw fork`, or `csaw unmount <path>` (edit kept under `.csaw-stash/modified/`). |
 | `stale-and-modified`        | Source and copy both changed.              | Same as above; `csaw update` will not touch it.     |
 | `missing-file`              | Copied or generated file is gone.          | Run `csaw update`.                                  |
+| `hooks-missing`             | A hook group csaw merged was removed.      | Run `csaw update`.                                  |
 | `protected-content-drift`   | Protected file hash changed.               | Audit the change; remount if approved.              |
 | `protected-hash-unreadable` | Hash verification could not read the file. | Check filesystem permissions and mount state.       |
 

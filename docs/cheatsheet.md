@@ -175,7 +175,7 @@ csaw update                             # repair broken links
 | Agents | `agents/*.md` | `.claude/agents/` (Codex has no agents directory) |
 | Skills | `skills/<name>/` (whole directory) | `.claude/skills/` and/or the neutral `.agents/skills/`, whichever your tools read |
 | MCP | `mcp/*.json`, `mcp/codex.toml` | `.mcp.json` (Claude Code); `csaw mcp sync codex` merges into `.codex/config.toml` |
-| Hooks | `hooks/*` | `.claude/hooks/` |
+| Hooks | `hooks/hooks.json`, `hooks/scripts/*` | Merged into `.claude/settings.local.json` and `.codex/hooks.json`; scripts copied to `<tool>/hooks/scripts/` |
 | Ignore | `ignore/*` | `.cursorignore`, `.cody/ignore`, `.aiderignore`, `.tongyiignore`, `.geminiignore` (other tools; neither Claude Code nor Codex has one) |
 
 csaw projects for Claude Code and Codex. Tools are taken from `csaw config set tools claude,codex` (or `--tools`), auto-detected from `.claude/` and `.codex/`, and fall back to the neutral `.agents/skills/` when neither is known.

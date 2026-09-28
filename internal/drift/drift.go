@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/NicholasCullenCooper/csaw/internal/hooks"
 	"github.com/NicholasCullenCooper/csaw/internal/linkmode"
 	"github.com/NicholasCullenCooper/csaw/internal/runtime"
 	"github.com/NicholasCullenCooper/csaw/internal/workspace"
@@ -34,6 +35,9 @@ const (
 	IssueStaleAndModified = "stale-and-modified"
 	// IssueUnreadable: the project file could not be hashed.
 	IssueUnreadable = "unreadable"
+	// IssueHooksMissing: some hook groups csaw merged into a tool's hooks
+	// file are no longer there. `csaw update` merges them again.
+	IssueHooksMissing = "hooks-missing"
 )
 
 type Status struct {
@@ -61,7 +65,7 @@ type Status struct {
 // drifted links.
 func (s Status) NeedsUpdate() bool {
 	switch s.Issue {
-	case IssueMissingFile, IssueStale, IssueMissingLink, IssueDriftedLink:
+	case IssueMissingFile, IssueStale, IssueMissingLink, IssueDriftedLink, IssueHooksMissing:
 		return true
 	}
 	return false
@@ -117,6 +121,8 @@ func InspectMountState(projectRoot string, state workspace.MountState, lm linkmo
 		}
 
 		switch {
+		case entry.IsMerge():
+			statuses = append(statuses, inspectMergedHooks(status, fullPath, entry))
 		case entry.Generated:
 			statuses = append(statuses, inspectGenerated(status, fullPath, entry.ContentSHA256))
 		case entry.Mode == "copy":
@@ -127,6 +133,34 @@ func InspectMountState(projectRoot string, state workspace.MountState, lm linkmo
 	}
 
 	return statuses
+}
+
+// inspectMergedHooks checks that every hook group csaw merged into a tool's
+// hooks file is still present.
+func inspectMergedHooks(status Status, fullPath string, entry workspace.MountedStateEntry) Status {
+	status.ExpectedHash = entry.ContentSHA256
+	owned, err := hooks.Decode(entry.Content)
+	if err != nil {
+		status.Healthy = false
+		status.Issue = IssueUnreadable
+		return status
+	}
+	if _, err := os.Stat(fullPath); err != nil {
+		status.Healthy = false
+		status.Issue = IssueMissingFile
+		return status
+	}
+	_, missing, err := hooks.Inspect(fullPath, owned)
+	if err != nil {
+		status.Healthy = false
+		status.Issue = IssueUnreadable
+		return status
+	}
+	if missing > 0 {
+		status.Healthy = false
+		status.Issue = IssueHooksMissing
+	}
+	return status
 }
 
 // inspectGenerated classifies a generated file: missing, replaced by a
