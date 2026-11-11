@@ -3,6 +3,7 @@ package mount
 import (
 	"os"
 	"path/filepath"
+	goruntime "runtime"
 	"strings"
 	"testing"
 
@@ -488,6 +489,9 @@ func TestApplyCopyModeWritesPlainFilesWithHashes(t *testing.T) {
 }
 
 func TestCopyModePreservesExecutableBit(t *testing.T) {
+	if goruntime.GOOS == "windows" {
+		t.Skip("Windows has no executable permission bit")
+	}
 	project, paths, entry, sourceFile := copyFixture(t)
 	if err := os.Chmod(sourceFile, 0o755); err != nil {
 		t.Fatalf("Chmod() error = %v", err)
