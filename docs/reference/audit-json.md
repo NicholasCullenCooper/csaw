@@ -71,6 +71,7 @@ Optional fields are omitted when empty.
 | `lock.missing` | `warn` (`error` when the policy sets `require_lock: true`) | Something is mounted but `.csaw/lock.yml` does not exist. |
 | `lock.match` | `ok` | The mounted files and source commits match `.csaw/lock.yml`. |
 | `lock.mismatch` | `error` | The mounted context differs from `.csaw/lock.yml`; `detail` lists each difference. |
+| `skill.invalid` | `warn` | A mounted skill's directory name or SKILL.md frontmatter name breaks the Agent Skills rules, so Claude Code and Codex will skip it. |
 | `source.required.present` | `ok` | A required source is active and healthy. |
 | `source.required.missing` | `error` | A required source is not active and healthy. |
 | `source.required.metadata_missing` | `error` | A required source is active, but its configured metadata could not be found for URL verification. |

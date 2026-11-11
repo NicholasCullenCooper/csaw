@@ -16,7 +16,7 @@ func newConfigCommand() *cobra.Command {
 		Short: "View and set csaw configuration",
 	}
 
-	validKeys := []string{"tools", "default_fork_target", "mount_mode"}
+	validKeys := []string{"tools", "default_fork_target", "mount_mode", "scanner"}
 
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "set <key> <value>",
@@ -56,6 +56,8 @@ func newConfigCommand() *cobra.Command {
 					return err
 				}
 				cfg.MountMode = string(mode)
+			case "scanner":
+				cfg.Scanner = strings.TrimSpace(value)
 			default:
 				return fmt.Errorf("unknown config key %q; valid keys: %s", key, strings.Join(validKeys, ", "))
 			}
@@ -101,6 +103,12 @@ func newConfigCommand() *cobra.Command {
 			case "mount_mode":
 				mode, _ := mount.ParseMountMode(cfg.MountMode)
 				fmt.Fprintln(cmd.OutOrStdout(), string(mode))
+			case "scanner":
+				if cfg.Scanner == "" {
+					output.Muted("not set")
+				} else {
+					fmt.Fprintln(cmd.OutOrStdout(), cfg.Scanner)
+				}
 			default:
 				return fmt.Errorf("unknown config key %q; valid keys: %s", key, strings.Join(validKeys, ", "))
 			}
@@ -136,6 +144,11 @@ func newConfigCommand() *cobra.Command {
 			}
 			mode, _ := mount.ParseMountMode(cfg.MountMode)
 			output.Label("mount mode:", string(mode))
+			if cfg.Scanner != "" {
+				output.Label("scanner:", cfg.Scanner)
+			} else {
+				output.Label("scanner:", output.Faint("not set (csaw vendor sync runs built-in checks only)"))
+			}
 			output.Label("sources:", fmt.Sprintf("%d", len(cfg.Sources)))
 			return nil
 		},

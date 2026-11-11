@@ -95,8 +95,8 @@ func preflightAutoUnmountConflicts(projectRoot string, entries []mount.SourceEnt
 	lm := linkmode.Detect()
 	conflicts := map[string]bool{}
 	for _, entry := range entries {
-		if entry.MergeHooks {
-			continue // merging into an existing hooks file is the normal case
+		if entry.MergeHooks || entry.RelativePath == "" {
+			continue // merges and note-only entries never conflict with files
 		}
 		relPath := runtime.NormalizeRegistryPath(entry.RelativePath)
 		if mountedEntry, ok := mounted[relPath]; ok {

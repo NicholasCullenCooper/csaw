@@ -137,7 +137,10 @@ Landed in the working tree on 2026-09-28: `ToolSpec` reads/writes table with `Pl
 
 **2.3 Docs for Phase 2.** Walkthrough "Lifecycle Hooks" rewritten with the `hooks.json` example; `mcp-merge-design.md` updated to describe both strategies; curriculum kinds table.
 
-### Phase 3: export and trust (v0.14.0)
+### Phase 3: export and trust (v0.14.0) — implemented
+
+**Status (2026-09-28): implemented in the working tree, not yet tagged.** `csaw export plugin <source>[/<profile>] --format claude-code|agent-plugins --out <dir>` and `csaw export marketplace <source> --out <dir>` (`internal/export`): Claude Code plugins carry skills, agents, `hooks/hooks.json` (scripts rewritten to `${CLAUDE_PLUGIN_ROOT}/scripts/...`), and `.mcp.json`; Agent Plugins directories carry skills and an `mcp.json` normalized from `mcp/codex.toml` (preferred) or `mcp/claude-code.json`; rules and instructions are reported as omitted; literal secrets refused via the existing validator; names validated per format; versions default to the source commit. `internal/scan` runs deterministic checks on every `vendor sync` (recorded in `vendor.lock.yaml`), an optional external scanner is configured with `csaw config set scanner`, `csaw vendor audit` lists findings, and `csaw vendor promote` refuses flagged files without `--force`. `internal/skills` validates skill names at mount (skipped with a note), at export (skipped and reported), and in audit (`skill.invalid`). Remaining: the manual passes (install an exported marketplace in Claude Code; load an Agent Plugins directory in Codex).
+
 
 **3.1 Export.** New `internal/export`, `cmd/csaw/export_cmd.go`
 

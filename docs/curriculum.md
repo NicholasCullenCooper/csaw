@@ -874,6 +874,18 @@ as `.csaw/policy.yml` are independent of mount visibility.
 
 Show and hide a mounted file. Inspect `.git/info/exclude` before and after.
 
+## Module 14b: Publishing and Vendoring Safely
+
+Two commands connect csaw to the wider ecosystem without giving up its model.
+
+`csaw export` writes a source or profile as a plugin the tools install themselves: `--format claude-code` for a Claude Code plugin (and `csaw export marketplace <source>` for one plugin per profile), `--format agent-plugins` for Codex and ChatGPT. Rules and `AGENTS.md` are not plugin components and stay mounted by csaw.
+
+`csaw vendor sync` runs content checks on everything it fetches and records findings in `vendor.lock.yaml`; `csaw vendor audit` lists them and `csaw vendor promote` refuses a flagged file without `--force`. Set `csaw config set scanner "<command>"` to add a real scanner's verdict.
+
+### Exercise
+
+Export the `team-go` preset as a Claude Code plugin and validate it with `claude plugin validate`. Then vendor a repository containing a skill whose SKILL.md has an `allowed-tools` line, confirm `csaw vendor audit` reports it, and confirm `promote` refuses it until `--force`.
+
 ## Module 15: Designing Sources
 
 The canonical csaw setup is a **vertical** 4-tier stack — `company` → `department` → `team` → `personal`. **Horizontal** sources (`client`, `community`, role-based) layer in by responsibility rather than position. Each source type has a different shape, owner, and protection profile.

@@ -23,11 +23,23 @@ type AuditFindings struct {
 	// PromotionDrift: promoted files where either (a) the vendor origin
 	// changed since promote, or (b) the promoted copy was edited.
 	PromotionDrift []PromotionFinding
+	// Content: built-in check findings and scanner failures recorded by the
+	// last sync of each vendor. Not drift, but what a reviewer must clear
+	// (or override with --force) before promoting.
+	Content []ContentFinding
 }
 
-// HasAny reports whether any drift was detected.
+// ContentFinding is one content check result or scanner verdict for a vendor.
+type ContentFinding struct {
+	Vendor string
+	Path   string // empty for a scanner verdict
+	Check  string
+	Detail string
+}
+
+// HasAny reports whether any drift or content finding was detected.
 func (a AuditFindings) HasAny() bool {
-	return len(a.LocalDrift) > 0 || len(a.UpstreamDrift) > 0 || len(a.PromotionDrift) > 0
+	return len(a.LocalDrift) > 0 || len(a.UpstreamDrift) > 0 || len(a.PromotionDrift) > 0 || len(a.Content) > 0
 }
 
 // DriftFinding is one vendored file out of sync with its lockfile entry.
@@ -77,6 +89,17 @@ func Audit(ctx context.Context, g git.Git, registryRoot, cacheRoot string) (Audi
 	declaredNames := make(map[string]Declaration, len(declarations))
 	for _, d := range declarations {
 		declaredNames[d.Name] = d
+	}
+
+	// Content findings recorded at sync time.
+	for _, name := range sortedVendorNames(lf.Vendors) {
+		state := lf.Vendors[name]
+		for _, finding := range state.Findings {
+			findings.Content = append(findings.Content, ContentFinding{Vendor: name, Path: finding.Path, Check: finding.Check, Detail: finding.Detail})
+		}
+		if strings.HasPrefix(state.ScannerStatus, "failed") {
+			findings.Content = append(findings.Content, ContentFinding{Vendor: name, Check: "scanner", Detail: state.ScannerStatus + " (log: " + state.ScannerLog + ")"})
+		}
 	}
 
 	// Check each lockfile-tracked vendor for file-level drift.
@@ -260,4 +283,13 @@ func findExtraFiles(vendorDir string, known map[string]FileRecord) ([]string, er
 	}
 	sort.Strings(extras)
 	return extras, nil
+}
+
+func sortedVendorNames(vendors map[string]VendorState) []string {
+	names := make([]string, 0, len(vendors))
+	for name := range vendors {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }

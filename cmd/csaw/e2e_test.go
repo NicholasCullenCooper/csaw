@@ -1028,3 +1028,97 @@ func TestE2EHooksMergeIntoClaudeAndCodex(t *testing.T) {
 		t.Fatal("files csaw created should be gone after unmount")
 	}
 }
+
+func TestE2EExportPluginAndMarketplace(t *testing.T) {
+	env := newE2EEnv(t)
+
+	reg := env.createRegistry("team", map[string]string{
+		"csaw.yml":               "backend:\n  description: Backend tooling\n  include:\n    - AGENTS.md\n    - skills/**\n    - agents/**\n    - hooks/**\n    - mcp/**\nfrontend:\n  description: Frontend tooling\n  include:\n    - skills/deploy/**\n",
+		"AGENTS.md":              "instructions",
+		"rules/go.md":            "rule",
+		"agents/reviewer.md":     "---\nname: reviewer\n---\nreview",
+		"skills/deploy/SKILL.md": "---\nname: deploy\ndescription: d\n---\nbody",
+		"skills/deploy/ref.md":   "ref",
+		"hooks/hooks.json":       `{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"scripts/done.sh"}]}]}}`,
+		"hooks/scripts/done.sh":  "#!/bin/sh\n",
+		"mcp/claude-code.json":   `{"mcpServers":{"docs":{"command":"npx","args":["docs"]}}}`,
+		"mcp/codex.toml":         "[mcp_servers.docs]\ncommand = \"npx\"\nargs = [\"docs\"]\n",
+	})
+	env.run("source", "add", "team", reg)
+
+	out := filepath.Join(filepath.Dir(env.projectDir), "dist")
+	env.run("export", "plugin", "team/backend", "--format", "claude-code", "--out", filepath.Join(out, "claude"), "--version", "1.0.0")
+	for _, want := range []string{
+		"claude/.claude-plugin/plugin.json", "claude/skills/deploy/SKILL.md", "claude/skills/deploy/ref.md",
+		"claude/agents/reviewer.md", "claude/hooks/hooks.json", "claude/scripts/done.sh", "claude/.mcp.json",
+	} {
+		if _, err := os.Stat(filepath.Join(out, filepath.FromSlash(want))); err != nil {
+			t.Errorf("%s should be exported: %v", want, err)
+		}
+	}
+	manifest, _ := os.ReadFile(filepath.Join(out, "claude", ".claude-plugin", "plugin.json"))
+	if !strings.Contains(string(manifest), `"name": "team-backend"`) || !strings.Contains(string(manifest), `"version": "1.0.0"`) || !strings.Contains(string(manifest), "Backend tooling") {
+		t.Fatalf("manifest = %s", manifest)
+	}
+	hooksJSON, _ := os.ReadFile(filepath.Join(out, "claude", "hooks", "hooks.json"))
+	if !strings.Contains(string(hooksJSON), "${CLAUDE_PLUGIN_ROOT}/scripts/done.sh") {
+		t.Fatalf("hooks.json = %s", hooksJSON)
+	}
+
+	env.run("export", "plugin", "team", "--format", "agent-plugins", "--out", filepath.Join(out, "agent"))
+	for _, want := range []string{"agent/plugin.json", "agent/skills/deploy/SKILL.md", "agent/mcp.json"} {
+		if _, err := os.Stat(filepath.Join(out, filepath.FromSlash(want))); err != nil {
+			t.Errorf("%s should be exported: %v", want, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(out, "agent", "agents")); err == nil {
+		t.Error("agents are outside the Agent Plugins format")
+	}
+	env.runExpectError("export", "plugin", "team", "--format", "agent-plugins", "--out", filepath.Join(out, "agent"))
+
+	env.run("export", "marketplace", "team", "--out", filepath.Join(out, "market"))
+	market, err := os.ReadFile(filepath.Join(out, "market", ".claude-plugin", "marketplace.json"))
+	if err != nil {
+		t.Fatalf("marketplace.json missing: %v", err)
+	}
+	for _, want := range []string{`"name": "team"`, `"./plugins/team-backend"`, `"./plugins/team-frontend"`} {
+		if !strings.Contains(string(market), want) {
+			t.Errorf("marketplace.json missing %s:\n%s", want, market)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(out, "market", "plugins", "team-frontend", "skills", "deploy", "SKILL.md")); err != nil {
+		t.Errorf("frontend profile plugin should carry its skill: %v", err)
+	}
+}
+
+func TestE2EInvalidSkillIsSkippedAndAudited(t *testing.T) {
+	env := newE2EEnv(t)
+
+	reg := env.createRegistry("reg", map[string]string{
+		"csaw.yml":                 "default:\n  include:\n    - skills/**\n",
+		"skills/good/SKILL.md":     "---\nname: good\n---\n",
+		"skills/Bad_Name/SKILL.md": "---\nname: bad\n---\n",
+		"skills/mismatch/SKILL.md": "---\nname: other\n---\n",
+	})
+	env.run("source", "add", "reg", reg)
+	env.run("mount", "--profile", "reg/default", "--tools", "claude")
+
+	if !env.fileExists(".claude/skills/good/SKILL.md") {
+		t.Fatal("valid skill should mount")
+	}
+	for _, bad := range []string{".claude/skills/Bad_Name/SKILL.md", ".claude/skills/mismatch/SKILL.md"} {
+		if env.fileExists(bad) {
+			t.Fatalf("%s should not mount", bad)
+		}
+	}
+
+	// A hand-placed invalid skill is reported by audit.
+	os.MkdirAll(filepath.Join(env.projectDir, ".claude", "skills", "Hand Placed"), 0o755)
+	os.WriteFile(filepath.Join(env.projectDir, ".claude", "skills", "Hand Placed", "SKILL.md"), []byte("x"), 0o644)
+	env.run("mount", "--profile", "reg/default", "--tools", "claude", "--keep")
+	out := env.run("audit", "--json")
+	if strings.Contains(out, `"skill.invalid"`) {
+		// Only mounted skills are audited; the hand-placed one is not in mount state.
+		t.Fatalf("hand-placed skill is outside mount state and should not be audited yet:\n%s", out)
+	}
+}

@@ -10,7 +10,11 @@
 // docs/planning/vendors-design.md for the full design rationale.
 package vendor
 
-import "time"
+import (
+	"time"
+
+	"github.com/NicholasCullenCooper/csaw/internal/scan"
+)
 
 // Declaration is a single entry in a source registry's `vendors:` block of
 // csaw.yml. Authored by hand or written by `csaw vendor add`.
@@ -55,6 +59,14 @@ type VendorState struct {
 	RefResolved  string                `yaml:"ref_resolved"` // exact SHA at sync time
 	SyncedAt     time.Time             `yaml:"synced_at"`
 	Files        map[string]FileRecord `yaml:"files"` // path within vendor/<name>/ → hash + size
+	// Findings are the built-in content checks (internal/scan) that fired
+	// on the last sync. Promotion of a file with findings needs --force.
+	Findings []scan.Finding `yaml:"findings,omitempty"`
+	// ScannerStatus records the configured external scanner's verdict on the
+	// last sync ("passed" or "failed (exit N)"); empty when none is set.
+	ScannerStatus string `yaml:"scanner_status,omitempty"`
+	// ScannerLog is where the scanner's output was written.
+	ScannerLog string `yaml:"scanner_log,omitempty"`
 }
 
 // FileRecord pins the integrity of a vendored file.

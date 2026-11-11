@@ -55,7 +55,7 @@ func Apply(projectRoot string, paths runtime.Paths, entries []SourceEntry, resol
 // from git.
 func ApplyWithOptions(projectRoot string, paths runtime.Paths, entries []SourceEntry, resolver ConflictResolver, options ApplyOptions) (Result, error) {
 	var err error
-	entries, err = resolveConflictsByPriority(entries)
+	entries, err = resolveConflictsByPriority(withoutNotesOnly(entries))
 	if err != nil {
 		return Result{}, err
 	}
@@ -583,6 +583,19 @@ func resolveConflictsByPriority(entries []SourceEntry) ([]SourceEntry, error) {
 	return resolved, nil
 }
 
+// withoutNotesOnly drops entries that exist only to carry Notes (no
+// project path), which the CLI prints and the engine must not place.
+func withoutNotesOnly(entries []SourceEntry) []SourceEntry {
+	kept := make([]SourceEntry, 0, len(entries))
+	for _, entry := range entries {
+		if entry.RelativePath == "" {
+			continue
+		}
+		kept = append(kept, entry)
+	}
+	return kept
+}
+
 func dedupeStrings(values []string) []string {
 	seen := make(map[string]bool)
 	out := values[:0]
@@ -677,7 +690,7 @@ func toMountedStateEntry(entry SourceEntry, mode MountMode) (workspace.MountedSt
 // without touching the project. Used to compare a planned mount against the
 // lock before anything changes.
 func PlannedState(entries []SourceEntry, mode MountMode) (workspace.MountState, error) {
-	resolved, err := resolveConflictsByPriority(entries)
+	resolved, err := resolveConflictsByPriority(withoutNotesOnly(entries))
 	if err != nil {
 		return workspace.MountState{}, err
 	}

@@ -48,6 +48,9 @@ Do not create a repo-root `TODO.md` backlog.
 - `internal/linkmode/`: cross-platform linking for symlink mode (symlinks with hardlink fallback on Windows)
 - `internal/lock/`: `.csaw/lock.yml` writing, reading, and comparison
 - `internal/hooks/`: hook declaration merging into Claude Code settings and Codex `hooks.json`
+- `internal/export/`: plugin and marketplace export (Claude Code, Agent Plugins 1.0)
+- `internal/scan/`: vendored-content checks and external scanner seam
+- `internal/skills/`: Agent Skills name validation
 - `internal/registry/`: registry scaffolding (`csaw init`, `--adopt`)
 - `internal/pinning/`: per-project source pinning to branches/tags
 - `internal/fork/`: file forking between sources

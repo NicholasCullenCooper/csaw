@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -79,6 +80,23 @@ func Promote(registryRoot, vendor, vendorPath, promotedTo string, force bool) (P
 	fileRec, hasRec := state.Files[vendorPath]
 	if !hasRec {
 		return res, fmt.Errorf("vendor file vendor/%s/%s is not tracked in the lockfile — re-sync the vendor", vendor, vendorPath)
+	}
+
+	// Refuse flagged content without --force: the checks exist so that a
+	// reviewer looks before a file becomes active context.
+	if !force {
+		var flagged []string
+		for _, finding := range state.Findings {
+			if finding.Path == vendorPath {
+				flagged = append(flagged, finding.Check+": "+finding.Detail)
+			}
+		}
+		if len(flagged) > 0 {
+			return res, fmt.Errorf("vendor/%s/%s has content findings from the last sync; review them (csaw vendor audit) and re-run with --force to promote anyway:\n  - %s", vendor, vendorPath, strings.Join(flagged, "\n  - "))
+		}
+		if strings.HasPrefix(state.ScannerStatus, "failed") {
+			return res, fmt.Errorf("vendor %q %s the configured scanner on the last sync (log: %s); re-run with --force to promote anyway", vendor, state.ScannerStatus, state.ScannerLog)
+		}
 	}
 
 	// Refuse to overwrite without --force.

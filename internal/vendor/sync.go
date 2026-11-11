@@ -16,6 +16,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/NicholasCullenCooper/csaw/internal/git"
+	"github.com/NicholasCullenCooper/csaw/internal/scan"
 )
 
 // vendorMetaFileName is written inside each vendor/<name>/ directory
@@ -33,6 +34,11 @@ type SyncResult struct {
 	FilesUpdate int
 	FilesGone   int  // present in last lockfile, no longer in upstream
 	Skipped     bool // upstream had no changes since last sync
+	// Findings from the built-in content checks; ScannerStatus and
+	// ScannerLog from the configured external scanner, when any.
+	Findings      []scan.Finding
+	ScannerStatus string
+	ScannerLog    string
 }
 
 // Sync fetches an upstream vendor and copies filtered content into
@@ -45,7 +51,24 @@ type SyncResult struct {
 // Refuses to overwrite if vendor-local drift is detected (a vendored file's
 // current SHA differs from the lockfile entry) unless force is true.
 func Sync(ctx context.Context, g git.Git, decl Declaration, registryRoot, cacheRoot string, force bool) (SyncResult, error) {
+	return SyncWithOptions(ctx, g, decl, registryRoot, cacheRoot, SyncOptions{Force: force})
+}
+
+// SyncOptions tunes a sync.
+type SyncOptions struct {
+	// Force overwrites vendor-local edits.
+	Force bool
+	// Scanner is an external command to run over the vendored directory
+	// after copying (see scan.RunExternal). Empty runs built-in checks only.
+	Scanner string
+}
+
+// SyncWithOptions is Sync with options. After copying it runs the built-in
+// content checks and, when configured, the external scanner, and records
+// both in the lockfile so promote can refuse flagged files.
+func SyncWithOptions(ctx context.Context, g git.Git, decl Declaration, registryRoot, cacheRoot string, options SyncOptions) (SyncResult, error) {
 	res := SyncResult{Name: decl.Name, URL: decl.URL}
+	force := options.Force
 
 	// 1. Pre-flight: check for vendor-local drift before destructive ops.
 	if !force {
@@ -111,17 +134,36 @@ func Sync(ctx context.Context, g git.Git, decl Declaration, registryRoot, cacheR
 		return res, fmt.Errorf("write vendor meta: %w", err)
 	}
 
-	// 7. Update the lockfile.
+	// 7. Content checks: built-in, then the configured scanner if any.
+	findings, err := scan.Dir(vendorDir)
+	if err != nil {
+		return res, fmt.Errorf("scan vendor dir: %w", err)
+	}
+	res.Findings = findings
+	if options.Scanner != "" {
+		logPath := filepath.Join(cacheRoot, "scan-logs", decl.Name+".log")
+		status, err := scan.RunExternal(options.Scanner, vendorDir, logPath)
+		if err != nil {
+			return res, err
+		}
+		res.ScannerStatus = status
+		res.ScannerLog = logPath
+	}
+
+	// 8. Update the lockfile.
 	lf, err := LoadLockfile(registryRoot)
 	if err != nil {
 		return res, err
 	}
 	lf.Vendors[decl.Name] = VendorState{
-		URL:          decl.URL,
-		RefRequested: decl.Ref,
-		RefResolved:  res.RefResolved,
-		SyncedAt:     meta.SyncedAt,
-		Files:        files,
+		URL:           decl.URL,
+		RefRequested:  decl.Ref,
+		RefResolved:   res.RefResolved,
+		SyncedAt:      meta.SyncedAt,
+		Files:         files,
+		Findings:      findings,
+		ScannerStatus: res.ScannerStatus,
+		ScannerLog:    res.ScannerLog,
 	}
 	if err := SaveLockfile(registryRoot, lf); err != nil {
 		return res, err

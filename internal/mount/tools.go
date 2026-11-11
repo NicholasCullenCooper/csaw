@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/NicholasCullenCooper/csaw/internal/hooks"
+	"github.com/NicholasCullenCooper/csaw/internal/skills"
 )
 
 // Kind classifies a registry entry by what kind of AI workspace artifact it is.
@@ -404,6 +405,12 @@ func skillParts(rel string) (name string, rest string, ok bool) {
 	return segments[nameIndex], strings.Join(segments[nameIndex+1:], "/"), true
 }
 
+// SkillParts is the exported form of skillParts for packages that need to
+// group registry entries by skill (export, audit).
+func SkillParts(rel string) (name string, rest string, ok bool) {
+	return skillParts(rel)
+}
+
 // isSkillEntry returns true if the source entry belongs to a skill directory
 // (any file under skills/<name>/).
 func isSkillEntry(entry SourceEntry) bool {
@@ -451,10 +458,19 @@ func ExpandToolTargets(entries []SourceEntry, tools []ToolSpec) []SourceEntry {
 		KindHook:  PlanTargets(KindHook, tools),
 	}
 
+	invalidSkills := invalidSkillNames(entries)
+
 	var expanded []SourceEntry
 	present := make(map[string]SourceEntry)
 	for _, entry := range entries {
 		if name, rest, ok := skillParts(entry.RelativePath); ok {
+			if note, invalid := invalidSkills[name]; invalid {
+				if note != "" {
+					expanded = append(expanded, SourceEntry{SourceName: entry.SourceName, Notes: []string{note}})
+					invalidSkills[name] = "" // one note per skill
+				}
+				continue
+			}
 			if len(targets[KindSkill]) == 0 {
 				expanded = append(expanded, entry)
 				continue
@@ -516,6 +532,37 @@ func ExpandToolTargets(entries []SourceEntry, tools []ToolSpec) []SourceEntry {
 	}
 
 	return expanded
+}
+
+// invalidSkillNames validates every skill in entries against the Agent
+// Skills naming rules and returns a note per invalid skill. Both supported
+// tools skip such skills silently, so csaw refuses to mount them instead.
+func invalidSkillNames(entries []SourceEntry) map[string]string {
+	skillMD := make(map[string]SourceEntry)
+	names := make(map[string]SourceEntry)
+	for _, entry := range entries {
+		name, rest, ok := skillParts(entry.RelativePath)
+		if !ok {
+			continue
+		}
+		if _, seen := names[name]; !seen {
+			names[name] = entry
+		}
+		if rest == "SKILL.md" {
+			skillMD[name] = entry
+		}
+	}
+	invalid := make(map[string]string)
+	for name, entry := range names {
+		md := ""
+		if e, ok := skillMD[name]; ok {
+			md = e.FullPath
+		}
+		if err := skills.Validate(name, md); err != nil {
+			invalid[name] = fmt.Sprintf("%s: skill not mounted: %v", entry.SourceName, err)
+		}
+	}
+	return invalid
 }
 
 // planHookMerges turns a registry hooks/hooks.json into one merge entry per

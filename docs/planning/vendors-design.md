@@ -230,3 +230,7 @@ Not blocking; document the decision when reached:
 3. Add `vendor/**` exclusion to source enumeration
 4. Update docs (README, cheatsheet, walkthrough scenario, v1.0-readiness)
 5. Ship as v0.10.0
+
+## Content checks and scanner seam (v0.14.0)
+
+Every `csaw vendor sync` runs `internal/scan` over the vendored directory and records the findings per file in `vendor.lock.yaml` under the vendor's `findings:`. The checks are deterministic and cheap: invisible or bidirectional Unicode, `allowed-tools` and `hooks` in SKILL.md frontmatter, `!`command`` substitution in markdown, executables outside `scripts/`, symlinks, binaries inside skills. A configured external scanner (`scanner:` in `~/.csaw/config.yml`, set with `csaw config set scanner`) runs after the built-in checks; its status and log path are recorded too. `csaw vendor promote` refuses a file with findings, or any file of a vendor whose scanner run failed, unless `--force` is given. csaw ships no prompt-injection scanner of its own; the seam exists so a real one (SkillSpector, Cisco skill-scanner, Snyk) can be plugged in.

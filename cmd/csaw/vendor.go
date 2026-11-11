@@ -169,6 +169,13 @@ func newVendorListCommand() *cobra.Command {
 						len(state.Files),
 						timeSince(state.SyncedAt),
 						state.RefResolved[:min(12, len(state.RefResolved))])
+					if len(state.Findings) > 0 || strings.HasPrefix(state.ScannerStatus, "failed") {
+						verdict := fmt.Sprintf("%d content finding(s)", len(state.Findings))
+						if strings.HasPrefix(state.ScannerStatus, "failed") {
+							verdict += "; scanner " + state.ScannerStatus
+						}
+						fmt.Fprintf(cmd.OutOrStdout(), "    %s %s\n", output.Faint("review:"), output.Warn(verdict))
+					}
 				}
 				fmt.Fprintln(cmd.OutOrStdout())
 			}
@@ -218,14 +225,31 @@ func newVendorSyncCommand() *cobra.Command {
 				targets = decls
 			}
 
+			scanner := ""
+			if manager, err := newSourcesManager(); err == nil {
+				if cfg, err := manager.Load(); err == nil {
+					scanner = cfg.Scanner
+				}
+			}
+
 			ctx := context.Background()
 			for _, d := range targets {
 				fmt.Fprintf(cmd.OutOrStdout(), "  %s syncing %s...\n", output.Faint("→"), d.Name)
-				res, err := vendor.Sync(ctx, git.ExecGit{}, d, registryRoot, cacheRoot, force)
+				res, err := vendor.SyncWithOptions(ctx, git.ExecGit{}, d, registryRoot, cacheRoot, vendor.SyncOptions{Force: force, Scanner: scanner})
 				if err != nil {
 					return err
 				}
 				output.Successf("%s · %d file(s) @ %s", res.Name, res.FilesAdded, res.RefResolved[:min(12, len(res.RefResolved))])
+				if len(res.Findings) > 0 {
+					output.Warnf("%d content finding(s) in %s; run csaw vendor audit to review (promote needs --force for flagged files)", len(res.Findings), res.Name)
+				}
+				if res.ScannerStatus != "" {
+					if strings.HasPrefix(res.ScannerStatus, "failed") {
+						output.Warnf("scanner %s for %s; log: %s", res.ScannerStatus, res.Name, res.ScannerLog)
+					} else {
+						output.Infof("scanner %s for %s", res.ScannerStatus, res.Name)
+					}
+				}
 			}
 			return nil
 		},
@@ -260,8 +284,21 @@ func newVendorAuditCommand() *cobra.Command {
 			}
 
 			if !findings.HasAny() {
-				output.Successf("no vendor drift detected")
+				output.Successf("no vendor drift or content findings")
 				return nil
+			}
+
+			if len(findings.Content) > 0 {
+				output.Header("content findings (review before promoting)")
+				fmt.Fprintln(cmd.OutOrStdout())
+				for _, f := range findings.Content {
+					where := f.Vendor
+					if f.Path != "" {
+						where += "/" + f.Path
+					}
+					fmt.Fprintf(cmd.OutOrStdout(), "  %s %s — %s: %s\n", output.Faint("•"), where, f.Check, f.Detail)
+				}
+				fmt.Fprintln(cmd.OutOrStdout())
 			}
 
 			if len(findings.LocalDrift) > 0 {

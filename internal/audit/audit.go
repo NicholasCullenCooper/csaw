@@ -22,6 +22,7 @@ import (
 	"github.com/NicholasCullenCooper/csaw/internal/output"
 	"github.com/NicholasCullenCooper/csaw/internal/pinning"
 	"github.com/NicholasCullenCooper/csaw/internal/runtime"
+	"github.com/NicholasCullenCooper/csaw/internal/skills"
 	"github.com/NicholasCullenCooper/csaw/internal/sources"
 	"github.com/NicholasCullenCooper/csaw/internal/workspace"
 )
@@ -185,6 +186,7 @@ func Run(projectRoot string, paths runtime.Paths) (Report, error) {
 	}
 
 	report.checkMountHealth(statuses)
+	report.checkSkills(statuses)
 	if err := report.checkLock(projectRoot, paths, policy.RequireLock, len(statuses)); err != nil {
 		return Report{}, err
 	}
@@ -509,6 +511,33 @@ func sourceRequirementsNeedURL(requirements []SourceRequirement) bool {
 		}
 	}
 	return false
+}
+
+// checkSkills validates every mounted skill directory name and SKILL.md
+// frontmatter name against the Agent Skills rules, catching hand-placed
+// skills csaw did not mount as well as mounted ones.
+func (r *Report) checkSkills(statuses []drift.Status) {
+	for _, status := range statuses {
+		rel := filepath.ToSlash(status.RelativePath)
+		if filepath.Base(rel) != "SKILL.md" {
+			continue
+		}
+		segments := strings.Split(rel, "/")
+		if len(segments) < 3 || segments[len(segments)-3] != "skills" {
+			continue
+		}
+		name := segments[len(segments)-2]
+		if err := skills.Validate(name, status.FullPath); err != nil {
+			r.add(Finding{
+				ID:       "skill.invalid",
+				Severity: SeverityWarn,
+				Message:  "skill will be skipped by Claude Code and Codex",
+				Kind:     string(mount.KindSkill),
+				Path:     rel,
+				Detail:   err.Error(),
+			})
+		}
+	}
 }
 
 // checkLock compares .csaw/lock.yml with what is mounted now. With nothing

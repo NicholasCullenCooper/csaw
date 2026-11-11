@@ -40,6 +40,10 @@ type Config struct {
 	// MountMode is "copy" (default when empty) or "symlink". See
 	// internal/mount/mode.go for what each means.
 	MountMode string `yaml:"mount_mode,omitempty"`
+	// Scanner is an optional external command run over every vendored
+	// directory by `csaw vendor sync` (a "{dir}" token is replaced by the
+	// directory; otherwise it is appended). Non-zero exit blocks promotion.
+	Scanner string `yaml:"scanner,omitempty"`
 }
 
 type Manager struct {

@@ -642,6 +642,30 @@ Codex is the only merge target, and with csaw scoped to Claude Code and Codex it
 
 ---
 
+## Publishing a Source as a Plugin (`csaw export`)
+
+Your team's registry is composed and audited with csaw, but a new hire on Claude Code wants a one-line install, and a Codex user wants a plugin directory. `csaw export` writes both from the same source:
+
+```bash
+csaw export plugin team/backend --format claude-code --out dist/team-backend
+csaw export marketplace team --out dist/team-marketplace
+csaw export plugin team/backend --format agent-plugins --out dist/team-backend-agent
+```
+
+```
+dist/team-backend/                   dist/team-backend-agent/
+├── .claude-plugin/plugin.json       ├── plugin.json      ← $schema agent-plugins.org 1.0.0
+├── skills/deploy/SKILL.md           ├── skills/deploy/SKILL.md
+├── agents/reviewer.md               └── mcp.json         ← mcpServers, normalized
+├── hooks/hooks.json                 (agents, hooks, rules: outside the format, reported)
+├── scripts/guard.sh
+└── .mcp.json
+```
+
+The marketplace holds one plugin per profile under `plugins/` and a `.claude-plugin/marketplace.json` listing them by relative path. Register it with `claude plugin marketplace add dist/team-marketplace` and install with `claude plugin install team-backend@team`. Plugin versions default to the source's checked-out commit (`0.0.0+<sha>`), so a re-export after a pull is a new version; pass `--version` to pin your own.
+
+Two things never export: rules and `AGENTS.md`, because neither plugin format has a component for always-on instructions. Keep mounting those with csaw. MCP entries with literal secrets are refused, and skills with invalid names are skipped, exactly as at mount time.
+
 ## Vendoring External Catalogs Safely (`csaw vendor`)
 
 You want to use skills from a popular community repo (say, [awesome-copilot](https://github.com/github/awesome-copilot)) or consume a few skills from an APM package — without running their opaque installer, manually copying files, or letting upstream's layout become your active mounted context. csaw's vendor feature is the safe primitive for this.
@@ -666,6 +690,8 @@ csaw vendor sync awesome-copilot   # one specific
 ```
 
 csaw clones the upstream into a per-URL cache under `~/.csaw/state/vendor-cache/`, resolves the ref to an exact SHA, copies filtered files into `<registry>/vendor/awesome-copilot/`, and writes the SHA-pinned inventory into `<registry>/vendor.lock.yaml`. Subsequent syncs reuse the cache and only re-copy if upstream content changed.
+
+Every sync also runs csaw's content checks over the vendored files and records the findings in the lockfile: invisible or bidirectional Unicode (text a reviewer cannot see), `allowed-tools` grants and embedded `hooks` in skill frontmatter, `!`command`` substitution in markdown, executables outside a `scripts/` directory, symlinks, and binaries inside skills. If you have a real scanner, point csaw at it once with `csaw config set scanner "skillspector scan {dir}"` and its verdict is recorded too. `csaw vendor audit` lists findings; `csaw vendor promote` refuses a flagged file, or any file from a vendor whose scanner run failed, unless you pass `--force` after reviewing.
 
 After sync your registry looks like:
 

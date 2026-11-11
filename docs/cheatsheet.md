@@ -112,6 +112,14 @@ csaw vendor promote awesome-copilot/agents/reviewer.md --into agents/reviewer.md
 csaw vendor remove awesome-copilot
 ```
 
+Publish a source to the tools' own plugin channels:
+
+```bash
+csaw export plugin team/backend --format claude-code --out dist/team-backend
+csaw export marketplace team --out dist/team-marketplace      # one plugin per profile
+csaw export plugin team --format agent-plugins --out dist/team-agent   # Codex / ChatGPT
+```
+
 Nothing under `vendor/` ever projects to mounted context. Only files copied into real kind directories (`skills/`, `agents/`, `rules/`, etc.) via `promote` (or by hand authoring) will mount. The bounded `vendor/` area is git-tracked; `vendor.lock.yaml` records per-file SHAs and promotion lineage.
 
 ## Merge MCP Into a Shared-Config Tool (Codex)

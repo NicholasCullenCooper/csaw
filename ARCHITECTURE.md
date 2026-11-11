@@ -17,6 +17,9 @@
 - `internal/linkmode`: cross-platform linking for symlink mode (symlinks with hardlink fallback on Windows)
 - `internal/lock`: `.csaw/lock.yml` (per-project record of mounted sources' commits and file hashes)
 - `internal/hooks`: merges a registry `hooks/hooks.json` into Claude Code settings and Codex `hooks.json` as csaw-owned matcher groups
+- `internal/export`: writes a source or profile as a Claude Code plugin/marketplace or an Agent Plugins 1.0 directory
+- `internal/scan`: deterministic content checks over vendored files and the external scanner seam
+- `internal/skills`: Agent Skills name and frontmatter validation shared by mount, audit, and export
 - `internal/registry`: registry scaffolding (`csaw init`)
 - `internal/pinning`: per-project source pinning to branches/tags
 - `internal/fork`: file forking between sources
@@ -51,6 +54,7 @@ Implemented now:
 - symlink mode as an opt-in with cross-platform linking (symlinks with hardlink fallback on Windows)
 - `.csaw/lock.yml` written on every mount and update, verified by `csaw audit`, enforced by `csaw use --frozen`
 - hooks as a merged kind: `hooks/hooks.json` groups merged into `.claude/settings.local.json` and `.codex/hooks.json`, scripts copied with commands rewritten, only csaw's groups removed on unmount
+- `csaw export plugin|marketplace` for Claude Code and Agent Plugins channels; vendor content checks and scanner seam; skill validation at mount, audit, and export
 - per-project source pinning (`csaw pin`/`unpin`) via git worktrees
 - file forking between sources (`csaw fork`)
 - skill lifecycle promotion (`csaw promote` from `skills/experimental/` to `skills/`)

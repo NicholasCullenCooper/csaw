@@ -94,6 +94,20 @@ var Targets = map[string]Target{
 	},
 }
 
+// ClaudePluginTarget plans hooks for a Claude Code plugin's hooks/hooks.json,
+// where scripts ship under the plugin's own scripts/ directory and are
+// addressed through ${CLAUDE_PLUGIN_ROOT}.
+var ClaudePluginTarget = Target{
+	Name:       "claude-plugin",
+	Path:       "hooks/hooks.json",
+	ScriptsDir: "scripts",
+	Events:     claudeEvents,
+	Types:      set("command", "http", "mcp_tool", "prompt", "agent"),
+	ScriptCommand: func(rel string) string {
+		return "${CLAUDE_PLUGIN_ROOT}/" + rel
+	},
+}
+
 func set(items ...string) map[string]bool {
 	out := make(map[string]bool, len(items))
 	for _, item := range items {

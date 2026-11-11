@@ -46,6 +46,7 @@ func newRootCommand() *cobra.Command {
 	cmd.AddCommand(newHideCommand())
 	cmd.AddCommand(newMCPCommand())
 	cmd.AddCommand(newVendorCommand())
+	cmd.AddCommand(newExportCommand())
 
 	return cmd
 }

@@ -463,12 +463,14 @@ inside `personal`, while `team/backend` resolves inside the `team` source.
 | `csaw unpin source` | Unpin, return to default branch. |
 | `csaw fork source/path` | Copy a file into another source. `--into target`. |
 | `csaw promote source/skills/experimental/name` | Promote experimental skill to stable. |
-| `csaw config set key value` | Set config (tools, default_fork_target, mount_mode). |
+| `csaw config set key value` | Set config (tools, default_fork_target, mount_mode, scanner). |
 | `csaw config list` | Show configuration. |
 | `csaw show / hide path` | Control git visibility of mounted files. |
 | `csaw status` | Quick summary: mounted count, stale and locally edited copies, uncommitted edits in source checkouts. |
 | `csaw mcp sync <target> --from <source>` | Merge MCP entries from a source into a tool's shared-config file (e.g., Codex's `.codex/config.toml`) using a bounded section. Dry-run by default; `--apply` to write; `--remove` to roll back. See [csaw mcp sync](docs/walkthrough.md#sharing-mcp-with-codex-csaw-mcp-sync) walkthrough. |
-| `csaw vendor add/sync/list/audit/promote/remove` | Safely consume external agent-context catalogs (skills.sh, APM packages, awesome-copilot, any git repo). Fetches upstream into a hash-locked `vendor/` area; nothing under `vendor/` ever projects until explicitly promoted into a real kind directory. Three drift detectors: vendor-local, upstream, promotion. See [`csaw vendor`](docs/walkthrough.md#vendoring-external-catalogs-safely-csaw-vendor) walkthrough and [`docs/planning/vendors-design.md`](docs/planning/vendors-design.md). |
+| `csaw export plugin <source>[/<profile>] --format claude-code\|agent-plugins --out <dir>` | Write a Claude Code plugin (skills, agents, hooks, MCP) or an Agent Plugins 1.0 directory (skills, MCP) for Codex and ChatGPT. Rules and `AGENTS.md` are not plugin components and are reported as omitted. |
+| `csaw export marketplace <source> --out <dir>` | Write a Claude Code marketplace with one plugin per profile of the source; register it with `claude plugin marketplace add <dir>`. |
+| `csaw vendor add/sync/list/audit/promote/remove` | Safely consume external agent-context catalogs (skills.sh, APM packages, awesome-copilot, any git repo). Fetches upstream into a hash-locked `vendor/` area; nothing under `vendor/` ever projects until explicitly promoted into a real kind directory. Every sync runs content checks (invisible or bidirectional characters, `allowed-tools` and embedded hooks in skills, `!`command`` substitution, executables outside `scripts/`, symlinks, binaries in skills) plus an optional external scanner (`csaw config set scanner "<command>"`); `promote` refuses a flagged file without `--force`. Three drift detectors: vendor-local, upstream, promotion. See [`csaw vendor`](docs/walkthrough.md#vendoring-external-catalogs-safely-csaw-vendor) walkthrough and [`docs/planning/vendors-design.md`](docs/planning/vendors-design.md). |
 
 ### Key Flags
 
@@ -494,6 +496,23 @@ inside `personal`, while `team/backend` resolves inside the `team` source.
 | `--into source` | fork | Target source to fork into. |
 
 </details>
+
+## Publishing to Claude Code and Codex plugin channels
+
+Both supported tools now install context through their own plugin channels: Claude Code from marketplaces of `.claude-plugin/` plugins, Codex and ChatGPT from Agent Plugins 1.0 directories. csaw stays the place where you compose and audit sources; `csaw export` hands the result to those channels.
+
+```bash
+csaw export plugin team/backend --format claude-code --out ./dist/team-backend
+claude plugin validate ./dist/team-backend
+
+csaw export marketplace team --out ./dist/team-marketplace   # one plugin per profile
+claude plugin marketplace add ./dist/team-marketplace
+claude plugin install team-backend@team
+
+csaw export plugin team --format agent-plugins --out ./dist/team-agent   # Codex / ChatGPT
+```
+
+What each format carries: Claude Code plugins take skills, agents, hooks (`hooks/hooks.json` with scripts rewritten to `${CLAUDE_PLUGIN_ROOT}/scripts/...`), and `.mcp.json`; Agent Plugins take skills and an `mcp.json` normalized from `mcp/codex.toml` or `mcp/claude-code.json`. Rules and `AGENTS.md` are not plugin components in either format, so keep mounting those with csaw; every omission is printed. Skills that break the Agent Skills naming rules are skipped and reported, as they are at mount time. MCP entries with literal secrets are refused.
 
 ## Contributing
 
